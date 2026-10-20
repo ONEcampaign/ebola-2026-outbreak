@@ -1,0 +1,106 @@
+[project]
+name = "ebola_2026_outbreak"
+version = "0.1.0"
+description = ""
+
+authors = [
+  { name = "Miguel Haro Ruiz", email = "miguel.haroruiz@one.org" }
+]
+
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+
+    "ty>=0.0.59",
+    "ruff>=0.15.0",
+    "pre-commit>=4.6.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-include = ["*.ipynb"]
+
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".pytest_cache",
+    "htmlcov",
+]
+
+[tool.ruff.lint]
+
+select = [
+    "E", "W", "F",      # pycodestyle, pyflakes
+    "I",                 # isort
+    "UP",                # pyupgrade
+    "B",                 # bugbear
+    "C4",                # comprehensions
+    "RUF",               # ruff-specific
+]
+
+ignore = [
+    "E501",     # Line length (formatter handles)
+    "F841",     # Unused local — common during exploration
+]
+
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+
+# Notebooks: exploration style — allow REPL-like patterns.
+"**/*.ipynb" = ["F401", "F811", "E402"]
+
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+include = ["src/ebola_2026_outbreak"]
+
+
+[tool.ty.analysis]
+# Replace pandas / numpy type information with `Any`. Eliminates the cascade
+# of false positives from those libraries' incomplete or absent stubs without
+# disabling type checking on your own code.
+# https://docs.astral.sh/ty/reference/configuration/
+replace-imports-with-any = [
+    "pandas",
+    "pandas.**",
+    "numpy",
+    "numpy.**",
+]
+
+[tool.ty.rules]
+# These warn-by-default rules fire frequently on dynamic dataframe / dict
+# patterns common in exploratory code. Demoted to ignore.
+possibly-missing-attribute = "ignore"
+possibly-unresolved-reference = "ignore"
+
+
+
