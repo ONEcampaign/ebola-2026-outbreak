@@ -9,6 +9,7 @@ date, which becomes the `date` column.
 import logging
 import re
 from datetime import UTC, date, datetime
+from difflib import get_close_matches
 from pathlib import Path
 
 import polars as pl
@@ -27,15 +28,18 @@ OUTPUT_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_who_by_country.csv"
 SECTION_HEADING = "Bundibugyo"
 FIRST_HEADER = "Affected countries"
 TOTAL_LABEL = "Total"
-DATE_ROW = re.compile(r"Data as of (\d{1,2} \w+ \d{4})")
+DATE_ROW = re.compile(r"Data as of\s*(\d{1,2} \w+ \d{4})")
 DATE_FORMAT = "%d %B %Y"
 MISSING = "-"
 # Footnote markers WHO appends to country names, e.g. "France ***", "Kenya#".
 FOOTNOTE_MARKERS = re.compile(r"[\s*#†]+$")
 
-# Header text (whitespace-normalised) -> indicator label.
+# Header text -> indicator label. Suspected deaths and CFR suspected appear
+# only in the May 2026 table images.
 INDICATORS = {
     "Suspected cases": "Suspected cases",
+    "Suspected deaths": "Suspected deaths",
+    "CFR (%) suspected": "CFR suspected (%)",
     "Confirmed cases": "Confirmed cases",
     "Confirmed deaths": "Confirmed deaths",
     "Probable cases": "Probable cases",
@@ -43,7 +47,10 @@ INDICATORS = {
     "CFR (%) confirmed": "CFR confirmed (%)",
     "Recovered": "Recovered",
 }
-NON_ADDITIVE = frozenset({"CFR confirmed (%)"})
+NON_ADDITIVE = frozenset({"CFR confirmed (%)", "CFR suspected (%)"})
+# Headers match ignoring spacing and case, and OCR typos ("Confrmed deaths")
+# match the closest known header. Distinct headers score at most 0.76.
+HEADER_MATCH_CUTOFF = 0.9
 # Indicators used downstream: a Total mismatch here rejects the capture.
 # WHO's own Total row is occasionally off for the others (Recovered sums to
 # 1 970 against 1 960 on 24 September 2026), which only logs a warning.
@@ -88,12 +95,11 @@ def parse_value(text: str) -> float | None:
     return float(cleaned)
 
 
-def find_table(soup: BeautifulSoup) -> Tag:
-    """Locate the table that follows the Bundibugyo section heading.
+def _find_section_content(soup: BeautifulSoup) -> tuple[Tag | None, str | None]:
+    """Return the Bundibugyo section's table, or failing that its table image URL.
 
     Raises:
-        ValueError: If the heading or table is missing, or the section shows
-            the table as an image.
+        ValueError: If the section heading is missing.
     """
     heading = soup.find(
         lambda tag: tag.name in {"h2", "h3"} and SECTION_HEADING in tag.get_text()
@@ -104,40 +110,83 @@ def find_table(soup: BeautifulSoup) -> Tag:
     image_src = None
     for tag in heading.find_all_next(["table", "img", "h2"]):
         if tag.name == "table":
-            return tag
+            return tag, None
         if tag.name == "h2":
             break
         src = str(tag.get("src", ""))
         if SECTION_HEADING.lower() in src.lower():
             image_src = image_src or src
+    return None, image_src
+
+
+def find_table(soup: BeautifulSoup) -> Tag:
+    """Locate the table that follows the Bundibugyo section heading.
+
+    Raises:
+        ValueError: If the heading or table is missing, or the section shows
+            the table as an image.
+    """
+    table, image_src = _find_section_content(soup)
+    if table is not None:
+        return table
     if image_src:
         # Until early September 2026 WHO published the table as a PNG.
         raise ValueError(f"Table published as an image: {image_src}")
     raise ValueError(f"No table after heading {SECTION_HEADING!r}")
 
 
-def _parse_header(row: Tag) -> list[str]:
+def find_table_image(html: str) -> str | None:
+    """Return the URL of the table image when the section has no HTML table."""
+    table, image_src = _find_section_content(BeautifulSoup(html, "html.parser"))
+    return None if table is not None else image_src
+
+
+def _normalise_header(text: str) -> str:
+    """Drop whitespace and case so "CFR(%) confirmed" matches "CFR (%) confirmed"."""
+    return re.sub(r"\s", "", text).lower()
+
+
+_HEADERS = {_normalise_header(k): v for k, v in INDICATORS.items()}
+
+
+def _parse_header(cells: list[str]) -> list[str]:
     """Map header cells to indicator labels, raising on unknown columns."""
-    cells = [_cell_text(c) for c in row.find_all(["td", "th"])]
     if cells[0] != FIRST_HEADER:
         raise ValueError(f"Unexpected first header cell: {cells[0]!r}")
-    unknown = [c for c in cells[1:] if c not in INDICATORS]
+    labels: list[str] = []
+    unknown: list[str] = []
+    for cell in cells[1:]:
+        match = get_close_matches(
+            _normalise_header(cell), _HEADERS, n=1, cutoff=HEADER_MATCH_CUTOFF
+        )
+        if match:
+            labels.append(_HEADERS[match[0]])
+        else:
+            unknown.append(cell)
     if unknown:
         raise ValueError(f"Unknown WHO table columns: {unknown}")
-    return [INDICATORS[c] for c in cells[1:]]
+    if len(set(labels)) != len(labels):
+        raise ValueError(f"Duplicate WHO table columns: {cells[1:]}")
+    return labels
 
 
-def parse_who_table(
-    html: str, *, retrieved_at: datetime, source_url: str = SOURCE_URL
+def parse_rows(
+    rows: list[list[str]],
+    *,
+    retrieved_at: datetime,
+    source_url: str,
+    strict_indicators: frozenset[str] = STRICT_INDICATORS,
 ) -> pl.DataFrame:
-    """Parse the Bundibugyo table into long rows, one per country and indicator.
+    """Turn the table's cell texts into long rows, one per country and indicator.
 
-    The Total row is used to validate country sums and is not returned.
+    Shared by the HTML parser and the image OCR. The Total row is used to
+    validate country sums and is not returned.
 
     Args:
-        html: Full HTML of the WHO page.
+        rows: Cell texts per table row, header row included.
         retrieved_at: When the page was captured (UTC).
-        source_url: Where the page came from, stored for provenance.
+        source_url: Where the table came from, stored for provenance.
+        strict_indicators: Indicators whose Total mismatch rejects the table.
 
     Returns:
         DataFrame with columns in `SCHEMA`.
@@ -145,9 +194,8 @@ def parse_who_table(
     Raises:
         ValueError: If the table layout is unrecognised or totals do not match.
     """
-    rows = find_table(BeautifulSoup(html, "html.parser")).find_all("tr")
     header_idx = next(
-        (i for i, r in enumerate(rows) if _cell_text(r).startswith(FIRST_HEADER)),
+        (i for i, r in enumerate(rows) if r and r[0].startswith(FIRST_HEADER)),
         None,
     )
     if header_idx is None:
@@ -157,8 +205,7 @@ def parse_who_table(
     records: list[dict[str, object]] = []
     totals: dict[str, float | None] = {}
     as_of: date | None = None
-    for row in rows[header_idx + 1 :]:
-        cells = [_cell_text(c) for c in row.find_all(["td", "th"])]
+    for cells in rows[header_idx + 1 :]:
         if not any(cells):
             continue
         if match := DATE_ROW.search(" ".join(cells)):
@@ -187,16 +234,45 @@ def parse_who_table(
         source_url=pl.lit(source_url),
     )
     df = df.select(list(SCHEMA)).cast(SCHEMA)
-    validate(df, totals=totals)
+    validate(df, totals=totals, strict_indicators=strict_indicators)
     return df
 
 
-def validate(df: pl.DataFrame, *, totals: dict[str, float | None]) -> None:
+def parse_who_table(
+    html: str, *, retrieved_at: datetime, source_url: str = SOURCE_URL
+) -> pl.DataFrame:
+    """Parse the Bundibugyo HTML table into long rows.
+
+    Args:
+        html: Full HTML of the WHO page.
+        retrieved_at: When the page was captured (UTC).
+        source_url: Where the page came from, stored for provenance.
+
+    Returns:
+        DataFrame with columns in `SCHEMA`.
+
+    Raises:
+        ValueError: If the table is missing or invalid; see `parse_rows`.
+    """
+    table = find_table(BeautifulSoup(html, "html.parser"))
+    rows = [
+        [_cell_text(cell) for cell in tr.find_all(["td", "th"])]
+        for tr in table.find_all("tr")
+    ]
+    return parse_rows(rows, retrieved_at=retrieved_at, source_url=source_url)
+
+
+def validate(
+    df: pl.DataFrame,
+    *,
+    totals: dict[str, float | None],
+    strict_indicators: frozenset[str] = STRICT_INDICATORS,
+) -> None:
     """Check keys are unique, log nulls, and check country sums match the Total row.
 
     Raises:
         ValueError: On duplicate keys, a missing Total row or a sum mismatch
-            for an indicator in `STRICT_INDICATORS`.
+            for an indicator in `strict_indicators`.
     """
     if df.select(KEY).is_duplicated().any():
         raise ValueError("Duplicate (date, country, indicator) rows")
@@ -221,7 +297,7 @@ def validate(df: pl.DataFrame, *, totals: dict[str, float | None]) -> None:
         if total == expected:
             continue
         message = f"{indicator}: countries sum to {total}, Total row says {expected}"
-        if indicator in STRICT_INDICATORS:
+        if indicator in strict_indicators:
             raise ValueError(message)
         logger.warning(message)
 
