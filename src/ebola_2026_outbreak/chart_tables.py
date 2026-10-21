@@ -1,9 +1,10 @@
 """Build chart-ready tables from the processed outbreak data.
 
 Outputs, in data/output/, with display column names for charting tools:
-    - drc_2026_country_summary.csv: latest WHO figures per country, plus Total.
-    - drc_2026_province_cases_map.csv: latest sitrep confirmed cases per
-      province, keyed to the map's OBJECTIDs.
+    - 2026_outbreak_country_summary.csv: latest WHO figures per country,
+      plus Total.
+    - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
+      per province, keyed to the map's OBJECTIDs.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case.
 """
@@ -28,8 +29,8 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = ROOT / "data" / "output"
 OBJECTID_PATH = ROOT / "data" / "reference" / "drc_provinces_objectid.csv"
-COUNTRY_SUMMARY_PATH = OUTPUT_DIR / "drc_2026_country_summary.csv"
-PROVINCE_MAP_PATH = OUTPUT_DIR / "drc_2026_province_cases_map.csv"
+COUNTRY_SUMMARY_PATH = OUTPUT_DIR / "2026_outbreak_country_summary.csv"
+PROVINCE_MAP_PATH = OUTPUT_DIR / "2026_outbreak_drc_cases_by_province.csv"
 COMPARISON_PATH = OUTPUT_DIR / "outbreak_comparison_weekly.csv"
 
 # Week 0 for each outbreak. West Africa: Institut Pasteur (Lyon) confirmed
