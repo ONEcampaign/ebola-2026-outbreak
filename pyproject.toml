@@ -9,7 +9,9 @@ authors = [
 
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "polars>=2.0.0",
+]
 
 
 [build-system]
@@ -101,6 +103,3 @@ replace-imports-with-any = [
 # patterns common in exploratory code. Demoted to ignore.
 possibly-missing-attribute = "ignore"
 possibly-unresolved-reference = "ignore"
-
-
-
