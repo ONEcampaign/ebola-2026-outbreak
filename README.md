@@ -32,6 +32,10 @@ Files are prefixed by outbreak so historical and current data stay apart:
   - `drc_2026_sitrep_by_province.csv`: new, cumulative confirmed cases and
     cumulative confirmed deaths by province from each sitrep's province
     table, built by `drc_2026_sitreps_parse.py`.
+  - `drc_2026_indicators_by_date.csv` and
+    `drc_2026_cumulative_confirmed_cases.csv`: national totals summed across
+    provinces, in the same shape and with the same final indicator label as
+    the West Africa files. Built by `drc_2026_final.py`.
 
 ### Tests
 

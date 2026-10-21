@@ -19,6 +19,8 @@ from pathlib import Path
 
 import polars as pl
 
+from ebola_2026_outbreak.aggregate import forward_fill_cumulative
+
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -84,37 +86,6 @@ def drop_non_additive(df: pl.DataFrame) -> pl.DataFrame:
     return df.filter(~is_non_additive)
 
 
-def forward_fill_cumulative(df: pl.DataFrame) -> pl.DataFrame:
-    """Carry each country's last reported cumulative value onto later report dates.
-
-    Only cumulative indicators are filled: a stale "last 21 days" count is not
-    valid on a later date. The grid uses dates on which any country reported the
-    indicator. Dates before a country's first report stay empty, so that country
-    adds nothing on those dates.
-    """
-    is_cumulative = pl.col("indicator").str.starts_with(CUMULATIVE_PREFIX)
-    cumulative, other = df.filter(is_cumulative), df.filter(~is_cumulative)
-
-    grid = (
-        cumulative.select("indicator", "country")
-        .unique()
-        .join(cumulative.select("indicator", "date").unique(), on="indicator")
-    )
-    filled = (
-        grid.join(cumulative, on=["indicator", "country", "date"], how="left")
-        .sort("indicator", "country", "date")
-        .with_columns(pl.col("value").forward_fill().over("indicator", "country"))
-        .drop_nulls("value")
-    )
-    logger.info(
-        "Forward-filled %d cumulative rows (%d -> %d)",
-        filled.height - cumulative.height,
-        cumulative.height,
-        filled.height,
-    )
-    return pl.concat([filled.select(df.columns), other])
-
-
 def sum_by_date_indicator(df: pl.DataFrame) -> pl.DataFrame:
     """Sum values across countries for each date and indicator, tagged by outbreak."""
     return (
@@ -145,7 +116,9 @@ def select_indicator(df: pl.DataFrame, indicator: str) -> pl.DataFrame:
 def main() -> None:
     """Build the intermediate and final outputs."""
     raw = load_raw(RAW_PATH)
-    additive = forward_fill_cumulative(drop_non_additive(raw))
+    additive = forward_fill_cumulative(
+        drop_non_additive(raw), entity="country", cumulative_prefix=CUMULATIVE_PREFIX
+    )
 
     intermediate = sum_by_date_indicator(additive)
     intermediate.write_csv(INTERMEDIATE_PATH)
