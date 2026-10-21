@@ -10,6 +10,8 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "httpx>=0.28.1",
     "polars>=2.0.0",
 ]
 
@@ -20,10 +22,10 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-
     "ty>=0.0.59",
     "ruff>=0.15.0",
     "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
 ]
 
 [tool.ruff]

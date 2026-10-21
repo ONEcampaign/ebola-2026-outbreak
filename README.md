@@ -20,7 +20,17 @@ Files are prefixed by outbreak so historical and current data stay apart:
 - `west_africa_2014_16_*`: 2014-16 West Africa outbreak (WHO via
   [HDX](https://data.humdata.org/dataset/ebola-cases-2014)), used for comparison.
   Built by `uv run python src/ebola_2026_outbreak/west_africa_2014_16.py`.
-- 2026 DRC outbreak: not yet added.
+- `drc_2026_*`: 2026 DRC Bundibugyo virus disease outbreak.
+  - `drc_2026_who_by_country.csv`: the WHO country table from the
+    [alert-and-response page](https://www.who.int/emergencies/alert-and-response).
+    WHO shows only the latest figures, so each run of
+    `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history.
+
+### Tests
+
+```bash
+uv run pytest
+```
 
 ### Code Quality
 
