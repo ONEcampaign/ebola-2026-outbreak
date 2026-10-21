@@ -1,10 +1,13 @@
 """Tests for sitrep header parsing and report date resolution."""
 
+from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
 import polars as pl
 import pytest
 
+from ebola_2026_outbreak import drc_2026_sitreps_download as dlm
 from ebola_2026_outbreak.drc_2026_sitreps_download import (
     MANIFEST_SCHEMA,
     SitrepHeader,
@@ -105,3 +108,61 @@ def test_flag_latest_keeps_most_recent_upload() -> None:
         518: False,
         506: True,
     }
+
+
+def _item(media_id: int, modified: str) -> dlm.MediaItem:
+    """Media item stub."""
+    return {
+        "id": media_id,
+        "modified": modified,
+        "source_url": f"https://example.org/{media_id}.pdf",
+        "mime_type": "application/pdf",
+    }
+
+
+@dataclass
+class FakeApi:
+    """Media API contents and the downloads requested from it."""
+
+    items: list[dlm.MediaItem] = field(default_factory=list)
+    downloads: list[tuple[int, bool]] = field(default_factory=list)
+
+
+@pytest.fixture
+def fake_api(monkeypatch: pytest.MonkeyPatch) -> FakeApi:
+    """Stub the media API, downloads and PDF reads."""
+    api = FakeApi()
+
+    def download(item: dlm.MediaItem, *, refresh: bool = False) -> Path:
+        api.downloads.append((item["id"], refresh))
+        return Path(f"{item['id']}.pdf")
+
+    monkeypatch.setattr(dlm, "list_media", lambda: api.items)
+    monkeypatch.setattr(dlm, "download", download)
+    monkeypatch.setattr(dlm, "read_first_page", lambda path: HEADER_OCT)
+    return api
+
+
+def test_build_manifest_keeps_media_dropped_by_api(fake_api: FakeApi) -> None:
+    fake_api.items = [_item(710, "2026-10-20")]
+    first = dlm.build_manifest(None)
+    fake_api.items = []
+    second = dlm.build_manifest(first)
+    assert second.select("media_id", "in_api", "is_latest").rows() == [
+        (710, False, True)
+    ]
+
+
+def test_build_manifest_refreshes_replaced_upload(fake_api: FakeApi) -> None:
+    fake_api.items = [_item(710, "2026-10-20")]
+    first = dlm.build_manifest(None)
+    fake_api.items = [_item(710, "2026-10-21")]
+    second = dlm.build_manifest(first)
+    assert fake_api.downloads == [(710, False), (710, True)]
+    assert second["modified"].to_list() == ["2026-10-21"]
+
+
+def test_build_manifest_reuses_unchanged_media(fake_api: FakeApi) -> None:
+    fake_api.items = [_item(710, "2026-10-20")]
+    dlm.build_manifest(dlm.build_manifest(None))
+    assert fake_api.downloads == [(710, False)]

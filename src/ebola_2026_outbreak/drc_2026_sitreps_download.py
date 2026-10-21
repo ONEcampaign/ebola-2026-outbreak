@@ -69,6 +69,7 @@ MANIFEST_SCHEMA = pl.Schema(
         "reference_date": pl.Date,
         "publish_date": pl.Date,
         "is_latest": pl.Boolean,
+        "in_api": pl.Boolean,
         "media_id": pl.Int64,
         "modified": pl.String,
         "file_name": pl.String,
@@ -207,14 +208,21 @@ def list_media() -> list[MediaItem]:
     return pdfs
 
 
-def download(item: MediaItem) -> Path:
+def download(item: MediaItem, *, refresh: bool = False) -> Path:
     """Download a media item to the sitrep folder unless already present.
 
     Files are named by media id because source filenames contain "N°" and
     duplicate each other across uploads.
+
+    Args:
+        item: Media item to fetch.
+        refresh: Download even if a file exists, for an upload replaced in place.
+
+    Returns:
+        Path to the local PDF.
     """
     path = SITREP_DIR / f"{item['id']}.pdf"
-    if not path.exists():
+    if refresh or not path.exists():
         path.write_bytes(get(item["source_url"]).content)
     return path
 
@@ -230,6 +238,7 @@ def manifest_row(item: MediaItem, header: SitrepHeader) -> dict[str, object]:
         "reference_date": header.reference_date,
         "publish_date": header.publish_date,
         "is_latest": False,
+        "in_api": True,
         "media_id": item["id"],
         "modified": item["modified"],
         "file_name": unquote(source_url.rsplit("/", 1)[-1]),
@@ -287,24 +296,39 @@ def log_gaps(manifest: pl.DataFrame) -> None:
 def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
     """Build the manifest, downloading only media items that are new or changed.
 
+    Rows for media the API no longer lists are kept with `in_api` False, so a
+    removed upload never deletes its date from the outputs.
+
     Args:
         previous: The existing manifest, or None on a first run.
 
     Returns:
         One row per sitrep PDF with `is_latest` flagged per report date.
     """
-    known: dict[tuple[int, str], dict[str, object]] = {}
-    if previous is not None:
-        known = {(row["media_id"], row["modified"]): row for row in previous.to_dicts()}
+    previous_rows = previous.to_dicts() if previous is not None else []
+    known = {(row["media_id"], row["modified"]): row for row in previous_rows}
+    known_ids = {row["media_id"] for row in previous_rows}
 
     rows: list[dict[str, object]] = []
     for item in list_media():
         if cached := known.get((item["id"], item["modified"])):
-            rows.append(cached)
+            rows.append(cached | {"in_api": True})
             continue
-        path = download(item)
+        # A known id with a new `modified` time is an upload replaced in place.
+        replaced = item["id"] in known_ids
+        path = download(item, refresh=replaced)
         rows.append(manifest_row(item, parse_header(read_first_page(path))))
-        logger.info("Added %s", rows[-1]["file_name"])
+        logger.info("%s %s", "Replaced" if replaced else "Added", rows[-1]["file_name"])
+
+    listed_ids = {row["media_id"] for row in rows}
+    for row in previous_rows:
+        if row["media_id"] not in listed_ids:
+            logger.warning(
+                "%s (%s) is no longer listed by the API; keeping it",
+                row["file_name"],
+                row["report_date"],
+            )
+            rows.append(row | {"in_api": False})
 
     manifest = pl.DataFrame(rows, schema=MANIFEST_SCHEMA)
     return flag_latest(resolve_report_dates(manifest))
