@@ -9,7 +9,10 @@ existed, or with a layout the parser rejects, are skipped and listed.
 import logging
 import time
 from datetime import UTC, datetime
+from itertools import groupby
+from operator import itemgetter
 
+import httpx
 import polars as pl
 
 from ebola_2026_outbreak.drc_2026_who import (
@@ -31,8 +34,8 @@ WAYBACK_DIR = SNAPSHOT_DIR / "wayback"
 # The outbreak was declared in mid-May 2026; earlier captures predate the table.
 BACKFILL_FROM = "20260501"
 TIMESTAMP_FORMAT = "%Y%m%d%H%M%S"
-# archive.org refuses connections above ~15 requests/minute.
-REQUEST_PAUSE_S = 5.0
+# archive.org starts refusing connections after a few dozen quick requests.
+REQUEST_PAUSE_S = 10.0
 
 
 def list_snapshots(url: str, *, since: str = BACKFILL_FROM) -> list[str]:
@@ -70,24 +73,30 @@ def load_snapshot(timestamp: str) -> str:
 def parse_snapshots(timestamps: list[str]) -> tuple[pl.DataFrame, dict[str, str]]:
     """Parse each capture, collecting rows and the reason for each skip.
 
+    Stops downloading at the first fetch failure, since archive.org then
+    refuses every request for a while; a rerun resumes from the cache.
+
     Returns:
         Parsed rows from every usable capture, and {timestamp: reason} for
-        captures the parser rejected.
+        captures that were rejected or not fetched.
     """
     frames: list[pl.DataFrame] = []
     skipped: dict[str, str] = {}
-    for timestamp in timestamps:
+    for i, timestamp in enumerate(timestamps):
+        try:
+            html = load_snapshot(timestamp)
+        except httpx.HTTPError as e:
+            logger.error("archive.org stopped responding (%s); rerun to resume", e)
+            skipped |= dict.fromkeys(timestamps[i:], "not fetched")
+            break
+
         retrieved_at = datetime.strptime(timestamp, TIMESTAMP_FORMAT).replace(
             tzinfo=UTC
         )
         source_url = SNAPSHOT_URL.format(timestamp=timestamp, url=SOURCE_URL)
         try:
             frames.append(
-                parse_who_table(
-                    load_snapshot(timestamp),
-                    retrieved_at=retrieved_at,
-                    source_url=source_url,
-                )
+                parse_who_table(html, retrieved_at=retrieved_at, source_url=source_url)
             )
         except ValueError as e:
             skipped[timestamp] = str(e)
@@ -107,8 +116,15 @@ def main() -> None:
     logger.info(
         "Parsed %d captures, skipped %d", len(timestamps) - len(skipped), len(skipped)
     )
-    for timestamp, reason in skipped.items():
-        logger.warning("Skipped capture %s: %s", timestamp, reason)
+    for reason, group in groupby(skipped.items(), key=itemgetter(1)):
+        captures = [timestamp for timestamp, _ in group]
+        logger.warning(
+            "Skipped %d captures (%s to %s): %s",
+            len(captures),
+            captures[0],
+            captures[-1],
+            reason,
+        )
     logger.info("Captures cached in %s", WAYBACK_DIR.relative_to(ROOT))
 
     upsert(df, OUTPUT_PATH)

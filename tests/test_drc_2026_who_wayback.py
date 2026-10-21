@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from ebola_2026_outbreak import drc_2026_who_wayback as wayback
@@ -24,6 +25,23 @@ def test_parse_snapshots_skips_unusable_captures() -> None:
     assert df.height == 35
     assert df["source_url"].str.contains(f"web.archive.org/web/{GOOD}id_/").all()
     assert df["retrieved_at"].dt.strftime("%Y%m%d%H%M%S").unique().to_list() == [GOOD]
+
+
+def test_parse_snapshots_stops_at_first_fetch_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blocked = "20261021000000"
+    pages = {GOOD: FIXTURE.read_text()}
+
+    def load(timestamp: str) -> str:
+        if timestamp not in pages:
+            raise httpx.ConnectError("Connection refused")
+        return pages[timestamp]
+
+    monkeypatch.setattr(wayback, "load_snapshot", load)
+    df, skipped = wayback.parse_snapshots([GOOD, blocked, "20261022000000"])
+    assert df.height == 35
+    assert skipped == dict.fromkeys([blocked, "20261022000000"], "not fetched")
 
 
 def test_parse_snapshots_raises_when_nothing_parses() -> None:
