@@ -20,6 +20,10 @@ Files are prefixed by outbreak so historical and current data stay apart:
 - `west_africa_2014_16_*`: 2014-16 West Africa outbreak (WHO via
   [HDX](https://data.humdata.org/dataset/ebola-cases-2014)), used for comparison.
   Built by `uv run python src/ebola_2026_outbreak/west_africa_2014_16.py`.
+  WHO's series starts on 29 August 2014; `west_africa_2014_16_early.py` fills
+  the months before from OCHA ROWCA's national confirmed counts
+  ([HDX](https://data.humdata.org/dataset/rowca-ebola-cases)) into
+  `west_africa_2014_16_early_confirmed_cases.csv`.
 - `drc_2026_*`: 2026 DRC Bundibugyo virus disease outbreak.
   - `drc_2026_who_by_country.csv`: the WHO country table from the
     [alert-and-response page](https://www.who.int/emergencies/alert-and-response).
@@ -51,7 +55,8 @@ tables to `data/output/`, refreshed by the daily scrape:
   each province with cases, keyed to the map OBJECTIDs in
   `data/reference/drc_provinces_objectid.csv`.
 - `outbreak_comparison_weekly.csv`: cumulative confirmed cases by week since
-  each outbreak's first confirmed case (22 March 2014 and 15 May 2026).
+  each outbreak's first confirmed case (22 March 2014 and 15 May 2026). West
+  Africa uses ROWCA counts before 29 August 2014 and WHO counts after.
 
 ### Tests
 

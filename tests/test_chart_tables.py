@@ -19,6 +19,7 @@ from ebola_2026_outbreak.chart_tables import (
     province_map,
     weekly,
     weekly_comparison,
+    west_africa_series,
 )
 
 D1, D2 = date(2026, 10, 17), date(2026, 10, 18)
@@ -144,3 +145,16 @@ def test_drc_outbreak_series_carries_countries_forward() -> None:
         ]
     )
     assert drc_outbreak_series(who).rows() == [(D1, 920.0), (D2, 1020.0)]
+
+
+def test_west_africa_series_joins_without_overlap() -> None:
+    early = pl.DataFrame({"date": [date(2014, 8, 28)], "value": [1899.0]})
+    who = pl.DataFrame({"date": [date(2014, 8, 29)], "value": [1754.0]})
+    assert west_africa_series(early, who)["value"].to_list() == [1899.0, 1754.0]
+
+
+def test_west_africa_series_rejects_overlap() -> None:
+    early = pl.DataFrame({"date": [date(2014, 8, 29)], "value": [1899.0]})
+    who = pl.DataFrame({"date": [date(2014, 8, 29)], "value": [1754.0]})
+    with pytest.raises(ValueError, match="overlaps"):
+        west_africa_series(early, who)

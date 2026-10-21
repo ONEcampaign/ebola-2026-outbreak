@@ -6,7 +6,8 @@ Outputs, in data/output/, with display column names for charting tools:
     - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
       per province, keyed to the map's OBJECTIDs.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
-      each outbreak's first confirmed case.
+      each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
+      before 29 August 2014 and WHO/HDX counts from then on.
 """
 
 import logging
@@ -23,6 +24,9 @@ from ebola_2026_outbreak.drc_2026_sitreps_parse import SCHEMA as PROVINCE_SCHEMA
 from ebola_2026_outbreak.drc_2026_who import OUTPUT_PATH as WHO_PATH
 from ebola_2026_outbreak.drc_2026_who import SCHEMA as WHO_SCHEMA
 from ebola_2026_outbreak.west_africa_2014_16 import FINAL_PATH as WEST_AFRICA_PATH
+from ebola_2026_outbreak.west_africa_2014_16_early import (
+    OUTPUT_PATH as WEST_AFRICA_EARLY_PATH,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +191,25 @@ def weekly(series: pl.DataFrame, *, start: date, name: str) -> pl.DataFrame:
     )
 
 
+def west_africa_series(early: pl.DataFrame, who: pl.DataFrame) -> pl.DataFrame:
+    """Join ROWCA counts before the WHO series to the WHO series itself.
+
+    Args:
+        early: ROWCA `date` and `value` rows, all before the WHO series.
+        who: WHO/HDX `date` and `value` rows.
+
+    Returns:
+        `date` and `value`, sorted by date.
+
+    Raises:
+        ValueError: If the two series overlap in time.
+    """
+    who_start = who.select(pl.col("date").min()).item()
+    if early.filter(pl.col("date") >= who_start).height:
+        raise ValueError(f"Early series overlaps the WHO series from {who_start}")
+    return pl.concat([early, who], how="vertical_relaxed").sort("date")
+
+
 def weekly_comparison(west_africa: pl.DataFrame, drc: pl.DataFrame) -> pl.DataFrame:
     """Cumulative confirmed cases per week since each outbreak's first case.
 
@@ -230,10 +253,13 @@ def main() -> None:
     mapped.write_csv(PROVINCE_MAP_PATH)
     logger.info("Wrote %d rows to %s", mapped.height, PROVINCE_MAP_PATH.name)
 
-    west_africa = pl.read_csv(WEST_AFRICA_PATH, try_parse_dates=True)
-    comparison = weekly_comparison(
-        west_africa.select("date", "value"), drc_outbreak_series(who)
+    west_africa = west_africa_series(
+        pl.read_csv(WEST_AFRICA_EARLY_PATH, try_parse_dates=True).select(
+            "date", "value"
+        ),
+        pl.read_csv(WEST_AFRICA_PATH, try_parse_dates=True).select("date", "value"),
     )
+    comparison = weekly_comparison(west_africa, drc_outbreak_series(who))
     comparison.write_csv(COMPARISON_PATH)
     logger.info("Wrote %d rows to %s", comparison.height, COMPARISON_PATH.name)
 
