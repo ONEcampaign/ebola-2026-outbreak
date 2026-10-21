@@ -107,7 +107,9 @@ def find_table(soup: BeautifulSoup) -> Tag:
             return tag
         if tag.name == "h2":
             break
-        image_src = image_src or tag.get("src")
+        src = str(tag.get("src", ""))
+        if SECTION_HEADING.lower() in src.lower():
+            image_src = image_src or src
     if image_src:
         # Until early September 2026 WHO published the table as a PNG.
         raise ValueError(f"Table published as an image: {image_src}")

@@ -91,10 +91,13 @@ def test_upsert_keeps_latest_capture(table: pl.DataFrame, tmp_path: Path) -> Non
 def test_image_only_section_raises() -> None:
     html = (
         "<html><h2>Ebola disease (Bundibugyo virus)</h2>"
-        '<img src="https://cdn.who.int/epi-update.png"><p>*Data source</p>'
+        '<img src="/logo.svg">'
+        '<img src="https://cdn.who.int/bundibugyo-epi-update.png"><p>*Data source</p>'
         "<h2>Other outbreak</h2><table><tr><td>x</td></tr></table></html>"
     )
-    with pytest.raises(ValueError, match=r"published as an image: .*epi-update\.png"):
+    with pytest.raises(
+        ValueError, match=r"published as an image: .*bundibugyo-epi-update\.png"
+    ):
         parse_who_table(html, retrieved_at=RETRIEVED_AT)
 
 
@@ -103,3 +106,9 @@ def test_non_strict_total_mismatch_warns(caplog: pytest.LogCaptureFixture) -> No
     df = parse_who_table(html, retrieved_at=RETRIEVED_AT)
     assert _value(df, "Democratic Republic of the Congo", "Recovered") == 2560
     assert "Recovered: countries sum to" in caplog.text
+
+
+def test_unrelated_image_is_not_reported_as_table() -> None:
+    html = '<html><h2>Ebola disease (Bundibugyo virus)</h2><img src="/logo.svg"></html>'
+    with pytest.raises(ValueError, match="No table after heading"):
+        parse_who_table(html, retrieved_at=RETRIEVED_AT)
