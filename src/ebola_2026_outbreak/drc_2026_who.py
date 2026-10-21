@@ -44,6 +44,10 @@ INDICATORS = {
     "Recovered": "Recovered",
 }
 NON_ADDITIVE = frozenset({"CFR confirmed (%)"})
+# Indicators used downstream: a Total mismatch here rejects the capture.
+# WHO's own Total row is occasionally off for the others (Recovered sums to
+# 1 970 against 1 960 on 24 September 2026), which only logs a warning.
+STRICT_INDICATORS = frozenset({"Confirmed cases", "Confirmed deaths"})
 
 KEY = ["date", "country", "indicator"]
 SCHEMA = pl.Schema(
@@ -88,17 +92,26 @@ def find_table(soup: BeautifulSoup) -> Tag:
     """Locate the table that follows the Bundibugyo section heading.
 
     Raises:
-        ValueError: If the heading or table is missing.
+        ValueError: If the heading or table is missing, or the section shows
+            the table as an image.
     """
     heading = soup.find(
         lambda tag: tag.name in {"h2", "h3"} and SECTION_HEADING in tag.get_text()
     )
     if heading is None:
         raise ValueError(f"No heading containing {SECTION_HEADING!r}")
-    table = heading.find_next("table")
-    if not isinstance(table, Tag):
-        raise ValueError(f"No table after heading {SECTION_HEADING!r}")
-    return table
+    # Search only this section: stop at the next top-level heading.
+    image_src = None
+    for tag in heading.find_all_next(["table", "img", "h2"]):
+        if tag.name == "table":
+            return tag
+        if tag.name == "h2":
+            break
+        image_src = image_src or tag.get("src")
+    if image_src:
+        # Until early September 2026 WHO published the table as a PNG.
+        raise ValueError(f"Table published as an image: {image_src}")
+    raise ValueError(f"No table after heading {SECTION_HEADING!r}")
 
 
 def _parse_header(row: Tag) -> list[str]:
@@ -180,7 +193,8 @@ def validate(df: pl.DataFrame, *, totals: dict[str, float | None]) -> None:
     """Check keys are unique, log nulls, and check country sums match the Total row.
 
     Raises:
-        ValueError: On duplicate keys, a missing Total row or a sum mismatch.
+        ValueError: On duplicate keys, a missing Total row or a sum mismatch
+            for an indicator in `STRICT_INDICATORS`.
     """
     if df.select(KEY).is_duplicated().any():
         raise ValueError("Duplicate (date, country, indicator) rows")
@@ -202,10 +216,12 @@ def validate(df: pl.DataFrame, *, totals: dict[str, float | None]) -> None:
     )
     for indicator, total in sums.iter_rows():
         expected = totals.get(indicator) or 0.0
-        if total != expected:
-            raise ValueError(
-                f"{indicator}: countries sum to {total}, Total row says {expected}"
-            )
+        if total == expected:
+            continue
+        message = f"{indicator}: countries sum to {total}, Total row says {expected}"
+        if indicator in STRICT_INDICATORS:
+            raise ValueError(message)
+        logger.warning(message)
 
 
 def upsert(new: pl.DataFrame, path: Path) -> pl.DataFrame:
