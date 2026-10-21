@@ -10,7 +10,6 @@ import logging
 import time
 from datetime import UTC, datetime
 from itertools import groupby
-from operator import itemgetter
 
 import httpx
 import polars as pl
@@ -116,7 +115,8 @@ def main() -> None:
     logger.info(
         "Parsed %d captures, skipped %d", len(timestamps) - len(skipped), len(skipped)
     )
-    for reason, group in groupby(skipped.items(), key=itemgetter(1)):
+    # Group by the reason's leading clause; details such as image URLs vary.
+    for reason, group in groupby(skipped.items(), key=lambda kv: kv[1].split(":")[0]):
         captures = [timestamp for timestamp, _ in group]
         logger.warning(
             "Skipped %d captures (%s to %s): %s",
