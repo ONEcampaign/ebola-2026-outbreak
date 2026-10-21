@@ -29,6 +29,9 @@ Files are prefixed by outbreak so historical and current data stay apart:
   - `drc_2026_sitrep_manifest.csv`: every DRC Ministry of Health sitrep PDF
     with its report date, built by `drc_2026_sitreps_download.py`. PDFs are
     saved to `data/raw/drc_2026/sitreps/`.
+  - `drc_2026_sitrep_by_province.csv`: new, cumulative confirmed cases and
+    cumulative confirmed deaths by province from each sitrep's province
+    table, built by `drc_2026_sitreps_parse.py`.
 
 ### Tests
 
