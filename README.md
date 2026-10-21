@@ -58,6 +58,16 @@ tables to `data/output/`, refreshed by the daily scrape:
   each outbreak's first confirmed case (22 March 2014 and 15 May 2026). West
   Africa uses ROWCA counts before 29 August 2014 and WHO counts after.
 
+### Health expenditure
+
+`uv run python src/ebola_2026_outbreak/drc_health_expenditure.py` writes
+`data/output/drc_expenditure_by_source.csv`: DR Congo's health expenditure by
+source (domestic government, external, other private, out-of-pocket) as a share
+of current health expenditure and in constant 2023 USD, from WHO's GHED via
+`bblocks.data_importers`. It replicates `expenditure_by_source.csv` in
+[topic_health_financing](https://github.com/ONEcampaign/topic_health_financing),
+which used constant 2022 USD.
+
 ### Tests
 
 ```bash
