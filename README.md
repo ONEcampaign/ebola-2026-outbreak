@@ -62,11 +62,10 @@ tables to `data/output/`, refreshed by the daily scrape:
 
 `uv run python src/ebola_2026_outbreak/drc_health_expenditure.py` writes
 `data/output/drc_expenditure_by_source.csv`: DR Congo's health expenditure by
-source (domestic government, external, other private, out-of-pocket) as a share
-of current health expenditure and in constant 2023 USD, from WHO's GHED via
-`bblocks.data_importers`. It replicates `expenditure_by_source.csv` in
-[topic_health_financing](https://github.com/ONEcampaign/topic_health_financing),
-which used constant 2022 USD.
+source as a percent of current health expenditure, one row per year with
+columns `Year, Country, Domestic government, External, Other private, Out-of-pocket`. Data come from WHO's GHED via `bblocks.data_importers`, using
+the method of `expenditure_by_source.csv` in
+[topic_health_financing](https://github.com/ONEcampaign/topic_health_financing).
 
 ### Tests
 
