@@ -58,9 +58,12 @@ jobs:
       - name: Build national series
         run: uv run python src/ebola_2026_outbreak/drc_2026_final.py
 
+      - name: Build chart tables
+        run: uv run python src/ebola_2026_outbreak/chart_tables.py
+
       - name: Commit sitrep data
         run: |
-          git add data/processed/drc_2026_*.csv
+          git add data/processed/drc_2026_*.csv data/output/*.csv
           if git diff --cached --quiet; then
             echo "No data changes"
             exit 0

@@ -40,6 +40,19 @@ Files are prefixed by outbreak so historical and current data stay apart:
     provinces, in the same shape and with the same final indicator label as
     the West Africa files. Built by `drc_2026_final.py`.
 
+### Chart tables
+
+`uv run python src/ebola_2026_outbreak/chart_tables.py` writes display-ready
+tables to `data/output/`, refreshed by the daily scrape:
+
+- `drc_2026_country_summary.csv`: latest WHO confirmed cases, deaths, case
+  fatality rate and recoveries per country, with a Total row.
+- `drc_2026_province_cases_map.csv`: latest sitrep confirmed cases for each
+  province with cases, keyed to the map OBJECTIDs in
+  `data/reference/drc_provinces_objectid.csv`.
+- `outbreak_comparison_weekly.csv`: cumulative confirmed cases by week since
+  each outbreak's first confirmed case (22 March 2014 and 15 May 2026).
+
 ### Tests
 
 ```bash
