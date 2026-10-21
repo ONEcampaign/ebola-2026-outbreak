@@ -3,7 +3,8 @@
 Follows `create_expenditure_by_source()` in ONEcampaign/topic_health_financing
 (scripts/analysis/create_data.py) for one country, sourcing GHED through
 `bblocks.data_importers.GHED`. Output is one row per year from 2013 to 2023
-with total current health expenditure in constant 2023 USD and each source's
+with total current health expenditure in millions of constant 2023 USD and
+each source's
 share of it, in percent: domestic government, external, other private and
 out-of-pocket.
 """
@@ -34,12 +35,11 @@ PVT_SUBTRACT = "fs61"
 # Current health expenditure by financing scheme.
 CHE_CODES = ["hf1", "hf2", "hf3", "hf4", "hfnec"]
 
-# Current health expenditure in constant 2023 USD, which GHED publishes in
-# millions; the output is in USD, as in the original.
+# Current health expenditure in millions of constant 2023 USD, as GHED
+# publishes it.
 CHE_USD_CODE = "che_usd2023"
-TOTAL = "Total health expenditure (constant 2023 USD)"
+TOTAL = "Total health expenditure (million constant 2023 USD)"
 GHED_USD_UNIT = "Millions"
-USD_PER_GHED_UNIT = 1_000_000
 FIRST_YEAR, LAST_YEAR = 2013, 2023
 
 # Components of the sums may be absent and count as 0, as in the original; if
@@ -159,7 +159,7 @@ def expenditure_by_source(
         last_year: Last year to keep.
 
     Returns:
-        `Year`, `Country`, `TOTAL` in USD, and one percent column per source
+        `Year`, `Country`, `TOTAL` in millions of USD, and one percent column per source
         in `SOURCE_ORDER`, for every year from `first_year` to `last_year`.
 
     Raises:
@@ -168,9 +168,7 @@ def expenditure_by_source(
     """
     shares = {source: indicator(ghed, code) for source, code in SHARE_CODES.items()}
     shares[PVT] = other_private_share(ghed)
-    total = indicator(ghed, CHE_USD_CODE).select(
-        "year", (pl.col("value") * USD_PER_GHED_UNIT).alias(TOTAL)
-    )
+    total = indicator(ghed, CHE_USD_CODE).select("year", pl.col("value").alias(TOTAL))
 
     years = pl.DataFrame(
         {"year": range(first_year, last_year + 1)}, schema={"year": pl.Int64}

@@ -53,7 +53,7 @@ def test_output_columns_and_values() -> None:
     assert out.row(0) == (
         2020,
         "DR Congo",
-        2_500_000.0,
+        2.5,
         20.0,
         40.0,
         pytest.approx(10.0),
