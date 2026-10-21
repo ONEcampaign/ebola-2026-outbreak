@@ -3,8 +3,11 @@
 from datetime import date
 from pathlib import Path
 
+import polars as pl
 import pytest
 
+from ebola_2026_outbreak import drc_2026_sitreps_parse as parse_module
+from ebola_2026_outbreak.drc_2026_sitreps_download import MANIFEST_SCHEMA
 from ebola_2026_outbreak.drc_2026_sitreps_parse import (
     TOTAL,
     ProvinceCounts,
@@ -53,6 +56,7 @@ def test_parse_sitrep_long_rows() -> None:
         report_date=date(2026, 10, 18),
         sitrep_number=157,
         media_id=710,
+        modified="2026-10-20T14:41:10",
     )
     assert df.height == 8 * 3
     assert TOTAL not in df["province"].to_list()
@@ -102,3 +106,33 @@ def test_validate_table_rejects_bad_sum() -> None:
 def test_no_table_raises() -> None:
     with pytest.raises(ValueError, match="No province table"):
         find_province_table("Ituri (85), au Nord-Kivu (19).\nAucun tableau.")
+
+
+def test_main_writes_nothing_when_a_sitrep_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest = pl.DataFrame(
+        [
+            {
+                "report_date": date(2026, 10, 18),
+                "is_latest": True,
+                "media_id": 710,
+                "modified": "2026-10-20T14:41:10",
+                "source_url": "https://example.org/710.pdf",
+            }
+        ]
+    )
+    manifest = manifest.select(
+        pl.col(c) if c in manifest.columns else pl.lit(None).alias(c)
+        for c in MANIFEST_SCHEMA
+    ).cast(MANIFEST_SCHEMA)
+    manifest_path, output_path = tmp_path / "manifest.csv", tmp_path / "out.csv"
+    manifest.write_csv(manifest_path)
+    monkeypatch.setattr(parse_module, "MANIFEST_PATH", manifest_path)
+    monkeypatch.setattr(parse_module, "OUTPUT_PATH", output_path)
+    monkeypatch.setattr(parse_module, "ensure_pdf", lambda **_: Path("710.pdf"))
+    monkeypatch.setattr(parse_module, "read_text", lambda _: "no table here")
+
+    with pytest.raises(ValueError, match="1 sitreps could not be parsed"):
+        parse_module.main()
+    assert not output_path.exists()

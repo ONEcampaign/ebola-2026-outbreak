@@ -23,8 +23,10 @@ from ebola_2026_outbreak.drc_2026_sitreps_download import (
     MANIFEST_PATH,
     MANIFEST_SCHEMA,
     OUTBREAK,
+    PDF_MIME,
     ROOT,
-    SITREP_DIR,
+    MediaItem,
+    download,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,7 @@ SCHEMA = pl.Schema(
         "value": pl.Int64,
         "sitrep_number": pl.Int64,
         "media_id": pl.Int64,
+        "modified": pl.String,
     }
 )
 
@@ -261,12 +264,12 @@ def validate_table(table: dict[str, ProvinceCounts]) -> None:
                 f"Provinces sum to {summed} {field}, Total row says "
                 f"{getattr(total, field)}"
             )
-    new = [c.new_cases for c in provinces]
-    if total.new_cases is not None and None not in new:
-        if sum(n for n in new if n is not None) != total.new_cases:
+    new = [c.new_cases for c in provinces if c.new_cases is not None]
+    if total.new_cases is not None and len(new) == len(provinces):
+        if sum(new) != total.new_cases:
             raise ValueError(
-                f"Provinces sum to {sum(n for n in new if n is not None)} new "
-                f"cases, Total row says {total.new_cases}"
+                f"Provinces sum to {sum(new)} new cases, Total row says "
+                f"{total.new_cases}"
             )
 
 
@@ -276,6 +279,7 @@ def table_to_frame(
     report_date: date,
     sitrep_number: int | None,
     media_id: int,
+    modified: str,
 ) -> pl.DataFrame:
     """Turn a validated table into long rows, dropping the Total row."""
     records = [
@@ -287,6 +291,7 @@ def table_to_frame(
             "value": getattr(counts, field),
             "sitrep_number": sitrep_number,
             "media_id": media_id,
+            "modified": modified,
         }
         for province, counts in table.items()
         if province != TOTAL
@@ -302,7 +307,12 @@ def read_text(path: Path) -> str:
 
 
 def parse_sitrep(
-    text: str, *, report_date: date, sitrep_number: int | None, media_id: int
+    text: str,
+    *,
+    report_date: date,
+    sitrep_number: int | None,
+    media_id: int,
+    modified: str,
 ) -> pl.DataFrame:
     """Parse and validate one sitrep's province table.
 
@@ -316,6 +326,7 @@ def parse_sitrep(
         report_date=report_date,
         sitrep_number=sitrep_number,
         media_id=media_id,
+        modified=modified,
     )
 
 
@@ -338,21 +349,40 @@ def check_monotonic(df: pl.DataFrame) -> None:
                 )
 
 
+def ensure_pdf(*, media_id: int, modified: str, source_url: str) -> Path:
+    """Return a kept sitrep's local PDF, downloading it if absent.
+
+    The CI runner starts with no raw files, so a sitrep that needs parsing
+    may not have been downloaded in this run.
+    """
+    item: MediaItem = {
+        "id": media_id,
+        "modified": modified,
+        "source_url": source_url,
+        "mime_type": PDF_MIME,
+    }
+    return download(item)
+
+
 def main() -> None:
-    """Parse every kept sitrep not yet in the output and update the CSV."""
+    """Parse every kept sitrep not yet in the output and update the CSV.
+
+    Writes nothing if any sitrep fails, so a partial run cannot drop dates.
+    """
     manifest = pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA).filter("is_latest")
     existing = (
         pl.read_csv(OUTPUT_PATH, schema=SCHEMA)
         if OUTPUT_PATH.exists()
         else pl.DataFrame(schema=SCHEMA)
     )
-    done = set(existing.select("date", "media_id").unique().iter_rows())
+    # Keyed on `modified` too, so an upload replaced in place is parsed again.
+    done = set(existing.select("date", "media_id", "modified").unique().iter_rows())
 
     frames = [existing]
     failures: dict[date, str] = {}
     for row in manifest.sort("report_date").iter_rows(named=True):
         report_date = row["report_date"]
-        if (report_date, row["media_id"]) in done:
+        if (report_date, row["media_id"], row["modified"]) in done:
             continue
         if report_date in NO_PROVINCE_TABLE:
             logger.info("Skipping %s: %s", report_date, NO_PROVINCE_TABLE[report_date])
@@ -360,24 +390,42 @@ def main() -> None:
         try:
             frames.append(
                 parse_sitrep(
-                    read_text(SITREP_DIR / f"{row['media_id']}.pdf"),
+                    read_text(
+                        ensure_pdf(
+                            media_id=row["media_id"],
+                            modified=row["modified"],
+                            source_url=row["source_url"],
+                        )
+                    ),
                     report_date=report_date,
                     sitrep_number=row["sitrep_number"],
                     media_id=row["media_id"],
+                    modified=row["modified"],
                 )
             )
         except ValueError as e:
             failures[report_date] = str(e)
 
-    # A newer upload for a date replaces rows parsed from an older one.
-    latest_media = manifest.select(pl.col("report_date").alias("date"), "media_id")
+    if failures:
+        for report_date, reason in failures.items():
+            logger.error("Failed %s: %s", report_date, reason)
+        raise ValueError(f"{len(failures)} sitreps could not be parsed")
+
+    # A newer or replaced upload for a date supersedes rows parsed earlier.
+    latest = manifest.select(
+        pl.col("report_date").alias("date"), "media_id", "modified"
+    )
     out = (
         pl.concat(frames)
-        .join(latest_media, on=["date", "media_id"], how="semi")
+        .join(latest, on=["date", "media_id", "modified"], how="semi")
         .sort("date", "province", "indicator")
     )
     if out.select("date", "province", "indicator").is_duplicated().any():
         raise ValueError("Duplicate (date, province, indicator) rows")
+    lost = set(existing["date"].to_list()) - set(out["date"].to_list())
+    if lost:
+        raise ValueError(f"Dates would drop out of the output: {sorted(lost)}")
+
     check_monotonic(out)
     out.write_csv(OUTPUT_PATH)
     logger.info(
@@ -386,11 +434,6 @@ def main() -> None:
         out["date"].n_unique(),
         OUTPUT_PATH.name,
     )
-
-    if failures:
-        for report_date, reason in failures.items():
-            logger.error("Failed %s: %s", report_date, reason)
-        raise ValueError(f"{len(failures)} sitreps could not be parsed")
 
 
 if __name__ == "__main__":
