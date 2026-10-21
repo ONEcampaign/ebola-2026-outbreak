@@ -2,9 +2,10 @@
 
 Follows `create_expenditure_by_source()` in ONEcampaign/topic_health_financing
 (scripts/analysis/create_data.py) for one country, sourcing GHED through
-`bblocks.data_importers.GHED`. Output is one row per year with each source's
-share of current health expenditure, in percent: domestic government,
-external, other private and out-of-pocket.
+`bblocks.data_importers.GHED`. Output is one row per year from 2013 to 2023
+with total current health expenditure in constant 2023 USD and each source's
+share of it, in percent: domestic government, external, other private and
+out-of-pocket.
 """
 
 import logging
@@ -33,9 +34,17 @@ PVT_SUBTRACT = "fs61"
 # Current health expenditure by financing scheme.
 CHE_CODES = ["hf1", "hf2", "hf3", "hf4", "hfnec"]
 
+# Current health expenditure in constant 2023 USD, which GHED publishes in
+# millions; the output is in USD, as in the original.
+CHE_USD_CODE = "che_usd2023"
+TOTAL = "Total health expenditure (constant 2023 USD)"
+GHED_USD_UNIT = "Millions"
+USD_PER_GHED_UNIT = 1_000_000
+FIRST_YEAR, LAST_YEAR = 2013, 2023
+
 # Components of the sums may be absent and count as 0, as in the original; if
 # all are absent, the share check fails instead.
-REQUIRED_CODES = frozenset(SHARE_CODES.values())
+REQUIRED_CODES = frozenset([*SHARE_CODES.values(), CHE_USD_CODE])
 SHARE_SUM_TOLERANCE = 1.0
 
 
@@ -43,16 +52,22 @@ def load_ghed(iso3: str = ISO3) -> pl.DataFrame:
     """Download GHED and keep one country's `year, indicator_code, value`.
 
     Raises:
-        ValueError: If a share indicator the output needs is missing.
+        ValueError: If an indicator the output needs is missing, as after GHED
+            rebases constant USD to a new year, or the USD total is not in
+            millions.
     """
     data = GHED().get_data()
     df = pl.from_pandas(data.loc[data["iso3_code"] == iso3]).select(
-        pl.col("year").cast(pl.Int64), "indicator_code", "value"
+        pl.col("year").cast(pl.Int64), "indicator_code", "value", "unit"
     )
     missing = REQUIRED_CODES - set(df["indicator_code"].unique())
     if missing:
         raise ValueError(f"GHED has no {sorted(missing)} for {iso3}")
-    return df
+
+    usd_units = set(df.filter(pl.col("indicator_code") == CHE_USD_CODE)["unit"])
+    if usd_units != {GHED_USD_UNIT}:
+        raise ValueError(f"Expected {CHE_USD_CODE} in {GHED_USD_UNIT}, got {usd_units}")
+    return df.drop("unit")
 
 
 def indicator(ghed: pl.DataFrame, code: str) -> pl.DataFrame:
@@ -133,25 +148,43 @@ def validate_shares(df: pl.DataFrame) -> None:
     )
 
 
-def expenditure_by_source(ghed: pl.DataFrame) -> pl.DataFrame:
-    """Each source's share of current health expenditure by year.
+def expenditure_by_source(
+    ghed: pl.DataFrame, *, first_year: int = FIRST_YEAR, last_year: int = LAST_YEAR
+) -> pl.DataFrame:
+    """Total health expenditure and each source's share of it, by year.
 
     Args:
         ghed: Long GHED rows for one country.
+        first_year: First year to keep.
+        last_year: Last year to keep.
 
     Returns:
-        `Year`, `Country` and one percent column per source in `SOURCE_ORDER`.
+        `Year`, `Country`, `TOTAL` in USD, and one percent column per source
+        in `SOURCE_ORDER`, for every year from `first_year` to `last_year`.
+
+    Raises:
+        ValueError: If a year in the range is missing, or has no total or an
+            incomplete set of shares.
     """
     shares = {source: indicator(ghed, code) for source, code in SHARE_CODES.items()}
     shares[PVT] = other_private_share(ghed)
+    total = indicator(ghed, CHE_USD_CODE).select(
+        "year", (pl.col("value") * USD_PER_GHED_UNIT).alias(TOTAL)
+    )
 
-    df = pl.concat([s.select("year") for s in shares.values()]).unique()
+    years = pl.DataFrame(
+        {"year": range(first_year, last_year + 1)}, schema={"year": pl.Int64}
+    )
+    df = years.join(total, on="year", how="left")
     for source in SOURCE_ORDER:
         df = df.join(shares[source].rename({"value": source}), on="year", how="left")
     df = df.rename({"year": YEAR}).sort(YEAR)
 
+    no_total = df.filter(pl.col(TOTAL).is_null())[YEAR].to_list()
+    if no_total:
+        raise ValueError(f"No {CHE_USD_CODE} for {no_total}")
     validate_shares(df)
-    return df.select(YEAR, pl.lit(COUNTRY_NAME).alias(COUNTRY), *SOURCE_ORDER)
+    return df.select(YEAR, pl.lit(COUNTRY_NAME).alias(COUNTRY), TOTAL, *SOURCE_ORDER)
 
 
 def main() -> None:

@@ -7,6 +7,7 @@ from ebola_2026_outbreak import drc_health_expenditure
 from ebola_2026_outbreak.drc_health_expenditure import (
     PVT,
     SOURCE_ORDER,
+    TOTAL,
     expenditure_by_source,
     sum_components,
 )
@@ -37,18 +38,32 @@ def full_year(year: int = 2020) -> dict[str, dict[int, float | None]]:
         "hf1": {year: 60},
         "hf2": {year: 10},
         "hf3": {year: 30},
+        "che_usd2023": {year: 2.5},
     }
 
 
+def build(data: dict[str, dict[int, float | None]]) -> pl.DataFrame:
+    """Run the output builder for the single test year."""
+    return expenditure_by_source(ghed(data), first_year=2020, last_year=2020)
+
+
 def test_output_columns_and_values() -> None:
-    out = expenditure_by_source(ghed(full_year()))
-    assert out.columns == ["Year", "Country", *SOURCE_ORDER]
-    assert out.row(0) == (2020, "DR Congo", 20.0, 40.0, pytest.approx(10.0), 30.0)
+    out = build(full_year())
+    assert out.columns == ["Year", "Country", TOTAL, *SOURCE_ORDER]
+    assert out.row(0) == (
+        2020,
+        "DR Congo",
+        2_500_000.0,
+        20.0,
+        40.0,
+        pytest.approx(10.0),
+        30.0,
+    )
 
 
 def test_other_private_share() -> None:
     # (6 + 5 + 3 - 4) / (60 + 10 + 30) * 100
-    out = expenditure_by_source(ghed(full_year()))
+    out = build(full_year())
     assert out[PVT].item() == pytest.approx(10.0)
 
 
@@ -61,7 +76,7 @@ def test_shares_not_summing_to_100_raise() -> None:
     data = full_year()
     data["ext_che"] = {2020: 50}
     with pytest.raises(ValueError, match="do not sum to 100"):
-        expenditure_by_source(ghed(data))
+        build(data)
 
 
 def test_absent_private_components_fail_share_check() -> None:
@@ -69,7 +84,7 @@ def test_absent_private_components_fail_share_check() -> None:
         k: v for k, v in full_year().items() if not k.startswith(("fs4", "fs5", "fs6"))
     }
     with pytest.raises(ValueError, match="missing a source"):
-        expenditure_by_source(ghed(data))
+        build(data)
 
 
 def test_load_ghed_raises_on_missing_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,8 +92,37 @@ def test_load_ghed_raises_on_missing_code(monkeypatch: pytest.MonkeyPatch) -> No
 
     class FakeGHED:
         def get_data(self) -> object:
-            return rows.with_columns(iso3_code=pl.lit("COD")).to_pandas()
+            return rows.with_columns(
+                iso3_code=pl.lit("COD"), unit=pl.lit("Millions")
+            ).to_pandas()
 
     monkeypatch.setattr(drc_health_expenditure, "GHED", FakeGHED)
     with pytest.raises(ValueError, match="ext_che"):
+        drc_health_expenditure.load_ghed()
+
+
+def test_missing_year_in_range_raises() -> None:
+    with pytest.raises(ValueError, match=r"No che_usd2023 for \[2021\]"):
+        expenditure_by_source(ghed(full_year()), first_year=2020, last_year=2021)
+
+
+def test_years_outside_range_are_dropped() -> None:
+    data = full_year(2020)
+    for code, by_year in full_year(2012).items():
+        data[code] = {**data[code], **by_year}
+    out = expenditure_by_source(ghed(data), first_year=2020, last_year=2020)
+    assert out["Year"].to_list() == [2020]
+
+
+def test_load_ghed_raises_on_unexpected_usd_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = ghed(full_year()).with_columns(iso3_code=pl.lit("COD"), unit=pl.lit("Units"))
+
+    class FakeGHED:
+        def get_data(self) -> object:
+            return rows.to_pandas()
+
+    monkeypatch.setattr(drc_health_expenditure, "GHED", FakeGHED)
+    with pytest.raises(ValueError, match="Expected che_usd2023 in Millions"):
         drc_health_expenditure.load_ghed()
