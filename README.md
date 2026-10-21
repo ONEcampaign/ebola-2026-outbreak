@@ -25,6 +25,10 @@ Files are prefixed by outbreak so historical and current data stay apart:
     [alert-and-response page](https://www.who.int/emergencies/alert-and-response).
     WHO shows only the latest figures, so each run of
     `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history.
+    `drc_2026_who_wayback.py` backfills it from Wayback Machine captures.
+  - `drc_2026_sitrep_manifest.csv`: every DRC Ministry of Health sitrep PDF
+    with its report date, built by `drc_2026_sitreps_download.py`. PDFs are
+    saved to `data/raw/drc_2026/sitreps/`.
 
 ### Tests
 
