@@ -38,4 +38,5 @@ jobs:
       - name: Run ty
         run: uv run ty check 'src/ebola_2026_outbreak'
 
-
+      - name: Run tests
+        run: uv run pytest
