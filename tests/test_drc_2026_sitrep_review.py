@@ -279,20 +279,18 @@ def test_apply_creates_a_missing_row_and_skips_unfilled(gazetteer) -> None:
     assert verified == {(KPIS, "cum_confirmed")}
 
 
-def test_added_rows_need_a_placeholder(tmp_path: Path, gazetteer) -> None:
-    placeholder = row(RowKey("zones", "Ituri", ""), "", "done", "section_missing")
+def test_added_rows_need_a_known_name(tmp_path: Path, gazetteer) -> None:
     typed = row(A, "cum_deaths", "2", "")
-    other = row(RowKey("zones", "Nord-Kivu", "D"), "cum_deaths", "2", "")
+    other = row(RowKey("zones", "Nord-Kivu", "D"), "cum_deaths", "", "")
 
-    values, verified = apply({}, [placeholder, typed], gazetteer=gazetteer)
+    values, verified = apply({}, [typed], gazetteer=gazetteer)
     assert values == {A: {"cum_deaths": 2}}
     assert verified == {(A, "cum_deaths")}
-    with pytest.raises(ValueError, match="placeholder"):
-        apply({}, [placeholder, other], gazetteer=gazetteer)
-    path = write_review(tmp_path / "r.csv", [placeholder, typed, other])
-    with pytest.raises(ValueError, match=r"line 4: .*placeholder"):
-        read_review(path)
-    path = write_review(tmp_path / "r.csv", [{**placeholder, "reviewed_value": "12"}])
+    review.check_added([typed], gazetteer=gazetteer)
+    with pytest.raises(ValueError, match="Nord-Kivu / D is not in the gazetteer"):
+        review.check_added([typed, other], gazetteer=gazetteer)
+    placeholder = row(RowKey("zones", "Ituri", ""), "", "12", "section_missing")
+    path = write_review(tmp_path / "r.csv", [placeholder])
     with pytest.raises(ValueError, match="'done'"):
         read_review(path)
 
@@ -398,8 +396,6 @@ def test_gh_is_skipped_outside_actions_or_in_dry_run(
 ) -> None:
     if actions:
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    else:
-        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
 
     assert review.create_issue(title="t", body="b", dry_run=dry_run) is None
     assert review.open_issues(dry_run=dry_run) == {}
@@ -567,6 +563,42 @@ def added(key: RowKey, printed_as: RowKey | None = None) -> list[ReviewRow]:
     ]
 
 
+def test_check_passes_rows_added_for_cells_a_sum_opens(
+    tmp_path: Path, check_pr: Any
+) -> None:
+    repo, path = make_repo(tmp_path, *wrong_twice())
+    # The PDF prints 11 cases for A. Typing that in runs the Ituri subtotal
+    # sum, which fails and opens cells the review file has no row for.
+    fill(path, A_cum_confirmed="11")
+    assert [e.split(": ", 1)[1].split(" is open")[0] for e in check_pr(repo)] == [
+        "zone_subtotals / Ituri cum_confirmed",
+        "zones / Ituri / B cum_confirmed",
+    ]
+
+    # The reviewer adds rows for them in the same pull request.
+    write_review(
+        path,
+        [
+            *read_review(path),
+            row(ITURI, "cum_confirmed", "30", ""),
+            row(B, "cum_confirmed", "20", ""),
+        ],
+    )
+    assert check_pr(repo) == []
+    cache = repo / CACHE_DIR.relative_to(ROOT)
+    verdict = ex.judge(
+        ex.read_records(SHA, root=cache),
+        gazetteer=load_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT)),
+        review_file=path,
+    )
+    assert (verdict.open_flags, verdict.unapplied) == ([], ())
+    # Released as printed: the subtotal sum, and A's CFR (2 of 11 is not 20.0).
+    assert {(d.key, d.field) for d in verdict.discrepancies} == {
+        (ITURI, "cum_confirmed"),
+        (A, "cfr_pct"),
+    }
+
+
 @pytest.mark.parametrize(
     ("missing", "placeholders", "typed"),
     [
@@ -676,6 +708,13 @@ def edit_column(path: Path, column: str, value: str) -> None:
             r"flagged "
             r"unknown_name",
             id="absent-on-models-disagree",
+        ),
+        pytest.param(
+            lambda repo, path: write_review(
+                path, [*read_review(path), row(B, "cum_deaths", "5", "")]
+            ),
+            r"zones / Ituri / B cum_deaths is not a cell under review; remove the row",
+            id="added-row-not-under-review",
         ),
     ],
 )

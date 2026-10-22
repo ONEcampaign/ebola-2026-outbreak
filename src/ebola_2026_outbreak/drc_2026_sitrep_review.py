@@ -8,8 +8,12 @@ PDF instead of confirming a guess. A flag with no field (a whole section, or
 a province's zone rows, is missing) becomes one placeholder row with an empty
 `field`. The reviewer adds one row per cell of that section and province,
 with an empty `reason`; the placeholder's `reviewed_value` may be set to
-`done`. A row flagged `unknown_name` that the table does not print (a
-misread zone name) is dismissed by typing `absent` in its cells. A missing
+`done`. A reviewer may add a row for any cell the same way, such as one a
+sum opens once a held value is typed in. `judge` in
+`drc_2026_sitreps_extract.py` decides which rows answer a cell under review,
+and the pull request check refuses an added row that answers none. A row
+flagged `unknown_name` that the table does not print (a misread zone name)
+is dismissed by typing `absent` in its cells. A missing
 row of a known shape (the headline indicators, the zone table's Total, a
 province subtotal) is flagged per field, so its cells are ordinary rows to
 fill.
@@ -22,9 +26,9 @@ Every reviewed cell counts as verified for `check_sums`, so a sum that fails
 on verified values only is a publisher discrepancy, released as printed.
 
 `check_diff` holds a review pull request to its shape: it may change only
-`reviewed_value` cells of existing review CSVs (and add rows under a
-placeholder) and add or edit rows of the gazetteer, and every value typed
-must read. Whether the reviewed report would then be released is decided by
+`reviewed_value` cells of existing review CSVs, add rows with an empty
+`reason`, and add or edit rows of the gazetteer, and every value typed must
+read. Whether the reviewed report would then be released is decided by
 `drc_2026_sitreps_extract.py check`, through the same function release uses.
 
 One issue per run lists the held reports and tags the reviewers. Issues are
@@ -97,7 +101,7 @@ class ReviewRow(TypedDict):
     """One row of a review CSV: one flagged cell, or a missing section.
 
     `field` is "" for a missing section's placeholder. A row the reviewer
-    added under a placeholder has `reason` "". `reviewed_value` is the text
+    added has `reason` "". `reviewed_value` is the text
     the reviewer typed, "" until filled.
     """
 
@@ -210,39 +214,16 @@ def read_review(path: Path) -> list[ReviewRow]:
         ValueError: If the columns differ from `COLUMNS`, or a row names an
             unknown section or field, has a page that is not a number, has a
             `reviewed_value` that is not a whole number, a decimal with a
-            point, or `blank` (`done` on a placeholder), or was added (has no
-            reason) for a section and province with no placeholder. The
-            message names the file and line.
+            point, or `blank` (`done` on a placeholder). The message names
+            the file and line.
     """
-    records = _records(path.read_text(), path.name)
     rows: list[ReviewRow] = []
-    for line, record in records:
+    for line, record in _records(path.read_text(), path.name):
         try:
             rows.append(_review_row(record))
         except ValueError as e:
             raise ValueError(f"{path.name} line {line}: {e}") from None
-    for i in _unplaced(rows):
-        raise ValueError(f"{path.name} line {records[i][0]}: {_UNPLACED}")
     return rows
-
-
-_UNPLACED = (
-    "a row without a reason may be added only for a section and province "
-    "whose placeholder row (empty field) is in the file"
-)
-
-
-def _unplaced(rows: list[ReviewRow]) -> list[int]:
-    """Indices of added rows with no placeholder for their section and province."""
-    placeholders = [(r["section"], r["province"]) for r in rows if not r["field"]]
-    return [
-        i
-        for i, r in enumerate(rows)
-        if r["field"]
-        and not r["reason"]
-        and (r["section"], "") not in placeholders
-        and (r["section"], r["province"]) not in placeholders
-    ]
 
 
 def _records(text: str, name: str) -> list[tuple[int, dict[str, str]]]:
@@ -327,7 +308,7 @@ def apply(
     Each filled row with a field sets that cell to the reviewer's value,
     replacing any accepted value and creating the row if it is absent: a
     row flagged `section_missing` field by field, or a row the reviewer
-    added under a placeholder. Placeholders and rows with an empty
+    added. Placeholders and rows with an empty
     `reviewed_value` are skipped. Every cell set is verified.
 
     A row flagged `unknown_name` whose cells read `absent` is not in the PDF:
@@ -353,14 +334,12 @@ def apply(
         The merged values and the verified cells, for `check_sums`.
 
     Raises:
-        ValueError: If a row's name does not resolve in the gazetteer, an
-            added row has no placeholder, a row is both dismissed and given
+        ValueError: If a filled row's name does not resolve in the
+            gazetteer, a row is both dismissed and given
             values, a resolved name is dismissed, `absent` is typed on a row
             with another reason, or two rows give one cell different values.
     """
     review = list(review)
-    for i in _unplaced(review):
-        raise ValueError(f"{describe(_key(review[i]))}: {_UNPLACED}")
     dismissed = {_key(row) for row in review if _dismissed(row)}
     for row in review:
         if _dismissed(row) and resolve(_key(row), gazetteer) is not None:
@@ -383,17 +362,35 @@ def apply(
                 f"{describe(printed)} is marked {ABSENT!r} and also given values"
             )
         if key is None:
-            raise ValueError(
-                f"{describe(printed)} is not in the gazetteer: add the zone, or "
-                f"its spelling as an alias, to {GAZETTEER_PATH.name}, or type "
-                f"{ABSENT!r} if the table does not print it"
-            )
+            raise ValueError(_not_in_gazetteer(printed))
         value = parse_value(row["reviewed_value"], field)
         if verified.get((key, field), value) != value:
             raise ValueError(f"{describe(key)} {field} is reviewed twice")
         verified[key, field] = value
         values.setdefault(key, {})[field] = value
     return values, set(verified)
+
+
+def check_added(review: Iterable[ReviewRow], *, gazetteer: Gazetteer) -> None:
+    """Refuse an added row whose name does not resolve in the gazetteer.
+
+    `apply` refuses only the filled rows it is given, so this covers an added
+    row whatever its value and whether or not it answers an open cell.
+
+    Raises:
+        ValueError: Naming the first such row.
+    """
+    for row in review:
+        if row["field"] and not row["reason"] and resolve(_key(row), gazetteer) is None:
+            raise ValueError(_not_in_gazetteer(_key(row)))
+
+
+def _not_in_gazetteer(key: RowKey) -> str:
+    return (
+        f"{describe(key)} is not in the gazetteer: add the zone, or its spelling "
+        f"as an alias, to {GAZETTEER_PATH.name}, or type {ABSENT!r} if the table "
+        "does not print it"
+    )
 
 
 def resolve(key: RowKey, gazetteer: Gazetteer) -> RowKey | None:
@@ -502,8 +499,10 @@ def issue_body(held: Sequence[HeldReport], *, run_url: str) -> str:
         "closes itself once every report in it is released.",
         "5. The pull request's check confirms the report would be released "
         "with the values typed, meaning every open cell is filled and the table "
-        "sums hold. A row whose cell is not flagged needs no value. Merging "
-        "the pull request releases the report.",
+        "sums hold. A row whose cell is not flagged needs no value. A value "
+        "typed in can open a sum on cells with no row; the check names them, "
+        "and you add a row for each, as in step 2. Merging the pull request "
+        "releases the report.",
         "",
         f"Run: {run_url}",
         "",
@@ -613,8 +612,9 @@ def check_diff(*, base: str = "origin/main", repo: Path = ROOT) -> ReviewDiff:
 
     Diffs tracked files against the merge base of `base` and HEAD. A pull
     request may change only `reviewed_value` cells of existing review files,
-    add rows under a placeholder, and add or edit gazetteer rows; each review
-    file must read with `read_review`.
+    add rows with a field and an empty reason, and add or edit gazetteer
+    rows; each review file must read with `read_review`. Whether an added
+    row answers a cell under review is for `judge` to decide.
 
     Args:
         base: The branch the pull request merges into.
@@ -692,14 +692,12 @@ def _changed_columns(
 ) -> list[str]:
     """Rows removed or changed in a column other than `reviewed_value`.
 
-    Rows may be added for the section, and the province unless the
-    placeholder's is empty, of a placeholder row (empty field).
+    Rows may be added with a field and an empty reason.
     """
 
     def identity(record: dict[str, str]) -> tuple[str, ...]:
         return tuple(record[c] for c in COLUMNS if c != "reviewed_value")
 
-    placeholders = [r for _, r in old if not r["field"]]
     added = Counter(identity(r) for _, r in new) - Counter(identity(r) for _, r in old)
     removed = Counter(identity(r) for _, r in old) - Counter(
         identity(r) for _, r in new
@@ -713,16 +711,9 @@ def _changed_columns(
         if added[identity(record)] <= 0:
             continue
         added[identity(record)] -= 1
-        if not any(
-            record["field"]
-            and not record["reason"]
-            and record["section"] == p["section"]
-            and p["province"] in ("", record["province"])
-            for p in placeholders
-        ):
+        if not record["field"] or record["reason"]:
             errors.append(
                 f"line {line}: changed a column other than reviewed_value. Rows may "
-                "be added, with an empty reason, only for the section and province "
-                "of a row with an empty field"
+                "be added only with a field and an empty reason"
             )
     return errors

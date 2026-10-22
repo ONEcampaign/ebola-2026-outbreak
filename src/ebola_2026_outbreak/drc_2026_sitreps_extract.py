@@ -20,8 +20,9 @@ Two steps, run in this order by default:
   nothing open is released. Otherwise it is held and its review CSV is
   written. An existing review CSV is not rewritten, since a reviewer may be
   filling it. Open cells it lacks (after a gazetteer edit, or a sum that
-  runs only once a held row is typed in) are appended as new rows, and
-  filled rows for cells that are not open are ignored.
+  runs only once a held row is typed in) are appended as new rows, unless a
+  reviewer has added rows for them, and filled rows for cells that are not
+  open are ignored.
 
 `by_zone.csv` and `headline.csv` are rebuilt from every released upload. A
 report date whose latest upload is held or pending keeps the values of the
@@ -38,7 +39,8 @@ pull request's tree without writing or opening anything, so the check passes
 exactly when release would succeed there. It fails when release would raise,
 when an upload released at the merge base would no longer be released or
 superseded (a gazetteer edit can do that to a report nobody is reviewing),
-and on each cell a changed review file leaves open. `--repo` points it, and
+on each cell a changed review file leaves open, and on each row a reviewer
+added that answers no cell under review. `--repo` points it, and
 every path it reads, at another checkout's data.
 
 A run that newly holds reports opens one issue listing them, and a run that
@@ -79,6 +81,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
     HeldReport,
     ReviewRow,
     apply,
+    check_added,
     check_diff,
     close_issue,
     create_issue,
@@ -269,6 +272,7 @@ class Verdict(NamedTuple):
 
     `text_rows` are the text-layer rows the report was reconciled with.
     `review_error` says why a review file was not applied, if it was not.
+    `unapplied` are the review rows whose cell was never open.
     """
 
     values: dict[RowKey, Values]
@@ -277,6 +281,7 @@ class Verdict(NamedTuple):
     discrepancies: list[Discrepancy]
     text_rows: dict[RowKey, TextRow]
     review_error: str | None = None
+    unapplied: tuple[ReviewRow, ...] = ()
 
     @property
     def open_cells(self) -> set[Cell]:
@@ -548,11 +553,11 @@ def judge(
     checked only once they are typed in, so its failure opens cells after
     the first pass. A row's key is read through the gazetteer, so a row typed
     under a spelling the gazetteer has since gained answers the canonical
-    row's cell. A filled row whose cell is not open (after a gazetteer
-    edit, say) is ignored. A review that does not read or apply is ignored,
-    with the reason in `review_error`, so the report stays held. A row that
-    lacks a field without a flag on it gets one, so a missing value cannot
-    be released as a printed blank.
+    row's cell. A row whose cell is never open (after a gazetteer edit, say)
+    is not applied and is listed in `unapplied`. A review that does not read
+    or apply is ignored, with the reason in `review_error`, so the report
+    stays held. A row that lacks a field without a flag on it gets one, so a
+    missing value cannot be released as a printed blank.
 
     Args:
         records: A complete cache.
@@ -571,10 +576,10 @@ def judge(
         arbitration=arbitration,
     )
     values, verified = reconciled.accepted, set()
-    review_error = None
+    review_error, unapplied = None, ()
     if review_file is not None:
         try:
-            values, verified = _apply_review(
+            values, verified, unapplied = _apply_review(
                 reconciled.flags,
                 reconciled.accepted,
                 read_review(review_file),
@@ -585,7 +590,13 @@ def judge(
             logger.warning("Not applying %s: %s", review_file.name, e)
     open_flags, discrepancies = _open(reconciled.flags, values, verified)
     return Verdict(
-        values, open_flags, len(verified), discrepancies, text_rows, review_error
+        values,
+        open_flags,
+        len(verified),
+        discrepancies,
+        text_rows,
+        review_error,
+        unapplied,
     )
 
 
@@ -595,19 +606,22 @@ def _apply_review(
     review: list[ReviewRow],
     *,
     gazetteer: Gazetteer,
-) -> tuple[dict[RowKey, Values], set[Cell]]:
+) -> tuple[dict[RowKey, Values], set[Cell], tuple[ReviewRow, ...]]:
     """Apply the review rows of every cell ever open; see `judge`.
 
-    The cells reached only grow, so the loop ends.
+    The cells reached only grow, so the loop ends. Returns the merged values,
+    the verified cells and the rows never applied.
     """
+    check_added(review, gazetteer=gazetteer)
+    answers = [(r, _review_cells(r, gazetteer)) for r in review]
     values, verified = accepted, set()
     reached: set[Cell] = set()
     applied = 0
     while True:
         reached |= _cells(_open(flags, values, verified)[0])
-        rows = [r for r in review if _review_cell(r, gazetteer) in reached]
+        rows = [r for r, cells in answers if cells & reached]
         if len(rows) == applied:
-            return values, verified
+            return values, verified, tuple(r for r, c in answers if not c & reached)
         values, verified = apply(accepted, rows, gazetteer=gazetteer)
         applied = len(rows)
 
@@ -713,11 +727,13 @@ def release(
             reviews[path] = rows
             continue
         try:
-            present = {_review_cell(r, gazetteer) for r in read_review(path)}
+            present = set().union(
+                *(_review_cells(r, gazetteer) for r in read_review(path))
+            )
         except ValueError as e:
             logger.warning("Not extending %s: %s", path.name, e)
             continue
-        if missing := [r for r in rows if _review_cell(r, gazetteer) not in present]:
+        if missing := [r for r in rows if not _review_cells(r, gazetteer) & present]:
             logger.warning(
                 "%s lacks %d open cells; appending them", path.name, len(missing)
             )
@@ -795,19 +811,20 @@ def _cells(flags: Sequence[Flag]) -> set[Cell]:
     return {(f.key, f.field or "") for f in flags}
 
 
-def _review_cell(row: ReviewRow, gazetteer: Gazetteer) -> Cell:
-    """The flagged cell a review row answers.
+def _review_cells(row: ReviewRow, gazetteer: Gazetteer) -> set[Cell]:
+    """The cells a review row answers when open.
 
-    A flagged row answers its row's cell, read through the gazetteer as
-    `apply` reads it. A row a reviewer added under a placeholder answers the
-    placeholder: its province's missing zones, or the whole section.
+    A row answers its own cell, read through the gazetteer as `apply` reads
+    it. A row a reviewer added also answers the placeholder it may sit under:
+    its province's missing zones, or the whole section.
     """
     key = RowKey(row["section"], row["province"], row["zone"])
+    cell = (resolve(key, gazetteer) or key, row["field"])
     if row["reason"]:
-        return (resolve(key, gazetteer) or key, row["field"])
+        return {cell}
     if row["section"] == "zones" and row["province"]:
-        return (RowKey("zones", row["province"], ""), "")
-    return (RowKey(row["section"], "", ""), "")
+        return {cell, (RowKey("zones", row["province"], ""), "")}
+    return {cell, (RowKey(row["section"], "", ""), "")}
 
 
 def _relative(path: Path) -> str:
@@ -1107,7 +1124,8 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
     no issue, and its outputs go through `check_outputs` against the dates
     released at the merge base. Each report whose review file changed goes
     through `judge`, as release reads it, so each cell it leaves open,
-    publisher discrepancies included, gets its own message.
+    publisher discrepancies included, gets its own message, as does each
+    row a reviewer added that `judge` never applied.
 
     Args:
         base: The branch the pull request merges into.
@@ -1117,7 +1135,8 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
     Returns:
         One message per problem: a broken rule, release raising, an upload
         released at the merge base that would no longer be released or
-        superseded, a review that does not apply, or a cell still open.
+        superseded, a review that does not apply, a cell still open, or an
+        added row for a cell not under review.
         Empty when the pull request passes.
     """
     diff = check_diff(base=base, repo=repo)
@@ -1143,6 +1162,12 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
             errors.append(f"{name}: {verdict.review_error}")
             continue
         errors += [f"{name}: {_open_message(f)}" for f in verdict.open_flags]
+        errors += [
+            f"{name}: {describe(RowKey(r['section'], r['province'], r['zone']))} "
+            f"{r['field']} is not a cell under review; remove the row"
+            for r in verdict.unapplied
+            if not r["reason"]
+        ]
         _log_discrepancies(name, verdict)
     return errors
 
