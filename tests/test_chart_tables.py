@@ -18,6 +18,7 @@ from ebola_2026_outbreak.chart_tables import (
     drc_outbreak_series,
     headline_figures,
     latest_date,
+    prose_date,
     province_map,
     weekly,
     weekly_comparison,
@@ -168,10 +169,10 @@ def test_headline_figures(who: pl.DataFrame) -> None:
         summary=country_summary(who), who_as_of=D2, mapped=mapped, sitrep_as_of=D1
     )
     assert figures == {
-        "total_confirmed_cases": {"value": 1009, "update_date": "2026-10-18"},
-        "total_deaths": {"value": 483, "update_date": "2026-10-18"},
-        "death_rate": {"value": 47.9, "update_date": "2026-10-18"},
-        "provinces_affected": {"value": 2, "update_date": "2026-10-17"},
+        "total_confirmed_cases": {"value": 1009, "update_date": "18 October"},
+        "total_deaths": {"value": 483, "update_date": "18 October"},
+        "death_rate": {"value": 47.9, "update_date": "18 October"},
+        "provinces_affected": {"value": 2, "update_date": "17 October"},
     }
 
 
@@ -184,3 +185,7 @@ def test_headline_figures_rejects_missing_total(who: pl.DataFrame) -> None:
 def test_latest_date_rejects_empty() -> None:
     with pytest.raises(ValueError, match="No dates"):
         latest_date(pl.Series("date", [], dtype=pl.Date))
+
+
+def test_prose_date_drops_leading_zero_and_year() -> None:
+    assert prose_date(date(2026, 6, 5)) == "5 June"
