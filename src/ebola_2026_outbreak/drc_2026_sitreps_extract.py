@@ -28,6 +28,11 @@ is when the cached answers were requested, or, for a pending upload, when
 extraction was first tried, which is what the three-day issue rule counts
 from.
 
+`check` tests a review pull request: after the review file rules of
+`drc_2026_sitrep_review.check_diff`, each changed report goes through
+`judge`, the function release decides with, so the check passes exactly when
+release would release the report.
+
 Issues: a run that newly holds reports opens one issue listing them; a run
 that finds uploads pending for `PENDING_DAYS` days running opens one issue
 for those. The ledger records each upload's issue, so no run opens a second
@@ -46,6 +51,8 @@ calls nothing.
 import argparse
 import logging
 import os
+import subprocess
+import sys
 from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -61,6 +68,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
     HeldReport,
     ReviewRow,
     apply,
+    check_diff,
     close_issue,
     create_issue,
     issue_body,
@@ -98,7 +106,11 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     write_text_rows,
 )
 from ebola_2026_outbreak.drc_2026_sitrep_textlayer import read_rows, row_matches
-from ebola_2026_outbreak.drc_2026_sitrep_validate import check_sums, reconcile
+from ebola_2026_outbreak.drc_2026_sitrep_validate import (
+    Matcher,
+    check_sums,
+    reconcile,
+)
 from ebola_2026_outbreak.drc_2026_sitreps_download import (
     MANIFEST_PATH,
     MANIFEST_SCHEMA,
@@ -125,6 +137,10 @@ OPEN: frozenset[Status] = frozenset({"held", "pending"})
 # changed model id (RuntimeError).
 EXTRACTOR_ERRORS = (httpx.HTTPError, ValueError, RuntimeError)
 KPIS = RowKey("kpis", "", "")
+# How `judge` reconciles, for release and the review check alike. Text-layer
+# arbitration stays on only while the golden set shows no accepted-wrong value.
+MATCH: Matcher = row_matches
+ARBITRATION = True
 
 BY_ZONE_SCHEMA = pl.Schema(
     {
@@ -223,12 +239,16 @@ class Records(NamedTuple):
 
 
 class Verdict(NamedTuple):
-    """A report's values after reconciling, review and sum checks."""
+    """A report's values after reconciling, review and sum checks.
+
+    `review_error` says why a review file was not applied, if it was not.
+    """
 
     values: dict[RowKey, Values]
     open_flags: list[Flag]
     verified: int
     discrepancies: list[Discrepancy]
+    review_error: str | None = None
 
 
 class Release(NamedTuple):
@@ -303,16 +323,15 @@ def read_ledger() -> Ledger:
     return {(r["media_id"], r["modified"]): LedgerRow(**r) for r in rows}
 
 
-def read_records(sha256: str | None) -> Records:
-    """The cached records of a PDF."""
+def read_records(sha256: str | None, *, root: Path | None = None) -> Records:
+    """The cached records of a PDF, from `root` or `CACHE_DIR`."""
     if sha256 is None:
         return Records(None, None, None)
+    root = root or CACHE_DIR
     gemini_result, mistral_result = (
-        read_model_result(sha256, e, root=CACHE_DIR) for e in EXTRACTORS
+        read_model_result(sha256, e, root=root) for e in EXTRACTORS
     )
-    return Records(
-        gemini_result, mistral_result, read_text_rows(sha256, root=CACHE_DIR)
-    )
+    return Records(gemini_result, mistral_result, read_text_rows(sha256, root=root))
 
 
 def _new_row(upload: Upload) -> LedgerRow:
@@ -464,10 +483,11 @@ def judge(
 ) -> Verdict:
     """Reconcile a report's cached answers, apply its review, check its sums.
 
+    Release and the review pull request check both decide a report here.
     Only review rows for cells flagged before the review are applied, so a
     value filled for a cell no longer flagged (after a gazetteer edit, say)
-    is ignored. A review that does not read or apply is ignored with a
-    warning, so the report stays held. A row that lacks a field without a
+    is ignored. A review that does not read or apply is ignored, with the
+    reason in `review_error`, so the report stays held. A row that lacks a field without a
     flag on it gets one, so a missing value is never released as a printed
     blank.
 
@@ -481,9 +501,11 @@ def judge(
         normalise(records.gemini.extraction_raw, gazetteer),
         normalise(records.mistral.extraction_raw, gazetteer),
         records.text_rows,
-        match=row_matches,
+        match=MATCH,
+        arbitration=ARBITRATION,
     )
     values, verified = reconciled.accepted, set()
+    review_error = None
     if review_file is not None:
         flagged_before = _cells(
             [*reconciled.flags, *check_sums(reconciled.accepted, set())[0]]
@@ -494,6 +516,7 @@ def judge(
             ]
             values, verified = apply(reconciled.accepted, rows, gazetteer=gazetteer)
         except ValueError as e:
+            review_error = str(e)
             logger.warning("Not applying %s: %s", review_file.name, e)
 
     # A flagged row missing from the merged values was dismissed as absent.
@@ -511,7 +534,7 @@ def judge(
         for field in FIELDS[key.section]
         if field not in row and (key, field) not in flagged
     ]
-    return Verdict(values, open_flags, len(verified), discrepancies)
+    return Verdict(values, open_flags, len(verified), discrepancies, review_error)
 
 
 def release(
@@ -554,15 +577,7 @@ def release(
         verdict = judge(
             records, gazetteer=gazetteer, review_file=path if path.exists() else None
         )
-        for d in verdict.discrepancies:
-            logger.info(
-                "Publisher discrepancy on %s: %s %s printed %s, sums to %s",
-                upload.report_date,
-                "/".join(p for p in d.key if p),
-                d.field,
-                d.printed,
-                d.computed,
-            )
+        _log_discrepancies(str(upload.report_date), verdict)
         row = _with_records(row, records, now=now)._replace(
             discrepancies=len(verdict.discrepancies)
         )
@@ -658,6 +673,22 @@ def release(
         published={d: u.key for d, (u, _) in published.items()},
         appended=appended,
     )
+
+
+def _log_discrepancies(report: str, verdict: Verdict) -> None:
+    for d in verdict.discrepancies:
+        logger.info(
+            "Publisher discrepancy in %s: %s %s printed %s, sums to %s",
+            report,
+            _describe(d.key),
+            d.field,
+            d.printed,
+            d.computed,
+        )
+
+
+def _describe(key: RowKey) -> str:
+    return " / ".join(part for part in key if part)
 
 
 def _cells(flags: Sequence[Flag]) -> set[tuple[RowKey, str]]:
@@ -942,6 +973,67 @@ def write_release(result: Release, ledger: Ledger) -> None:
     write_ledger(ledger)
 
 
+# Review pull request check
+
+
+def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
+    """Check a review pull request: it passes when release would release it.
+
+    The changes must follow the review file rules (`check_diff`). Then each
+    report whose review file changed goes through `judge`, as release reads
+    it, with the working tree's gazetteer and review file; the check passes
+    when no cell is left open, publisher discrepancies included.
+
+    Args:
+        base: The branch the pull request merges into.
+        repo: The repository root.
+
+    Returns:
+        One message per problem: a broken rule, a review that does not
+        apply, or a cell still open. Empty when the pull request passes.
+    """
+    diff = check_diff(base=base, repo=repo)
+    if diff.errors:
+        return diff.errors
+    gazetteer_file = GAZETTEER_PATH.relative_to(ROOT)
+    try:
+        gazetteer = load_gazetteer(repo / gazetteer_file)
+    except ValueError as e:
+        return [f"{gazetteer_file}: {e}"]
+
+    errors: list[str] = []
+    for path in diff.reviews:
+        name = path.relative_to(repo).as_posix()
+        sha256 = next((r["sha256"] for r in read_review(path) if r["reason"]), None)
+        records = read_records(sha256, root=repo / CACHE_DIR.relative_to(ROOT))
+        if not records.complete:
+            errors.append(f"{name}: no cached extraction for {sha256}")
+            continue
+        verdict = judge(records, gazetteer=gazetteer, review_file=path)
+        if verdict.review_error is not None:
+            errors.append(f"{name}: {verdict.review_error}")
+            continue
+        errors += [f"{name}: {_open_message(f)}" for f in verdict.open_flags]
+        _log_discrepancies(name, verdict)
+    return errors
+
+
+def _open_message(flag: Flag) -> str:
+    """What a reviewer must do about a cell still open."""
+    if flag.field is None:
+        return (
+            f"{_describe(flag.key)} rows are missing; add one row per cell under "
+            "the row with an empty field"
+        )
+    cell = f"{_describe(flag.key)} {flag.field}"
+    if flag.reason == "sum_mismatch":
+        return (
+            f"{cell} is open (sum_mismatch): the table sums do not hold with the "
+            "values typed; check them against the PDF"
+        )
+    return f"{cell} is open ({flag.reason}): type the value printed in the PDF"
+
+
 # Command line
 
 
@@ -1055,11 +1147,14 @@ def run(
     return lines + summarise_release(result, plan, after, dry_run=dry_run)
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    """Run the command line."""
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line; return 1 when the review check fails."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "command", nargs="?", choices=("extract", "release"), help="default: both"
+        "command",
+        nargs="?",
+        choices=("extract", "release", "check"),
+        help="default: extract then release; check tests a review pull request",
     )
     parser.add_argument(
         "--dry-run",
@@ -1072,7 +1167,26 @@ def main(argv: Sequence[str] | None = None) -> None:
         type=date.fromisoformat,
         help="extract only this date (YYYY-MM-DD)",
     )
+    parser.add_argument(
+        "--base", default="origin/main", help="branch a review pull request merges into"
+    )
     args = parser.parse_args(argv)
+    if args.command == "check":
+        try:
+            errors = check_review(base=args.base)
+        except subprocess.CalledProcessError as e:
+            print(
+                f"git {' '.join(e.cmd[3:])} failed: {e.stderr.strip()}", file=sys.stderr
+            )
+            return 1
+        for error in errors:
+            print(error, file=sys.stderr)
+        if errors:
+            print(f"{len(errors)} problems; fix them and push again.", file=sys.stderr)
+            return 1
+        print("Review check passed: the report would be released.")
+        return 0
+
     lines = run(
         args.command,
         now=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -1080,8 +1194,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         dry_run=args.dry_run,
     )
     print("\n".join(lines))
+    return 0
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    main()
+    sys.exit(main())

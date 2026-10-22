@@ -7,11 +7,12 @@ naming the row, the field, the PDF page and the reason, with an empty
 PDF instead of confirming a guess. A flag with no field (a whole section, or
 a province's zone rows, is missing) becomes one placeholder row with an empty
 `field`. The reviewer adds one row per cell of that section and province,
-with an empty `reason`, and sets the placeholder's `reviewed_value` to
+with an empty `reason`; the placeholder's `reviewed_value` may be set to
 `done`. A row flagged `unknown_name` that the table does not print (a
-misread zone name) is dismissed by typing `absent` in its cells. A missing row of a known shape (the headline indicators, the zone
-table's Total, a province subtotal) is flagged per field, so its cells are
-ordinary rows to fill.
+misread zone name) is dismissed by typing `absent` in its cells. A missing
+row of a known shape (the headline indicators, the zone table's Total, a
+province subtotal) is flagged per field, so its cells are ordinary rows to
+fill.
 
 The reviewer types each value as printed (a whole number, a decimal with a
 point, or `blank` for an empty cell) and opens a pull request. An unknown
@@ -20,23 +21,21 @@ pull request. `apply` merges the reviewed values into the accepted ones;
 every reviewed cell counts as verified for `check_sums`, so a sum that fails
 on verified values only is a publisher discrepancy, released as printed.
 
-`--check` validates such a pull request against its base branch: it may
-change only `reviewed_value` cells of existing review CSVs (and add rows under
-a placeholder) and rows of the gazetteer;
-every row must be filled; and each report must pass the sum checks with the
-reviewed values, rebuilt from the cached model responses and text-layer rows.
+`check_diff` holds a review pull request to its shape: it may change only
+`reviewed_value` cells of existing review CSVs (and add rows under a
+placeholder) and add or edit rows of the gazetteer, and every value typed
+must read. Whether the reviewed report would then be released is decided by
+`drc_2026_sitreps_extract.py check`, through the same function release uses.
 
 One issue per run lists the held reports and tags the reviewers. Issues are
 opened, commented on and closed with `gh`, only inside GitHub Actions.
 """
 
-import argparse
 import csv
 import logging
 import os
 import re
 import subprocess
-import sys
 import tempfile
 from collections import Counter
 from collections.abc import Iterable, Sequence
@@ -44,8 +43,6 @@ from pathlib import Path
 from typing import NamedTuple, TypedDict
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
-    CACHE_DIR,
-    EXTRACTORS,
     FIELDS,
     GAZETTEER_PATH,
     PERCENT_FIELDS,
@@ -55,23 +52,14 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Gazetteer,
     HealthZone,
     Number,
-    Reconciled,
     RowKey,
     Section,
     TextRow,
     Values,
-    load_gazetteer,
     name_key,
     normalise,
-    read_model_result,
-    read_text_rows,
 )
-from ebola_2026_outbreak.drc_2026_sitrep_validate import (
-    Cell,
-    Matcher,
-    check_sums,
-    reconcile,
-)
+from ebola_2026_outbreak.drc_2026_sitrep_validate import Cell
 from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
 
 logger = logging.getLogger(__name__)
@@ -494,8 +482,7 @@ def issue_body(held: Sequence[HeldReport], *, run_url: str) -> str:
         "2. A row with an empty `field` means the whole section is missing, or, "
         "for `zones` with a province, that province's zone rows. Add one row "
         "per zone and field below it, filling `section`, `province`, `zone`, "
-        "`field` and `reviewed_value` and leaving `reason` empty. Then set the "
-        f"empty-field row's `reviewed_value` to `{DONE}`.",
+        "`field` and `reviewed_value` and leaving `reason` empty.",
         "3. A row with reason `unknown_name` names a zone the gazetteer does not "
         "know. Add the zone, or this spelling to its `aliases` (separated by "
         f"`|`), in `data/reference/{GAZETTEER_PATH.name}`, and fill its values. "
@@ -505,8 +492,10 @@ def issue_body(held: Sequence[HeldReport], *, run_url: str) -> str:
         "4. Open a pull request and write `Refs #N` in its description, where N "
         "is this issue's number. Do not write `Closes`: this issue closes "
         "itself once every report in it is released.",
-        "5. The pull request's check confirms every cell is filled and the "
-        "table sums hold. Merging it releases the report.",
+        "5. The pull request's check confirms the report would be released "
+        "with the values typed: every open cell is filled and the table sums "
+        "hold. A row whose cell is no longer flagged needs no value. Merging "
+        "the pull request releases the report.",
         "",
         f"Run: {run_url}",
     ]
@@ -552,29 +541,29 @@ def close_issue(number: int, *, comment: str, dry_run: bool = False) -> None:
 # Pull request check
 
 
-def check(
-    *,
-    base: str = "origin/main",
-    repo: Path = ROOT,
-    match: Matcher | None = None,
-) -> list[str]:
-    """Check a review pull request's working tree against its base.
+class ReviewDiff(NamedTuple):
+    """A review pull request's changes against its base.
 
-    Diffs tracked files against the merge base of `base` and HEAD.
+    `reviews` are the changed review files, as paths under the repository.
+    `errors` holds one message per rule the changes break.
+    """
+
+    reviews: list[Path]
+    errors: list[str]
+
+
+def check_diff(*, base: str = "origin/main", repo: Path = ROOT) -> ReviewDiff:
+    """Hold a review pull request's working tree to the review file rules.
+
+    Diffs tracked files against the merge base of `base` and HEAD. A pull
+    request may change only `reviewed_value` cells of existing review files,
+    add rows under a placeholder, and add or edit gazetteer rows; each review
+    file must read with `read_review`.
 
     Args:
         base: The branch the pull request merges into.
         repo: The repository root.
-        match: The text-layer matcher for `reconcile`; defaults to
-            `drc_2026_sitrep_textlayer.row_matches`.
-
-    Returns:
-        One message per problem; empty when the pull request passes.
     """
-    if match is None:
-        from ebola_2026_outbreak.drc_2026_sitrep_textlayer import row_matches
-
-        match = row_matches
     merge_base = _git(repo, "merge-base", base, "HEAD")
     changes = [
         line.split("\t", 1)
@@ -586,7 +575,7 @@ def check(
     gazetteer_file = GAZETTEER_PATH.relative_to(ROOT).as_posix()
 
     errors: list[str] = []
-    reviews: list[str] = []
+    reviews: list[Path] = []
     for status, path in changes:
         if status == "M" and path == gazetteer_file:
             errors += _check_gazetteer(repo, merge_base, path)
@@ -595,24 +584,14 @@ def check(
             and path.startswith(f"{review_dir}/")
             and path.endswith(".csv")
         ):
-            reviews.append(path)
+            errors += _check_review(repo, merge_base, path)
+            reviews.append(repo / path)
         else:
             errors.append(
                 f"{path}: a review pull request may change only `reviewed_value` "
                 f"in existing files of {review_dir}/ and rows of {gazetteer_file}"
             )
-    if errors:
-        return errors
-
-    try:
-        gazetteer = load_gazetteer(repo / gazetteer_file)
-    except ValueError as e:
-        return [f"{gazetteer_file}: {e}"]
-    for path in reviews:
-        errors += _check_review(
-            repo, merge_base, path, gazetteer=gazetteer, match=match
-        )
-    return errors
+    return ReviewDiff(reviews, errors)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -633,10 +612,8 @@ def _check_gazetteer(repo: Path, merge_base: str, path: str) -> list[str]:
     return []
 
 
-def _check_review(
-    repo: Path, merge_base: str, path: str, *, gazetteer: Gazetteer, match: Matcher
-) -> list[str]:
-    """Problems with one changed review file, ending at the first failed stage."""
+def _check_review(repo: Path, merge_base: str, path: str) -> list[str]:
+    """Problems with the shape of one changed review file."""
     try:
         old = _records(_git(repo, "show", f"{merge_base}:{path}"), path)
         new = _records((repo / path).read_text(), path)
@@ -645,65 +622,12 @@ def _check_review(
     errors = [f"{path}: {e}" for e in _changed_columns(old, new)]
     if errors:
         return errors
-
     try:
-        review = read_review(repo / path)
+        if not read_review(repo / path):
+            return [f"{path}: the file has no rows"]
     except ValueError as e:
         return [f"{path}: {e}"]
-    for line, row in zip((line for line, _ in new), review, strict=True):
-        if not row["field"] and row["reviewed_value"] != DONE:
-            errors.append(
-                f"{path} line {line}: {_describe(_key(row))} is missing; add one "
-                f"row per zone and field, then set this row's reviewed_value to "
-                f"{DONE!r}"
-            )
-        elif not row["reviewed_value"]:
-            errors.append(
-                f"{path} line {line}: reviewed_value is empty for "
-                f"{_describe(_key(row))} {row['field']}"
-            )
-    if errors:
-        return errors
-    if not review:
-        return [f"{path}: the file has no rows"]
-
-    sha256 = next(r["sha256"] for r in review if r["reason"])
-    reconciled = _reconcile_cached(
-        sha256,
-        cache_root=repo / CACHE_DIR.relative_to(ROOT),
-        gazetteer=gazetteer,
-        match=match,
-    )
-    if reconciled is None:
-        return [f"{path}: no cached extraction for {sha256}"]
-    try:
-        values, verified = apply(reconciled.accepted, review, gazetteer=gazetteer)
-    except ValueError as e:
-        return [f"{path}: {e}"]
-
-    # A flagged row missing from the merged values was dismissed as absent.
-    errors += [
-        f"{path}: {_describe(f.key)} {f.field} is flagged {f.reason} and has no "
-        "reviewed value"
-        for f in reconciled.flags
-        if f.key in values and (f.key, f.field) not in verified
-    ]
-    flags, discrepancies = check_sums(values, verified)
-    errors += [
-        f"{path}: {_describe(f.key)} {f.field or ''} fails the sum checks "
-        f"({f.reason}); check the reviewed values against the PDF"
-        for f in flags
-    ]
-    for d in discrepancies:
-        logger.info(
-            "Publisher discrepancy in %s: %s %s printed %s, sums to %s",
-            path,
-            _describe(d.key),
-            d.field,
-            d.printed,
-            d.computed,
-        )
-    return errors
+    return []
 
 
 def _changed_columns(
@@ -745,42 +669,3 @@ def _changed_columns(
                 "of a row with an empty field"
             )
     return errors
-
-
-def _reconcile_cached(
-    sha256: str, *, cache_root: Path, gazetteer: Gazetteer, match: Matcher
-) -> Reconciled | None:
-    """Reconcile a PDF's cached model responses, or None if any is missing."""
-    results = [read_model_result(sha256, e, root=cache_root) for e in EXTRACTORS]
-    text_rows = read_text_rows(sha256, root=cache_root)
-    if text_rows is None or any(r is None for r in results):
-        return None
-    gemini, mistral = (normalise(r.extraction_raw, gazetteer) for r in results if r)
-    return reconcile(gemini, mistral, text_rows, match=match)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run `--check`; print each problem and return 1 if there are any."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--check", action="store_true", required=True, help="check a review PR"
-    )
-    parser.add_argument("--base", default="origin/main", help="branch to diff against")
-    args = parser.parse_args(argv)
-    try:
-        errors = check(base=args.base)
-    except subprocess.CalledProcessError as e:
-        print(f"git {' '.join(e.cmd[3:])} failed: {e.stderr.strip()}", file=sys.stderr)
-        return 1
-    for error in errors:
-        print(error, file=sys.stderr)
-    if errors:
-        print(f"{len(errors)} problems; fix them and push again.", file=sys.stderr)
-        return 1
-    print("Review check passed.")
-    return 0
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    sys.exit(main())

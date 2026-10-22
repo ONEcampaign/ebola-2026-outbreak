@@ -10,11 +10,11 @@ from typing import Any
 import pytest
 
 from ebola_2026_outbreak import drc_2026_sitrep_review as review
+from ebola_2026_outbreak import drc_2026_sitreps_extract as ex
 from ebola_2026_outbreak.drc_2026_sitrep_review import (
     HeldReport,
     ReviewRow,
     apply,
-    check,
     issue_body,
     parse_value,
     read_review,
@@ -419,7 +419,18 @@ def test_gh_runs_in_actions(
     assert gh_calls[1][-1] == "Released."
 
 
-# Pull request check
+# Pull request check (drc_2026_sitreps_extract.py check)
+
+
+@pytest.fixture
+def check_pr(monkeypatch: pytest.MonkeyPatch):
+    """Run the review check on a repository, reading the stub text layer."""
+    monkeypatch.setattr(ex, "MATCH", match)
+
+    def run(repo: Path) -> list[str]:
+        return ex.check_review(base="HEAD", repo=repo)
+
+    return run
 
 
 def git(repo: Path, *args: str) -> None:
@@ -495,11 +506,11 @@ def wrong_twice() -> tuple[dict[RowKey, Values], dict[RowKey, Values]]:
     return gemini, mistral
 
 
-def test_check_passes_a_filled_review(tmp_path: Path) -> None:
+def test_check_passes_a_filled_review(tmp_path: Path, check_pr: Any) -> None:
     repo, path = make_repo(tmp_path, *wrong_twice())
     assert len(read_review(path)) == 8
     fill(path)
-    assert check(base="HEAD", repo=repo, match=match) == []
+    assert check_pr(repo) == []
 
 
 def added(key: RowKey, printed_as: RowKey | None = None) -> list[ReviewRow]:
@@ -540,6 +551,7 @@ def test_check_passes_a_section_typed_in(
     missing: list[RowKey],
     placeholders: list[tuple[str, str]],
     typed: list[ReviewRow],
+    check_pr: Any,
 ) -> None:
     without = {k: v for k, v in TRUTH.items() if k not in missing}
     repo, path = make_repo(tmp_path, without, without)
@@ -551,15 +563,12 @@ def test_check_passes_a_section_typed_in(
     write_gazetteer(gazetteer, "Ituri,A,\nIturi,B,Bee\n")
 
     write_review(path, [*rows, *typed])
-    assert any(
-        "set this row's reviewed_value to 'done'" in e
-        for e in check(base="HEAD", repo=repo, match=match)
-    )
-    fill(path)
-    assert check(base="HEAD", repo=repo, match=match) == []
+    assert check_pr(repo) == []
 
 
-def test_check_passes_a_missing_row_filled_field_by_field(tmp_path: Path) -> None:
+def test_check_passes_a_missing_row_filled_field_by_field(
+    tmp_path: Path, check_pr: Any
+) -> None:
     without = {k: v for k, v in TRUTH.items() if k != TOTAL}
     repo, path = make_repo(tmp_path, without, without)
     rows = read_review(path)
@@ -568,10 +577,12 @@ def test_check_passes_a_missing_row_filled_field_by_field(tmp_path: Path) -> Non
     }
     assert len(rows) == len(FIELDS["zone_total"])
     fill(path)
-    assert check(base="HEAD", repo=repo, match=match) == []
+    assert check_pr(repo) == []
 
 
-def test_check_passes_a_garbled_zone_dismissed_as_absent(tmp_path: Path) -> None:
+def test_check_passes_a_garbled_zone_dismissed_as_absent(
+    tmp_path: Path, check_pr: Any
+) -> None:
     gemini, mistral = wrong_twice()
     garbled = RowKey("zones", "Ituri", "Xyz")
     extra = {garbled: {**TRUTH[A], "cum_confirmed": 3}}
@@ -581,7 +592,7 @@ def test_check_passes_a_garbled_zone_dismissed_as_absent(tmp_path: Path) -> None
     }
 
     fill(path, **{f"Xyz_{f}": "absent" for f in FIELDS["zones"]})
-    assert check(base="HEAD", repo=repo, match=match) == []
+    assert check_pr(repo) == []
 
 
 def edit_column(path: Path, column: str, value: str) -> None:
@@ -599,7 +610,8 @@ def edit_column(path: Path, column: str, value: str) -> None:
     [
         pytest.param(
             lambda repo, path: fill(path, A_cum_deaths=""),
-            r"line \d+: reviewed_value is empty for zones / Ituri / A cum_deaths",
+            r"zones / Ituri / A cum_deaths is open \(text_mismatch\): type the "
+            r"value printed in the PDF",
             id="unfilled",
         ),
         pytest.param(
@@ -614,8 +626,8 @@ def edit_column(path: Path, column: str, value: str) -> None:
         ),
         pytest.param(
             lambda repo, path: fill(path, A_cum_confirmed="11"),
-            r"zone_subtotals / Ituri cum_confirmed fails the sum checks "
-            r"\(sum_mismatch\)",
+            r"zone_subtotals / Ituri cum_confirmed is open \(sum_mismatch\): the "
+            r"table sums do not hold",
             id="failing-sum",
         ),
         pytest.param(
@@ -627,9 +639,24 @@ def edit_column(path: Path, column: str, value: str) -> None:
         ),
     ],
 )
-def test_check_fails(tmp_path: Path, change: Any, message: str) -> None:
+def test_check_fails(tmp_path: Path, check_pr: Any, change: Any, message: str) -> None:
     repo, path = make_repo(tmp_path, *wrong_twice())
     fill(path)
     change(repo, path)
-    errors = check(base="HEAD", repo=repo, match=match)
+    errors = check_pr(repo)
     assert any(re.search(message, e) for e in errors), errors
+
+
+@pytest.mark.parametrize("typed", ["", "99"])
+def test_check_ignores_a_row_no_longer_flagged(
+    tmp_path: Path, check_pr: Any, typed: str
+) -> None:
+    repo, path = make_repo(tmp_path, *wrong_twice())
+    # Release appended a row for a cell that is no longer flagged.
+    stale = row(B, "cum_confirmed", "")
+    write_review(path, [*read_review(path), stale])
+    git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "grow")
+
+    fill(path, B_cum_confirmed=typed)
+    assert read_review(path)[-1]["reviewed_value"] == typed
+    assert check_pr(repo) == []
