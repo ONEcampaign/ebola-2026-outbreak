@@ -106,12 +106,12 @@ def _words_96(
     return path
 
 
-def _manifest(*uploads: tuple[int, str]) -> None:
-    """Write a manifest whose last upload is the latest for `DAY`."""
+def _manifest(*uploads: tuple[int, str], report_date: date = DAY) -> None:
+    """Write a manifest whose last upload is the latest for `report_date`."""
     rows = [
         {
             "outbreak": "drc_2026",
-            "report_date": DAY,
+            "report_date": report_date,
             "sitrep_number": 96,
             "is_latest": i == len(uploads) - 1,
             "in_api": True,
@@ -473,6 +473,35 @@ def test_held_reupload_keeps_released_values(
     by_zone = pl.read_csv(ex.BY_ZONE_PATH, schema=ex.BY_ZONE_SCHEMA)
     assert by_zone["media_id"].unique().to_list() == [1]
     assert by_zone.height == 18
+
+
+def test_upload_replaced_with_another_date_drops_its_old_date(
+    issues: list[tuple[str, Any]],
+) -> None:
+    _manifest((1, "t1"))
+    _ledger((1, "t1", SHA_A))
+    _cache(SHA_A, _raw_96(), _words_96())
+    ex.run("release", now=NOW)
+
+    # The ministry replaces the upload in place with the next day's report,
+    # which waits for review.
+    later = date(2026, 8, 20)
+    _manifest((1, "t2"), report_date=later)
+    ledger = ex.read_ledger()
+    ledger[1, "t2"] = ex.LedgerRow(later, 1, "t2", SHA_B, "pending", *[None] * 7)
+    ex.write_ledger(ledger)
+    _hold_96(SHA_B)
+    lines = ex.run("release", now=NOW)
+
+    statuses = {
+        (r["modified"], r["status"]) for r in pl.read_csv(ex.STATUS_PATH).to_dicts()
+    }
+    assert statuses == {("t1", "superseded"), ("t2", "held")}
+    assert pl.read_csv(ex.BY_ZONE_PATH).is_empty()
+    assert (
+        f"Dropped {DAY} from the outputs: the ministry replaced the upload with a "
+        "report of another date"
+    ) in lines
 
 
 def test_release_refuses_to_drop_a_released_date() -> None:

@@ -821,16 +821,36 @@ def test_check_ignores_a_row_no_longer_flagged(
     assert check_pr(repo) == []
 
 
-def test_check_fails_a_gazetteer_edit_that_unreleases_a_report(
-    tmp_path: Path, check_pr: Any
+@pytest.mark.parametrize(
+    "change",
+    [
+        # Moving zone A to another province flags the released report's row.
+        pytest.param(
+            lambda repo, monkeypatch: write_gazetteer(
+                repo / GAZETTEER_PATH.relative_to(ROOT), "Tshopo,A,\nIturi,B,\n"
+            ),
+            id="gazetteer-edit",
+        ),
+        # A stricter text-layer match flags every row.
+        pytest.param(
+            lambda repo, monkeypatch: monkeypatch.setattr(
+                ex, "MATCH", lambda text, values, section: False
+            ),
+            id="code-change",
+        ),
+    ],
+)
+def test_check_fails_a_change_that_unreleases_a_report(
+    tmp_path: Path, check_pr: Any, monkeypatch: pytest.MonkeyPatch, change: Any
 ) -> None:
     repo, path = make_repo(tmp_path, TRUTH, TRUTH, status="released")
     assert not path.exists()
     assert check_pr(repo) == []
+    assert ex.check_release(base="HEAD", repo=repo) == []
 
-    # Moving zone A to another province flags the released report's row.
-    write_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT), "Tshopo,A,\nIturi,B,\n")
-    errors = check_pr(repo)
+    change(repo, monkeypatch)
+    errors = ex.check_release(base="HEAD", repo=repo)
+    assert check_pr(repo) == errors
     assert (
         f"{DATE} upload (media 1, modified t1) was released and would now be held"
         in errors

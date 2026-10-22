@@ -27,7 +27,9 @@ Two steps, run in this order by default:
 `by_zone.csv` and `headline.csv` are rebuilt from every released upload. A
 report date whose latest upload is held or pending keeps the values of the
 upload released before it, so no date drops out while a re-upload waits. That
-older upload is marked `superseded` once the new one is released. The
+older upload is marked `superseded` once the new one is released, or at once
+when the ministry replaces it in place (same media id) with a report of
+another date; its old date then drops out, the one case release allows. The
 ledger (`extraction_status.csv`) keeps one row per upload. Its `extracted_at`
 is when the cached answers were requested, or, for a pending upload, when
 extraction was first tried, which is what the three-day issue rule counts
@@ -41,7 +43,10 @@ when an upload released at the merge base would no longer be released or
 superseded (a gazetteer edit can do that to a report nobody is reviewing),
 on each cell a changed review file leaves open, and on each row a reviewer
 added that answers no cell under review. `--repo` points it, and
-every path it reads, at another checkout's data.
+every path it reads, at another checkout's data. The review check runs the
+base branch's code, so `check-release` runs the release part of it with the
+pull request's own code on every pull request: a code change that would hold
+a released upload fails there, before it reaches main.
 
 A run that newly holds reports opens one issue listing them, and a run that
 finds uploads pending for `PENDING_DAYS` days running opens one issue for
@@ -298,7 +303,9 @@ class Release(NamedTuple):
 
     `published` maps each report date to the upload whose values are in the
     outputs. `reviews` holds the rows of new review files, `appended` the
-    rows to add to existing ones.
+    rows to add to existing ones. `replaced` holds the report dates that
+    leave the outputs because the ministry replaced their released upload in
+    place with a report of another date.
     """
 
     ledger: Ledger
@@ -308,6 +315,7 @@ class Release(NamedTuple):
     held: dict[UploadKey, HeldReport]
     published: dict[date, UploadKey]
     appended: dict[Path, list[ReviewRow]]
+    replaced: set[date]
 
 
 class Extracted(NamedTuple):
@@ -760,8 +768,11 @@ def release(
 
     # Of the uploads that are no longer latest, the last released one of a date
     # whose latest upload is not released stays published and every other is
-    # superseded.
+    # superseded. So is one whose media id now holds a report of another date:
+    # the ministry replaced the file, and its old date has no source left.
     by_date = {u.report_date: u for u in uploads}
+    moved = _moved(manifest, ledger)
+    replaced: set[date] = set()
     older = sorted(
         (r for k, r in ledger.items() if k not in out),
         key=lambda r: r.modified,
@@ -771,6 +782,10 @@ def release(
         key = (row.media_id, row.modified)
         if row.status != "released" or row.report_date in published:
             out[key] = row._replace(status="superseded")
+            continue
+        if key in moved:
+            out[key] = row._replace(status="superseded")
+            replaced.add(row.report_date)
             continue
         records = read_records(row.sha256, root=cache)
         path = review_path(
@@ -811,7 +826,21 @@ def release(
         held=held,
         published={d: u.key for d, (u, _) in published.items()},
         appended=appended,
+        replaced=replaced - published.keys(),
     )
+
+
+def _moved(manifest: pl.DataFrame, ledger: Ledger) -> set[UploadKey]:
+    """Ledger uploads whose media id has a newer upload of another report date."""
+    newer = (
+        ledger_frame(ledger)
+        .join(manifest, on="media_id", suffix="_new")
+        .filter(
+            pl.col("modified_new") > pl.col("modified"),
+            pl.col("report_date_new") != pl.col("report_date"),
+        )
+    )
+    return set(newer.select("media_id", "modified").iter_rows())
 
 
 def _log_discrepancies(report: str, verdict: Verdict) -> None:
@@ -910,6 +939,8 @@ class OutputError(ValueError):
 def check_outputs(result: Release, *, previous_dates: set[date]) -> None:
     """Refuse outputs with a repeated key, or without a date released before.
 
+    A date in `result.replaced` may drop out: the ministry replaced its upload.
+
     Raises:
         OutputError: On either.
     """
@@ -922,7 +953,7 @@ def check_outputs(result: Release, *, previous_dates: set[date]) -> None:
             raise OutputError(
                 "duplicate_key", f"Duplicate {', '.join(key)} rows in {name}"
             )
-    lost = previous_dates - set(result.published)
+    lost = previous_dates - set(result.published) - result.replaced
     if lost:
         raise OutputError(
             "dates_dropped", f"Dates would drop out of the outputs: {sorted(lost)}"
@@ -1140,7 +1171,9 @@ def write_release(result: Release, ledger: Ledger) -> None:
         tmp.replace(path)
     for path, rows in result.appended.items():
         # Rows go after the existing ones, which stay byte for byte, so a
-        # reviewer's open pull request still merges.
+        # reviewer's open pull request still merges, unless it edits the
+        # file's last row: git reports a conflict with the lines appended
+        # after it.
         tmp = path.with_suffix(".csv.tmp")
         write_review(tmp, rows)
         _, new = tmp.read_text().split("\n", 1)
@@ -1204,6 +1237,31 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
         errors += [f"{name}: {_open_message(f)}" for f in verdict.open_flags]
         _log_discrepancies(name, verdict)
     return errors
+
+
+def check_release(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
+    """Check that this code still releases what the merge base released.
+
+    CI runs it on every pull request with the pull request's own code, so a
+    change to matching, arbitration, the text layer or reconcile that would
+    hold a released upload fails there, before release on main raises. The
+    review check runs the base branch's code and cannot see such a change.
+
+    Args:
+        base: The branch the pull request merges into.
+        repo: The checkout whose data is checked.
+
+    Returns:
+        One message per problem, as `_check_release` finds them; empty when
+        release would succeed.
+    """
+    merge_base = git(repo, "merge-base", base, "HEAD")
+    gazetteer_path = _in(repo, GAZETTEER_PATH)
+    try:
+        gazetteer = load_gazetteer(gazetteer_path)
+    except ValueError as e:
+        return [f"{gazetteer_path.relative_to(repo)}: {e}"]
+    return _check_release(repo, merge_base=merge_base, gazetteer=gazetteer)
 
 
 def _check_release(repo: Path, *, merge_base: str, gazetteer: Gazetteer) -> list[str]:
@@ -1300,6 +1358,12 @@ def summarise_release(
         f"{write} {result.by_zone.height} by-zone rows and "
         f"{result.headline.height} headline rows for {len(result.published)} dates",
     ]
+    if result.replaced:
+        dates = ", ".join(str(d) for d in sorted(result.replaced))
+        lines.append(
+            f"{'Would drop' if dry_run else 'Dropped'} {dates} from the outputs: "
+            "the ministry replaced the upload with a report of another date"
+        )
     lines += [
         f"{write} review file {_relative(p)} ({len(rows)} cells)"
         for p, rows in result.reviews.items()
@@ -1384,8 +1448,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=("extract", "release", "check"),
-        help="default: extract then release; check tests a review pull request",
+        choices=("extract", "release", "check", "check-release"),
+        help="default: extract then release; check tests a review pull request, "
+        "check-release that a pull request's code still releases what main did",
     )
     parser.add_argument(
         "--dry-run",
@@ -1408,9 +1473,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="checkout whose data the check reads (default: this one)",
     )
     args = parser.parse_args(argv)
-    if args.command == "check":
+    if args.command in ("check", "check-release"):
+        check, passed = (
+            (check_review, "Review check passed: the report would be released.")
+            if args.command == "check"
+            else (check_release, "Release check passed: release would succeed.")
+        )
         try:
-            errors = check_review(base=args.base, repo=args.repo.resolve())
+            errors = check(base=args.base, repo=args.repo.resolve())
         except subprocess.CalledProcessError as e:
             print(
                 f"git {' '.join(e.cmd[3:])} failed: {e.stderr.strip()}", file=sys.stderr
@@ -1421,7 +1491,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if errors:
             print(f"{len(errors)} problems; fix them and push again.", file=sys.stderr)
             return 1
-        print("Review check passed: the report would be released.")
+        print(passed)
         return 0
 
     lines = run(
