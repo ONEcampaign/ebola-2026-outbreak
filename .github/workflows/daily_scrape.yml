@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: daily-scrape
@@ -46,11 +47,39 @@ jobs:
             exit 0
           fi
           git commit -m "data: WHO Bundibugyo table $(date -u +%Y-%m-%d)"
+          git pull --rebase
           git push
 
       # The manifest records media already seen, so only new sitreps download.
       - name: Download new sitreps
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_download.py
+
+      # The only step with the model API keys. It caches each new sitrep's
+      # answers; an API error leaves the upload pending for the next run.
+      - name: Extract zone data
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_extract.py extract
+
+      # Release needs no keys. It opens an issue for any report held for review.
+      - name: Release zone data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_extract.py release
+
+      # Commit before the province steps, so a layout the province parser cannot
+      # read does not discard the paid-for extractions.
+      - name: Commit zone data
+        run: |
+          git add data/interim/drc_2026_sitrep_extractions data/review/drc_2026 data/processed/drc_2026_sitrep_*.csv
+          if git diff --cached --quiet; then
+            echo "No zone data changes"
+            exit 0
+          fi
+          git commit -m "data: DRC 2026 sitrep zone data $(date -u +%Y-%m-%d)"
+          git pull --rebase
+          git push
 
       - name: Parse new sitreps
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_parse.py
@@ -69,4 +98,5 @@ jobs:
             exit 0
           fi
           git commit -m "data: DRC 2026 sitreps $(date -u +%Y-%m-%d)"
+          git pull --rebase
           git push

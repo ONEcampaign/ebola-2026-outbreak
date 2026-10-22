@@ -44,6 +44,45 @@ Files are prefixed by outbreak so historical and current data stay apart:
     provinces, in the same shape and with the same final indicator label as
     the West Africa files. Built by `drc_2026_final.py`.
 
+### Zone-level sitreps
+
+From SitRep 96 (report date 19 August 2026), the sitrep's health-zone table is
+read by two models, Gemini and Mistral OCR, and checked against the PDF's text
+layer and the table's own sums. `drc_2026_sitreps_extract.py` runs in the daily
+scrape (`extract`, then `release`) and writes:
+
+- `drc_2026_sitrep_by_zone.csv`: one row per date, zone and indicator (cumulative
+  confirmed cases and deaths, new cases, community, CTE and total deaths in the
+  last 24 hours). The `level` column is `zone`, `province` (the table's
+  province subtotals) or `national` (its Total row), so sum one level only.
+  A blank `value` is a cell the sitrep leaves empty, which is not the same as 0.
+- `drc_2026_sitrep_headline.csv`: the six headline indicators (cumulative cases
+  and deaths, case fatality rate, people in isolation, recoveries, contacts
+  followed up).
+- `drc_2026_sitrep_extraction_status.csv`: one row per uploaded PDF, with its
+  status (`released`, `held`, `pending` or `superseded`) and the number of cells
+  flagged.
+
+A report is released only when every value is agreed by both models and
+confirmed by the PDF, or typed by a person. Otherwise it is held, and the run
+opens one issue that tags the reviewers. To review a held report:
+
+1. Open its file in `data/review/drc_2026/`. Each row is a cell to check, with
+   the PDF page to open in `pdf_url`.
+1. Type the printed value in `reviewed_value`: a number, or `blank` for an
+   empty cell. Type `absent` where a flagged zone name is a misreading and the
+   table has no such row. If a zone name is unknown, add it or its spelling to
+   `aliases` in `data/reference/drc_2026_health_zones.csv`.
+1. Open a pull request that says `Refs #N` for the issue. The review check runs
+   `drc_2026_sitreps_extract.py check` and passes when the report would be
+   released. Merging runs the release, and the issue closes once all its
+   reports are out.
+
+The extraction needs two repository secrets, `GEMINI_API_KEY` and
+`MISTRAL_API_KEY`. Only the extract step and the weekly golden check read them.
+Raw model answers are cached in `data/interim/drc_2026_sitrep_extractions/`, so
+`release` needs no keys and no PDFs.
+
 ### Chart tables
 
 `uv run python src/ebola_2026_outbreak/chart_tables.py` writes display-ready

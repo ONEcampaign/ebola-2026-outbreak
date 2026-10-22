@@ -1,0 +1,56 @@
+name: Release reviewed sitreps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/review/**"
+      - "data/reference/drc_2026_health_zones.csv"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+# Shares the daily scrape's group so the two never push at the same time.
+concurrency:
+  group: daily-scrape
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+
+      - name: Set up Python 3.13
+        run: uv python install '3.13'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # A pure function of the committed cache, reviews and gazetteer: no API
+      # keys and no PDFs. It closes an issue once all its reports are released.
+      - name: Release zone data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_extract.py release
+
+      - name: Commit zone data
+        run: |
+          git add data/review/drc_2026 data/processed/drc_2026_sitrep_*.csv
+          if git diff --cached --quiet; then
+            echo "No zone data changes"
+            exit 0
+          fi
+          git commit -m "data: release reviewed DRC 2026 sitreps $(date -u +%Y-%m-%d)"
+          git pull --rebase
+          git push
