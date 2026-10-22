@@ -8,12 +8,18 @@ Outputs, in data/output/, with display column names for charting tools:
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
       before 29 August 2014 and WHO/HDX counts from then on.
+    - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
+      confirmed deaths and case fatality rate (percent) from WHO's Total row,
+      and the number of DRC provinces with confirmed cases from the latest
+      sitrep, each with the date its source reports.
 """
 
+import json
 import logging
 import unicodedata
 from datetime import date
 from pathlib import Path
+from typing import TypedDict
 
 import polars as pl
 
@@ -36,6 +42,7 @@ OBJECTID_PATH = ROOT / "data" / "reference" / "drc_provinces_objectid.csv"
 COUNTRY_SUMMARY_PATH = OUTPUT_DIR / "2026_outbreak_country_summary.csv"
 PROVINCE_MAP_PATH = OUTPUT_DIR / "2026_outbreak_drc_cases_by_province.csv"
 COMPARISON_PATH = OUTPUT_DIR / "outbreak_comparison_weekly.csv"
+HEADLINE_PATH = OUTPUT_DIR / "2026_outbreak_headline_figures.json"
 
 # Week 0 for each outbreak. West Africa: Institut Pasteur (Lyon) confirmed
 # Ebola by PCR in Guinean samples, reported by WHO on 23 March 2014 with
@@ -63,6 +70,13 @@ COUNTRY, CASES, DEATHS, CFR, RECOVERED = (
 NAME, OBJECTID = "Name", "OBJECTID"
 WEEK = "Weeks since the first confirmed case"
 WEST_AFRICA, DRC = "West Africa 2014-16 outbreak", "DRC 2026 outbreak"
+
+
+class HeadlineFigure(TypedDict):
+    """One headline number and the date its source reports."""
+
+    value: int | float
+    update_date: str
 
 
 def _cfr(deaths: pl.Expr, cases: pl.Expr) -> pl.Expr:
@@ -146,6 +160,57 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
     return joined.select(
         NAME, OBJECTID, pl.col("value").cast(pl.Int64).alias(CASES)
     ).sort(CASES, descending=True)
+
+
+def latest_date(dates: pl.Series) -> date:
+    """Latest date in a series.
+
+    Raises:
+        ValueError: If the series is empty or holds no dates.
+    """
+    latest = dates.max()
+    if not isinstance(latest, date):
+        raise ValueError(f"No dates in {dates.name!r}")
+    return latest
+
+
+def headline_figures(
+    *,
+    summary: pl.DataFrame,
+    who_as_of: date,
+    mapped: pl.DataFrame,
+    sitrep_as_of: date,
+) -> dict[str, HeadlineFigure]:
+    """Headline outbreak figures with their update dates.
+
+    Args:
+        summary: Output of `country_summary`, including its Total row.
+        who_as_of: Latest WHO "Data as of" date across countries.
+        mapped: Output of `province_map`, one row per province with cases.
+        sitrep_as_of: Date of the sitrep `mapped` comes from.
+
+    Returns:
+        `total_confirmed_cases`, `total_deaths` (confirmed), `death_rate`
+        (confirmed case fatality rate in percent) and `provinces_affected`.
+
+    Raises:
+        ValueError: If the Total row is missing or any WHO figure is null.
+    """
+    total = summary.filter(pl.col(COUNTRY) == TOTAL_LABEL)
+    if total.height != 1:
+        raise ValueError(f"Expected one {TOTAL_LABEL!r} row, found {total.height}")
+    row = total.row(0, named=True)
+    missing = [column for column in (CASES, DEATHS, CFR) if row[column] is None]
+    if missing:
+        raise ValueError(f"WHO {TOTAL_LABEL} row has no value for {missing}")
+
+    who_date, sitrep_date = who_as_of.isoformat(), sitrep_as_of.isoformat()
+    return {
+        "total_confirmed_cases": {"value": row[CASES], "update_date": who_date},
+        "total_deaths": {"value": row[DEATHS], "update_date": who_date},
+        "death_rate": {"value": row[CFR], "update_date": who_date},
+        "provinces_affected": {"value": mapped.height, "update_date": sitrep_date},
+    }
 
 
 def drc_outbreak_series(who: pl.DataFrame) -> pl.DataFrame:
@@ -239,7 +304,7 @@ def weekly_comparison(west_africa: pl.DataFrame, drc: pl.DataFrame) -> pl.DataFr
 
 
 def main() -> None:
-    """Write the three chart tables."""
+    """Write the chart tables and headline figures."""
     who = pl.read_csv(WHO_PATH, schema=WHO_SCHEMA)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -262,6 +327,16 @@ def main() -> None:
     comparison = weekly_comparison(west_africa, drc_outbreak_series(who))
     comparison.write_csv(COMPARISON_PATH)
     logger.info("Wrote %d rows to %s", comparison.height, COMPARISON_PATH.name)
+
+    sitrep_cases = provinces.filter(pl.col("indicator") == SITREP_INDICATORS["cases"])
+    headline = headline_figures(
+        summary=summary,
+        who_as_of=latest_date(who["date"]),
+        mapped=mapped,
+        sitrep_as_of=latest_date(sitrep_cases["date"]),
+    )
+    HEADLINE_PATH.write_text(json.dumps(headline, indent=2) + "\n")
+    logger.info("Wrote %d figures to %s", len(headline), HEADLINE_PATH.name)
 
 
 if __name__ == "__main__":
