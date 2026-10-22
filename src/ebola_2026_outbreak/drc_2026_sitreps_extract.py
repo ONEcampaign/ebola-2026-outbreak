@@ -79,6 +79,7 @@ from ebola_2026_outbreak import drc_2026_sitrep_mistral as mistral
 from ebola_2026_outbreak.drc_2026_sitrep_review import (
     REVIEWERS,
     HeldReport,
+    ReviewError,
     ReviewRow,
     apply,
     check_added,
@@ -616,8 +617,9 @@ def _apply_review(
     and the verified cells.
 
     Raises:
-        ValueError: If an added row names an unknown zone, or answers no cell
-            the review reaches, naming each such row.
+        ReviewError: If an added row names an unknown zone, or a zone under
+            another province than the gazetteer's, or answers no cell the
+            review reaches, naming each such row.
     """
     check_added(review, gazetteer=gazetteer)
     answers = [(r, _review_cells(r, gazetteer)) for r in review]
@@ -632,12 +634,13 @@ def _apply_review(
         values, verified = apply(accepted, rows, gazetteer=gazetteer)
         applied = len(rows)
     if added := [r for r, cells in answers if not r["reason"] and not cells & reached]:
-        raise ValueError(
+        raise ReviewError(
+            "not_under_review",
             "; ".join(
                 f"{describe(RowKey(r['section'], r['province'], r['zone']))} "
                 f"{r['field']} is not a cell under review; remove the row"
                 for r in added
-            )
+            ),
         )
     return values, verified
 
@@ -832,14 +835,16 @@ def _review_cells(row: ReviewRow, gazetteer: Gazetteer) -> set[Cell]:
 
     A row answers its own cell, read through the gazetteer as `apply` reads
     it. A row a reviewer added also answers the placeholder it may sit under:
-    its province's missing zones, or the whole section.
+    its province's missing zones, under the province the gazetteer resolves,
+    or the whole section.
     """
     key = RowKey(row["section"], row["province"], row["zone"])
-    cell = (resolve(key, gazetteer) or key, row["field"])
+    resolved = resolve(key, gazetteer) or key
+    cell = (resolved, row["field"])
     if row["reason"]:
         return {cell}
     if row["section"] == "zones" and row["province"]:
-        return {cell, (RowKey("zones", row["province"], ""), "")}
+        return {cell, (RowKey("zones", resolved.province, ""), "")}
     return {cell, (RowKey(row["section"], "", ""), "")}
 
 
@@ -888,11 +893,25 @@ def _headline(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.Da
     return pl.DataFrame(records, schema=HEADLINE_SCHEMA).sort("date", "indicator")
 
 
+class OutputError(ValueError):
+    """Outputs that `check_outputs` refuses.
+
+    `code` is `duplicate_key` or `dates_dropped`; the message names the rows
+    or dates.
+    """
+
+    def __init__(
+        self, code: Literal["duplicate_key", "dates_dropped"], message: str
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def check_outputs(result: Release, *, previous_dates: set[date]) -> None:
     """Refuse outputs with a repeated key, or without a date released before.
 
     Raises:
-        ValueError: On either.
+        OutputError: On either.
     """
     keys = {
         "by_zone": (result.by_zone, ["date", "level", "province", "zone", "indicator"]),
@@ -900,10 +919,14 @@ def check_outputs(result: Release, *, previous_dates: set[date]) -> None:
     }
     for name, (df, key) in keys.items():
         if df.select(key).is_duplicated().any():
-            raise ValueError(f"Duplicate {', '.join(key)} rows in {name}")
+            raise OutputError(
+                "duplicate_key", f"Duplicate {', '.join(key)} rows in {name}"
+            )
     lost = previous_dates - set(result.published)
     if lost:
-        raise ValueError(f"Dates would drop out of the outputs: {sorted(lost)}")
+        raise OutputError(
+            "dates_dropped", f"Dates would drop out of the outputs: {sorted(lost)}"
+        )
 
 
 def previous_dates() -> set[date]:

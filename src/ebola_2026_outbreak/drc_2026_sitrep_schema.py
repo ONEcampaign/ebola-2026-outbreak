@@ -472,14 +472,57 @@ def _values(row: object, section: Section) -> Values:
     return values
 
 
+def canonical_key(
+    printed: RowKey, gazetteer: Gazetteer
+) -> tuple[RowKey, FlagReason | None] | None:
+    """The canonical key of a row as printed, and why its names flag it.
+
+    Provinces are matched with `canonical_province`, zones on `name_key`
+    against the gazetteer. A zone the gazetteer files under one other
+    province moves there, flagged `wrong_province`. A row that cannot be
+    placed keeps its printed names, with a known province made canonical:
+    flagged `wrong_province` when several provinces share the zone name,
+    none of them the printed one, and `unknown_name` for a name the
+    gazetteer or the province list lacks, or a name given in a section
+    whose rows have none.
+
+    Args:
+        printed: The section and the province and zone labels as printed.
+        gazetteer: From `load_gazetteer`.
+
+    Returns:
+        The key and the flag reason, None when the names are canonical; or
+        None for a Total row, which belongs in `zone_total`.
+    """
+    section, label, zone = printed
+    unknown = RowKey(section, label.strip(), zone.strip()), "unknown_name"
+    if section in ("kpis", "zone_total"):
+        return (printed, None) if not label and not zone else unknown
+    province = _province(label)
+    if province == TOTAL or (section == "zones" and name_key(zone) == name_key(TOTAL)):
+        return None
+    if section != "zones":
+        if zone.strip() or province is None:
+            return unknown
+        return RowKey(section, province, ""), None
+    candidates = gazetteer.get(name_key(zone), ())
+    match = next((z for z in candidates if z.province == province), None)
+    if match is not None:
+        return RowKey("zones", *match), None
+    if len(candidates) == 1:
+        return RowKey("zones", *candidates[0]), "wrong_province"
+    key = RowKey("zones", province or label.strip(), zone.strip())
+    return key, "wrong_province" if candidates else "unknown_name"
+
+
 def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     """Key a model's raw extraction on canonical names.
 
-    A province or zone label that is unknown, a zone filed under a province
-    other than the gazetteer's, and a row repeated under one key each flag
-    every field of the row. The first of repeated rows is kept. A Total row
-    filed among provinces, subtotals or zones is dropped, since the prompt
-    excludes it and `zone_total` carries the zone table's Total.
+    Each row is keyed by `canonical_key`. A name it flags, and a row
+    repeated under one key, each flag every field of the row. The first of
+    repeated rows is kept. A Total row filed among provinces, subtotals or
+    zones is dropped, since the prompt excludes it and `zone_total` carries
+    the zone table's Total.
 
     Args:
         raw: The object the model returned, shaped by `JSON_SCHEMA`.
@@ -495,7 +538,11 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     rows: dict[RowKey, Values] = {}
     flags: list[Flag] = []
 
-    def add(key: RowKey, values: Values, reason: FlagReason | None = None) -> None:
+    def add(printed: RowKey, values: Values) -> None:
+        if (canonical := canonical_key(printed, gazetteer)) is None:
+            logger.info("Dropping a Total row filed in %s", printed.section)
+            return
+        key, reason = canonical
         if key in rows:
             reason = "duplicate_row"
         else:
@@ -510,31 +557,11 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     for section in ("provinces", "zone_subtotals"):
         for row in _list(raw, section):
             label = _name(row, section, "province")
-            province = _province(label)
-            values = _values(row, section)
-            if province == TOTAL:
-                logger.info("Dropping a Total row filed in %s", section)
-            elif province is None:
-                add(RowKey(section, label.strip(), ""), values, "unknown_name")
-            else:
-                add(RowKey(section, province, ""), values)
+            add(RowKey(section, label, ""), _values(row, section))
 
     for row in _list(raw, "zones"):
         label, zone = _name(row, "zones", "province"), _name(row, "zones", "zone")
-        province = _province(label)
-        values = _values(row, "zones")
-        if name_key(zone) == name_key(TOTAL) or province == TOTAL:
-            logger.info("Dropping a Total row filed in zones")
-            continue
-        candidates = gazetteer.get(name_key(zone), ())
-        match = next((z for z in candidates if z.province == province), None)
-        if match is not None:
-            add(RowKey("zones", *match), values)
-        elif len(candidates) == 1:
-            add(RowKey("zones", *candidates[0]), values, "wrong_province")
-        else:
-            printed = RowKey("zones", province or label.strip(), zone.strip())
-            add(printed, values, "wrong_province" if candidates else "unknown_name")
+        add(RowKey("zones", label, zone), _values(row, "zones"))
 
     extraction = Extraction(
         _get(raw, "extraction", "sitrep_no"),

@@ -4,6 +4,8 @@ import csv
 import json
 import re
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,7 @@ from ebola_2026_outbreak import drc_2026_sitrep_review as review
 from ebola_2026_outbreak import drc_2026_sitreps_extract as ex
 from ebola_2026_outbreak.drc_2026_sitrep_review import (
     HeldReport,
+    ReviewError,
     ReviewRow,
     apply,
     issue_body,
@@ -170,6 +173,14 @@ def row(
     }
 
 
+@contextmanager
+def refused(code: str) -> Iterator[pytest.ExceptionInfo[ReviewError]]:
+    """Expect a `ReviewError` with `code`."""
+    with pytest.raises(ReviewError) as e:
+        yield e
+    assert e.value.code == code, e.value
+
+
 # Review files
 
 
@@ -217,28 +228,40 @@ def test_parse_value(text: str, field: str, value: float | None) -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "field"),
+    ("text", "field", "code"),
     [
-        ("48,3", "cfr_pct"),
-        ("1 234", "cum_confirmed"),
-        ("12.0", "cum_confirmed"),
-        ("-1", "cum_confirmed"),
-        ("NA", "cum_deaths"),
-        ("absent", "cum_deaths"),
+        ("48,3", "cfr_pct", "bad_value"),
+        ("1 234", "cum_confirmed", "bad_value"),
+        ("12.0", "cum_confirmed", "bad_value"),
+        ("-1", "cum_confirmed", "bad_value"),
+        ("NA", "cum_deaths", "bad_value"),
+        ("absent", "cum_deaths", "absent_misused"),
     ],
 )
-def test_parse_value_rejects(text: str, field: str) -> None:
-    with pytest.raises(ValueError, match=field):
+def test_parse_value_rejects(text: str, field: str, code: str) -> None:
+    with refused(code):
         parse_value(text, field)
 
 
-def test_read_review_names_the_bad_line(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("tail", "code"),
+    [
+        pytest.param(",two", "bad_value", id="not-a-number"),
+        # Unquoted, a comma splits the value into an extra field.
+        pytest.param(",48,3", "row_width", id="decimal-comma"),
+        pytest.param(",1,234", "row_width", id="thousands-comma"),
+        pytest.param("", "row_width", id="short-row"),
+    ],
+)
+def test_read_review_names_the_bad_line(tmp_path: Path, tail: str, code: str) -> None:
     path = write_review(
         tmp_path / "r.csv",
-        [row(A, "cum_confirmed", "10"), row(A, "cum_deaths", "two")],
+        [row(A, "cum_confirmed", "10"), row(A, "cum_deaths", "X")],
     )
-    with pytest.raises(ValueError, match=r"r\.csv line 3: .*'two'"):
+    path.write_text(path.read_text().replace(",X\n", f"{tail}\n"))
+    with refused(code) as e:
         read_review(path)
+    assert str(e.value).startswith("r.csv line 3: ")
 
 
 # Applying a review
@@ -287,12 +310,29 @@ def test_added_rows_need_a_known_name(tmp_path: Path, gazetteer) -> None:
     assert values == {A: {"cum_deaths": 2}}
     assert verified == {(A, "cum_deaths")}
     review.check_added([typed], gazetteer=gazetteer)
-    with pytest.raises(ValueError, match="Nord-Kivu / D is not in the gazetteer"):
+    with refused("not_in_gazetteer"):
         review.check_added([typed, other], gazetteer=gazetteer)
     placeholder = row(RowKey("zones", "Ituri", ""), "", "12", "section_missing")
     path = write_review(tmp_path / "r.csv", [placeholder])
-    with pytest.raises(ValueError, match="'done'"):
+    with refused("bad_placeholder"):
         read_review(path)
+
+
+def test_added_row_under_another_province_is_refused(gazetteer) -> None:
+    # The gazetteer files A under Ituri. Flagged, the row moves there; typed
+    # in by the reviewer, it is a mistake.
+    misfiled = RowKey("zones", "Tshopo", "A")
+    typed = row(misfiled, "cum_deaths", "2", "")
+    with refused("wrong_province"):
+        review.check_added([typed], gazetteer=gazetteer)
+    with refused("wrong_province"):
+        apply(TRUTH, [typed], gazetteer=gazetteer)
+
+    # A spelling of the right province is the same row.
+    spelled = row(RowKey("zones", "ITURI", "A"), "cum_deaths", "2", "")
+    review.check_added([spelled], gazetteer=gazetteer)
+    values, verified = apply({}, [spelled], gazetteer=gazetteer)
+    assert (values, verified) == ({A: {"cum_deaths": 2}}, {(A, "cum_deaths")})
 
 
 def test_apply_moves_a_zone_to_the_gazetteer_province(gazetteer) -> None:
@@ -308,7 +348,7 @@ def test_apply_resolves_an_unknown_name_after_an_alias(tmp_path: Path) -> None:
     printed = RowKey("zones", "Ituri", "Bee")
     reviewed = [row(printed, f, "1", "unknown_name") for f in ("new_confirmed",)]
     before = load_gazetteer(write_gazetteer(tmp_path / "before.csv"))
-    with pytest.raises(ValueError, match="Ituri / Bee is not in the gazetteer"):
+    with refused("not_in_gazetteer"):
         apply(TRUTH, reviewed, gazetteer=before)
 
     after = load_gazetteer(
@@ -329,22 +369,22 @@ def test_apply_drops_a_row_dismissed_as_absent(gazetteer) -> None:
     assert values == TRUTH
     assert verified == set()
 
-    with pytest.raises(ValueError, match="also given values"):
+    with refused("absent_and_valued"):
         apply(
             accepted,
             [*dismiss[1:], row(garbled, "cum_confirmed", "1")],
             gazetteer=gazetteer,
         )
     real = [row(A, "cum_deaths", "absent", "unknown_name")]
-    with pytest.raises(ValueError, match="real zone"):
+    with refused("absent_real_zone"):
         apply(TRUTH, real, gazetteer=gazetteer)
     duplicate = [row(A, "cum_deaths", "absent", "duplicate_row")]
-    with pytest.raises(ValueError, match="only for rows flagged unknown_name"):
+    with refused("absent_misused"):
         apply(TRUTH, duplicate, gazetteer=gazetteer)
 
 
 def test_apply_rejects_a_cell_reviewed_twice_differently(gazetteer) -> None:
-    with pytest.raises(ValueError, match="reviewed twice"):
+    with refused("reviewed_twice"):
         apply(
             TRUTH,
             [row(A, "cum_deaths", "2"), row(A, "cum_deaths", "3")],
@@ -616,6 +656,16 @@ def test_check_passes_rows_added_for_cells_a_sum_opens(
             # B typed as printed, under a spelling the PR adds as an alias.
             [*added(A), *added(B, RowKey("zones", "Ituri", "Bee"))],
             id="province-zones-with-alias",
+        ),
+        pytest.param(
+            [A, B],
+            [("zones", ""), ("zones", "Ituri")],
+            # The province typed as spelled, answering the Ituri placeholder.
+            [
+                *added(A, RowKey("zones", "ITURI", "A")),
+                *added(B, RowKey("zones", "ITURI", "B")),
+            ],
+            id="province-zones-spelled",
         ),
     ],
 )

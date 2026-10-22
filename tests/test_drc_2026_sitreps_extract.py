@@ -485,8 +485,9 @@ def test_release_refuses_to_drop_a_released_date() -> None:
     # The released upload's cache is lost: its date would drop out.
     for extractor in EXTRACTORS:
         cache_path(SHA_A, extractor, root=ex.CACHE_DIR).unlink()
-    with pytest.raises(ValueError, match="Dates would drop out"):
+    with pytest.raises(ex.OutputError) as e:
         ex.run("release", now=NOW)
+    assert e.value.code == "dates_dropped"
     assert {p: p.read_text() for p in ex.STATUS_PATH.parent.iterdir()} == written
 
 

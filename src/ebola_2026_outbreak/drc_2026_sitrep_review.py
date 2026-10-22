@@ -49,7 +49,7 @@ import tempfile
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import NamedTuple, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     FIELDS,
@@ -65,8 +65,8 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Section,
     TextRow,
     Values,
+    canonical_key,
     name_key,
-    normalise,
 )
 from ebola_2026_outbreak.drc_2026_sitrep_validate import Cell
 from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
@@ -95,6 +95,35 @@ DONE = "done"
 LABEL = "sitrep-review"
 _INTEGER = re.compile(r"\d+")
 _DECIMAL = re.compile(r"\d+\.\d+")
+
+type ReviewErrorCode = Literal[
+    "columns",
+    "row_width",
+    "unknown_section",
+    "unknown_field",
+    "bad_page",
+    "bad_placeholder",
+    "bad_value",
+    "absent_misused",
+    "absent_real_zone",
+    "absent_and_valued",
+    "not_in_gazetteer",
+    "wrong_province",
+    "reviewed_twice",
+    "not_under_review",
+]
+
+
+class ReviewError(ValueError):
+    """A review file that does not read or apply.
+
+    `code` names the rule it breaks; the message tells the reviewer what to
+    fix.
+    """
+
+    def __init__(self, code: ReviewErrorCode, message: str) -> None:
+        super().__init__(message)
+        self.code: ReviewErrorCode = code
 
 
 class ReviewRow(TypedDict):
@@ -211,39 +240,59 @@ def read_review(path: Path) -> list[ReviewRow]:
     """Read and validate a review CSV.
 
     Raises:
-        ValueError: If the columns differ from `COLUMNS`, or a row names an
-            unknown section or field, has a page that is not a number, has a
-            `reviewed_value` that is not a whole number, a decimal with a
-            point, or `blank` (`done` on a placeholder). The message names
-            the file and line.
+        ReviewError: If the columns differ from `COLUMNS`, or a row has more
+            or fewer fields than the header, names an unknown section or
+            field, has a page that is not a number, has a `reviewed_value`
+            that is not a whole number, a decimal with a point, or `blank`
+            (`done` on a placeholder). The message names the file and line.
     """
     rows: list[ReviewRow] = []
     for line, record in _records(path.read_text(), path.name):
         try:
             rows.append(_review_row(record))
-        except ValueError as e:
-            raise ValueError(f"{path.name} line {line}: {e}") from None
+        except ReviewError as e:
+            raise ReviewError(e.code, f"{path.name} line {line}: {e}") from None
     return rows
 
 
 def _records(text: str, name: str) -> list[tuple[int, dict[str, str]]]:
-    """A review CSV's rows as raw strings, with their line numbers."""
-    reader = csv.DictReader(text.splitlines())
-    if tuple(reader.fieldnames or ()) != COLUMNS:
-        raise ValueError(f"{name}: columns must be {', '.join(COLUMNS)}")
-    return [(i, record) for i, record in enumerate(reader, start=2)]
+    """A review CSV's rows as raw strings, with their line numbers.
+
+    Raises:
+        ReviewError: If the header is not `COLUMNS`, or a row has more or
+            fewer fields than it, as a value typed with a comma (`48,3`,
+            `1,234`) gives.
+    """
+    reader = csv.reader(text.splitlines())
+    if tuple(next(reader, ())) != COLUMNS:
+        raise ReviewError("columns", f"{name}: columns must be {', '.join(COLUMNS)}")
+    records: list[tuple[int, dict[str, str]]] = []
+    for fields in reader:
+        if not fields:
+            continue
+        if len(fields) != len(COLUMNS):
+            raise ReviewError(
+                "row_width",
+                f"{name} line {reader.line_num}: {len(fields)} fields where the "
+                f"header has {len(COLUMNS)}. Type decimals with a point (48.3) "
+                "and numbers without separators (1234)",
+            )
+        records.append((reader.line_num, dict(zip(COLUMNS, fields, strict=True))))
+    return records
 
 
 def _review_row(record: dict[str, str]) -> ReviewRow:
     section = record["section"]
     if section not in SECTIONS:
-        raise ValueError(f"unknown section {section!r}")
+        raise ReviewError("unknown_section", f"unknown section {section!r}")
     field = record["field"]
     if field and field not in FIELDS[section]:
-        raise ValueError(f"unknown field {field!r} for section {section}")
+        raise ReviewError(
+            "unknown_field", f"unknown field {field!r} for section {section}"
+        )
     page = record["page"].strip()
     if page and not _INTEGER.fullmatch(page):
-        raise ValueError(f"page {page!r} is not a number")
+        raise ReviewError("bad_page", f"page {page!r} is not a number")
     row: ReviewRow = {
         "report_date": record["report_date"],
         "sha256": record["sha256"],
@@ -257,7 +306,10 @@ def _review_row(record: dict[str, str]) -> ReviewRow:
         "reviewed_value": record["reviewed_value"].strip(),
     }
     if not field and row["reviewed_value"] not in ("", DONE):
-        raise ValueError(f"a placeholder's reviewed_value must be {DONE!r} or empty")
+        raise ReviewError(
+            "bad_placeholder",
+            f"a placeholder's reviewed_value must be {DONE!r} or empty",
+        )
     if row["reviewed_value"] and field and not _dismissed(row):
         parse_value(row["reviewed_value"], field)
     return row
@@ -272,15 +324,16 @@ def parse_value(text: str, field: str) -> Number | None:
         field: The field it fills; a count takes only whole numbers.
 
     Raises:
-        ValueError: For anything else, such as "48,3", "1 234" or "", and
+        ReviewError: For anything else, such as "48,3", "1 234" or "", and
             for "absent", which dismisses a row instead of giving a value.
     """
     if text.casefold() == BLANK:
         return None
     if text.casefold() == ABSENT:
-        raise ValueError(
+        raise ReviewError(
+            "absent_misused",
             f"reviewed_value {ABSENT!r} for {field} is only for rows flagged "
-            "unknown_name; type the value printed in the PDF"
+            "unknown_name; type the value printed in the PDF",
         )
     if field in PERCENT_FIELDS and (
         _INTEGER.fullmatch(text) or _DECIMAL.fullmatch(text)
@@ -289,8 +342,9 @@ def parse_value(text: str, field: str) -> Number | None:
     if _INTEGER.fullmatch(text):
         return int(text)
     expected = "a number" if field in PERCENT_FIELDS else "a whole number"
-    raise ValueError(
-        f"reviewed_value {text!r} for {field} must be {expected}, or {BLANK!r}"
+    raise ReviewError(
+        "bad_value",
+        f"reviewed_value {text!r} for {field} must be {expected}, or {BLANK!r}",
     )
 
 
@@ -322,7 +376,8 @@ def apply(
     reads a model's row, so an `unknown_name` row whose zone the reviewer has
     since added to the gazetteer lands under the canonical zone and province,
     and a `wrong_province` row lands under the gazetteer's province. The
-    gazetteer decides the row, the reviewer the value.
+    gazetteer decides the row, the reviewer the value. A row the reviewer
+    added must name its zone under the gazetteer's province.
 
     Args:
         reconciled_values: `Reconciled.accepted`, from a `reconcile` run
@@ -334,18 +389,20 @@ def apply(
         The merged values and the verified cells, for `check_sums`.
 
     Raises:
-        ValueError: If a filled row's name does not resolve in the
-            gazetteer, a row is both dismissed and given
-            values, a resolved name is dismissed, `absent` is typed on a row
-            with another reason, or two rows give one cell different values.
+        ReviewError: If a filled row's name does not resolve in the
+            gazetteer, an added row names a zone under another province than
+            the gazetteer's, a row is both dismissed and given values, a
+            resolved name is dismissed, `absent` is typed on a row with
+            another reason, or two rows give one cell different values.
     """
     review = list(review)
     dismissed = {_key(row) for row in review if _dismissed(row)}
     for row in review:
         if _dismissed(row) and resolve(_key(row), gazetteer) is not None:
-            raise ValueError(
+            raise ReviewError(
+                "absent_real_zone",
                 f"{describe(_key(row))} is in the gazetteer, so it is a real zone; "
-                f"type its values instead of {ABSENT!r}"
+                f"type its values instead of {ABSENT!r}",
             )
     values = {
         key: dict(row) for key, row in reconciled_values.items() if key not in dismissed
@@ -356,75 +413,84 @@ def apply(
         if not field or not row["reviewed_value"] or _dismissed(row):
             continue
         printed = _key(row)
-        key = resolve(printed, gazetteer)
-        if printed in dismissed or key in dismissed:
-            raise ValueError(
-                f"{describe(printed)} is marked {ABSENT!r} and also given values"
-            )
-        if key is None:
-            raise ValueError(_not_in_gazetteer(printed))
+        if printed in dismissed:
+            raise _absent_and_valued(printed)
+        key = _row_key(row, gazetteer)
+        if key in dismissed:
+            raise _absent_and_valued(printed)
         value = parse_value(row["reviewed_value"], field)
         if verified.get((key, field), value) != value:
-            raise ValueError(f"{describe(key)} {field} is reviewed twice")
+            raise ReviewError(
+                "reviewed_twice", f"{describe(key)} {field} is reviewed twice"
+            )
         verified[key, field] = value
         values.setdefault(key, {})[field] = value
     return values, set(verified)
 
 
 def check_added(review: Iterable[ReviewRow], *, gazetteer: Gazetteer) -> None:
-    """Refuse an added row whose name does not resolve in the gazetteer.
+    """Refuse an added row whose names `apply` would refuse.
 
     `apply` refuses only the filled rows it is given, so this covers an added
     row whatever its value and whether or not it answers an open cell.
 
     Raises:
-        ValueError: Naming the first such row.
+        ReviewError: Naming the first such row.
     """
     for row in review:
-        if row["field"] and not row["reason"] and resolve(_key(row), gazetteer) is None:
-            raise ValueError(_not_in_gazetteer(_key(row)))
+        if row["field"] and not row["reason"]:
+            _row_key(row, gazetteer)
 
 
-def _not_in_gazetteer(key: RowKey) -> str:
-    return (
-        f"{describe(key)} is not in the gazetteer: add the zone, or its spelling "
-        f"as an alias, to {GAZETTEER_PATH.name}, or type {ABSENT!r} if the table "
-        "does not print it"
+def _row_key(row: ReviewRow, gazetteer: Gazetteer) -> RowKey:
+    """The canonical key of a row with a field, as `apply` sets it.
+
+    Raises:
+        ReviewError: If the names do not resolve, or the row was added under
+            a province other than the gazetteer's for its zone.
+    """
+    printed = _key(row)
+    if (key := resolve(printed, gazetteer)) is None:
+        raise ReviewError(
+            "not_in_gazetteer",
+            f"{describe(printed)} is not in the gazetteer: add the zone, or its "
+            f"spelling as an alias, to {GAZETTEER_PATH.name}, or type {ABSENT!r} "
+            "if the table does not print it",
+        )
+    if not row["reason"] and canonical_key(printed, gazetteer) != (key, None):
+        raise ReviewError(
+            "wrong_province",
+            f"{describe(printed)}: the gazetteer files {key.zone} under "
+            f"{key.province}; type the row under {key.province}, or fix the "
+            f"gazetteer in {GAZETTEER_PATH.name}",
+        )
+    return key
+
+
+def _absent_and_valued(key: RowKey) -> ReviewError:
+    return ReviewError(
+        "absent_and_valued",
+        f"{describe(key)} is marked {ABSENT!r} and also given values",
     )
 
 
 def resolve(key: RowKey, gazetteer: Gazetteer) -> RowKey | None:
     """The canonical key of a row, read as `normalise` reads a model's row.
 
-    Returns None when a province or zone name is unknown, or a zone name
-    belongs to several provinces, none of them the printed one.
+    A `wrong_province` zone resolves when the gazetteer files it under one
+    province, since `canonical_key` has already keyed it there. Returns None
+    for a Total row, a province or zone name that is unknown, or a zone name
+    several provinces share, none of them the printed one.
     """
-    if key.section in ("kpis", "zone_total"):
-        return key if not key.province and not key.zone else None
-    names = {"province": key.province}
-    if key.section == "zones":
-        names["zone"] = key.zone
-    raw = {
-        "sitrep_no": None,
-        "report_date": None,
-        "kpis": None,
-        "zone_total": None,
-        "provinces": [],
-        "zone_subtotals": [],
-        "zones": [],
-        key.section: [{**names, **dict.fromkeys(FIELDS[key.section])}],
-    }
-    normalised = normalise(raw, gazetteer)
-    if len(normalised.extraction.rows) != 1:
-        # A Total row, which `normalise` drops.
+    if (canonical := canonical_key(key, gazetteer)) is None:
         return None
-    (canonical,) = normalised.extraction.rows
-    if canonical.section == "zones":
-        # A wrong_province flag still resolves when the gazetteer names one
-        # province for the zone; `normalise` has already keyed it there.
-        zone = HealthZone(canonical.province, canonical.zone)
-        return canonical if zone in gazetteer.get(name_key(zone.zone), ()) else None
-    return None if normalised.name_flags else canonical
+    resolved, reason = canonical
+    if reason is None:
+        return resolved
+    zone = HealthZone(resolved.province, resolved.zone)
+    if reason == "wrong_province" and zone in gazetteer.get(name_key(zone.zone), ()):
+        return resolved
+    return None
 
 
 def _dismissed(row: ReviewRow) -> bool:
