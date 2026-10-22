@@ -16,6 +16,8 @@ from ebola_2026_outbreak.chart_tables import (
     WEST_AFRICA_FIRST_CONFIRMED,
     country_summary,
     drc_outbreak_series,
+    headline_figures,
+    latest_date,
     province_map,
     weekly,
     weekly_comparison,
@@ -158,3 +160,27 @@ def test_west_africa_series_rejects_overlap() -> None:
     who = pl.DataFrame({"date": [date(2014, 8, 29)], "value": [1754.0]})
     with pytest.raises(ValueError, match="overlaps"):
         west_africa_series(early, who)
+
+
+def test_headline_figures(who: pl.DataFrame) -> None:
+    mapped = province_map(provinces([("Ituri", 10), ("Haut-Uélé", 5)]), LOOKUP)
+    figures = headline_figures(
+        summary=country_summary(who), who_as_of=D2, mapped=mapped, sitrep_as_of=D1
+    )
+    assert figures == {
+        "total_confirmed_cases": {"value": 1009, "update_date": "2026-10-18"},
+        "total_deaths": {"value": 483, "update_date": "2026-10-18"},
+        "death_rate": {"value": 47.9, "update_date": "2026-10-18"},
+        "provinces_affected": {"value": 2, "update_date": "2026-10-17"},
+    }
+
+
+def test_headline_figures_rejects_missing_total(who: pl.DataFrame) -> None:
+    summary = country_summary(who).filter(pl.col("Country") != "Total")
+    with pytest.raises(ValueError, match="one 'Total' row"):
+        headline_figures(summary=summary, who_as_of=D2, mapped=LOOKUP, sitrep_as_of=D2)
+
+
+def test_latest_date_rejects_empty() -> None:
+    with pytest.raises(ValueError, match="No dates"):
+        latest_date(pl.Series("date", [], dtype=pl.Date))

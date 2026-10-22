@@ -57,6 +57,12 @@ tables to `data/output/`, refreshed by the daily scrape:
 - `outbreak_comparison_weekly.csv`: cumulative confirmed cases by week since
   each outbreak's first confirmed case (22 March 2014 and 15 May 2026). West
   Africa uses ROWCA counts before 29 August 2014 and WHO counts after.
+- `2026_outbreak_headline_figures.json`: four figures, each with `value` and
+  `update_date`. `total_confirmed_cases`, `total_deaths` (confirmed) and
+  `death_rate` (confirmed case fatality rate, in percent) come from WHO's
+  Total row across all affected countries, dated by the latest WHO "Data as
+  of" date. `provinces_affected` counts DRC provinces with confirmed cases in
+  the latest sitrep, dated by that sitrep.
 
 ### Health expenditure
 
