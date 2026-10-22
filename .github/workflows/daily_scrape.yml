@@ -7,7 +7,7 @@ on:
     # in the shared concurrency group. Download, extract and release are
     # idempotent and the cache means no sitrep is paid for twice, so a second
     # run on a quiet day does nothing.
-    - cron: "0 12 * * *"
+    - cron: "30 12 * * *"
     - cron: "0 18 * * *"
   workflow_dispatch:
 
