@@ -416,15 +416,43 @@ def load_gazetteer(path: Path = GAZETTEER_PATH) -> Gazetteer:
 # Normalisation
 
 
-def _values(row: Mapping[str, Any], section: Section) -> Values:
+def _get(obj: object, where: str, field: str) -> Any:
+    """`obj[field]`, where `where` names `obj` in an error.
+
+    Raises:
+        ValueError: If `obj` is not an object or lacks `field`.
+    """
+    if not isinstance(obj, Mapping):
+        raise ValueError(f"{where} is not an object: {obj!r}")
+    if field not in obj:
+        raise ValueError(f"{where}.{field} is missing")
+    return obj[field]
+
+
+def _list(raw: object, section: Section) -> list[Any]:
+    rows = _get(raw, "extraction", section)
+    if not isinstance(rows, list):
+        raise ValueError(f"{section} is not a list: {rows!r}")
+    return rows
+
+
+def _name(row: object, section: Section, field: str) -> str:
+    name = _get(row, section, field)
+    if not isinstance(name, str):
+        raise ValueError(f"{section}.{field} is not a string: {name!r}")
+    return name
+
+
+def _values(row: object, section: Section) -> Values:
     """Read and type-check a row's numeric fields.
 
     Raises:
-        ValueError: On a missing field, or a count that is not a whole number.
+        ValueError: On a row that is not an object, a missing field, or a
+            count that is not a whole number.
     """
     values: Values = {}
     for field in FIELDS[section]:
-        value = row[field]
+        value = _get(row, section, field)
         if value is None:
             values[field] = None
         elif isinstance(value, bool) or not isinstance(value, int | float):
@@ -456,7 +484,7 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
 
     Raises:
         ValueError: If `raw` breaks the schema (a missing field or a value of
-            the wrong type).
+            the wrong type); the message names the section and field.
     """
     rows: dict[RowKey, Values] = {}
     flags: list[Flag] = []
@@ -470,41 +498,44 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
             flags.extend(Flag(key, field, reason) for field in FIELDS[key.section])
 
     for section in ("kpis", "zone_total"):
-        if raw[section] is not None:
-            add(RowKey(section, "", ""), _values(raw[section], section))
+        if (row := _get(raw, "extraction", section)) is not None:
+            add(RowKey(section, "", ""), _values(row, section))
 
     for section in ("provinces", "zone_subtotals"):
-        for row in raw[section]:
-            province = _province(row["province"])
+        for row in _list(raw, section):
+            label = _name(row, section, "province")
+            province = _province(label)
             values = _values(row, section)
             if province == TOTAL:
                 logger.info("Dropping a Total row filed in %s", section)
             elif province is None:
-                add(
-                    RowKey(section, row["province"].strip(), ""), values, "unknown_name"
-                )
+                add(RowKey(section, label.strip(), ""), values, "unknown_name")
             else:
                 add(RowKey(section, province, ""), values)
 
-    for row in raw["zones"]:
-        province = _province(row["province"])
+    for row in _list(raw, "zones"):
+        label, zone = _name(row, "zones", "province"), _name(row, "zones", "zone")
+        province = _province(label)
         values = _values(row, "zones")
-        if name_key(row["zone"]) == name_key(TOTAL) or province == TOTAL:
+        if name_key(zone) == name_key(TOTAL) or province == TOTAL:
             logger.info("Dropping a Total row filed in zones")
             continue
-        candidates = gazetteer.get(name_key(row["zone"]), ())
+        candidates = gazetteer.get(name_key(zone), ())
         match = next((z for z in candidates if z.province == province), None)
         if match is not None:
             add(RowKey("zones", *match), values)
         elif len(candidates) == 1:
             add(RowKey("zones", *candidates[0]), values, "wrong_province")
         else:
-            printed = RowKey(
-                "zones", province or row["province"].strip(), row["zone"].strip()
-            )
+            printed = RowKey("zones", province or label.strip(), zone.strip())
             add(printed, values, "wrong_province" if candidates else "unknown_name")
 
-    return Normalised(Extraction(raw["sitrep_no"], raw["report_date"], rows), flags)
+    extraction = Extraction(
+        _get(raw, "extraction", "sitrep_no"),
+        _get(raw, "extraction", "report_date"),
+        rows,
+    )
+    return Normalised(extraction, flags)
 
 
 # Cache

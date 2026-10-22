@@ -8,7 +8,9 @@ Two steps, run in this order by default:
   answer and Mistral's answer, keyed on the PDF's sha256. An upload whose
   cache is complete costs no API call. An API error, an answer that breaks
   the schema, or a returned model id other than the pin leaves the upload
-  `pending`; the next run tries again, and the answer is not cached.
+  `pending`; the next run tries again, and the answer is not cached. Any
+  other error on an upload (a damaged PDF, say) is logged with its traceback
+  and leaves that upload pending too, keeping what was cached before it.
 - `release` needs neither keys nor PDFs: it is a function of committed files
   (the manifest, the cache, the review CSVs, the gazetteer and the status
   ledger). For every cached latest upload it normalises both answers and
@@ -31,15 +33,21 @@ extraction was first tried, which is what the three-day issue rule counts
 from.
 
 `check` tests a review pull request: after the review file rules of
-`drc_2026_sitrep_review.check_diff`, each changed report goes through
-`judge`, the function release decides with, so the check passes exactly when
-release would release the report.
+`drc_2026_sitrep_review.check_diff`, it runs the whole of release on the
+pull request's tree without writing or opening anything, so the check passes
+exactly when release would succeed there. It fails when release would raise,
+when an upload released at the merge base would no longer be released or
+superseded (a gazetteer edit can do that to a report nobody is reviewing),
+and on each cell a changed review file leaves open. `--repo` points it, and
+every path it reads, at another checkout's data.
 
 Issues: a run that newly holds reports opens one issue listing them; a run
 that finds uploads pending for `PENDING_DAYS` days running opens one issue
-for those. The ledger records each upload's issue, so no run opens a second
-issue for an upload already tracked. An issue is commented on and closed
-once none of its uploads is held or pending any more.
+for those. The ledger records each upload's issue, and each issue carries a
+hidden marker per upload, so no run opens a second issue for an upload
+already tracked: an open issue whose marker names the upload is adopted even
+when its number never reached the ledger. An issue is commented on and
+closed once none of its uploads is held or pending any more.
 
 Release computes everything first, then checks that no output key repeats
 and no previously released date drops out, and only then opens issues and
@@ -56,7 +64,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -75,8 +83,12 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
     close_issue,
     create_issue,
     describe,
+    git,
+    held_marker,
     issue_body,
     issue_title,
+    open_issues,
+    pending_marker,
     read_review,
     resolve,
     review_path,
@@ -314,9 +326,14 @@ class IssuePlan(NamedTuple):
 # Inputs
 
 
-def read_manifest() -> pl.DataFrame:
-    """The sitrep manifest."""
-    return pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA)
+def _in(repo: Path | None, path: Path) -> Path:
+    """`path`, or where it sits in the checkout `repo`."""
+    return path if repo is None else repo / path.relative_to(ROOT)
+
+
+def read_manifest(*, repo: Path | None = None) -> pl.DataFrame:
+    """The sitrep manifest, of this checkout or of `repo`."""
+    return pl.read_csv(_in(repo, MANIFEST_PATH), schema=MANIFEST_SCHEMA)
 
 
 def latest_uploads(
@@ -336,11 +353,17 @@ def latest_uploads(
     ]
 
 
-def read_ledger() -> Ledger:
-    """The status ledger by upload; empty before the first run."""
-    if not STATUS_PATH.exists():
-        return {}
-    rows = pl.read_csv(STATUS_PATH, schema=STATUS_SCHEMA).iter_rows(named=True)
+def read_ledger(*, repo: Path | None = None) -> Ledger:
+    """The status ledger by upload, of this checkout or of `repo`.
+
+    Empty before the first run.
+    """
+    path = _in(repo, STATUS_PATH)
+    return _parse_ledger(path.read_bytes()) if path.exists() else {}
+
+
+def _parse_ledger(csv: bytes) -> Ledger:
+    rows = pl.read_csv(csv, schema=STATUS_SCHEMA).iter_rows(named=True)
     return {(r["media_id"], r["modified"]): LedgerRow(**r) for r in rows}
 
 
@@ -429,14 +452,21 @@ def extract(
                 failed.append(upload.key)
                 ledger[upload.key] = row
                 continue
+            # Any error is scoped to this upload: it stays pending, keeps what
+            # its cache gained, and the run moves on to the next upload.
             try:
                 # A new upload may replace a PDF of the same media id in place.
                 pdf = download(_media_item(upload), refresh=row.sha256 is None)
                 sha256 = sha256_file(pdf)
                 row = row._replace(sha256=sha256)
                 records = _fill(pdf, sha256, read_records(sha256), gazetteer=gazetteer)
-            except EXTRACTOR_ERRORS as e:
-                logger.error("Extracting %s failed: %s", upload.report_date, e)
+            except Exception:
+                logger.exception(
+                    "Extracting %s (media %s, modified %s) failed",
+                    upload.report_date,
+                    *upload.key,
+                )
+                records = read_records(row.sha256)
             if not records.complete:
                 failed.append(upload.key)
         ledger[upload.key] = _with_records(row, records, now=now)
@@ -612,6 +642,7 @@ def release(
     *,
     gazetteer: Gazetteer,
     now: str,
+    repo: Path | None = None,
 ) -> Release:
     """Decide every upload's status and build the outputs.
 
@@ -622,6 +653,7 @@ def release(
         ledger: The ledger after `extract`, holding each upload's sha256.
         gazetteer: From `load_gazetteer`.
         now: UTC timestamp of the run, ISO 8601.
+        repo: Read the cache and review files of this checkout instead.
 
     Raises:
         ValueError: If an upload released before no longer releases while
@@ -632,17 +664,18 @@ def release(
     held: dict[UploadKey, HeldReport] = {}
     appended: dict[Path, list[ReviewRow]] = {}
     published: dict[date, tuple[Upload, dict[RowKey, Values]]] = {}
+    cache, review_dir = _in(repo, CACHE_DIR), _in(repo, REVIEW_DIR)
 
     uploads = latest_uploads(manifest)
     for upload in uploads:
         row = ledger.get(upload.key) or _new_row(upload)
         sha256 = row.sha256
-        records = read_records(sha256)
+        records = read_records(sha256, root=cache)
         if sha256 is None or not records.complete:
             out[upload.key] = row._replace(status="pending")
             continue
 
-        path = review_path(upload.report_date.isoformat(), sha256, root=REVIEW_DIR)
+        path = review_path(upload.report_date.isoformat(), sha256, root=review_dir)
         verdict = judge(
             records, gazetteer=gazetteer, review_file=path if path.exists() else None
         )
@@ -703,9 +736,9 @@ def release(
         if row.status != "released" or row.report_date in published:
             out[key] = row._replace(status="superseded")
             continue
-        records = read_records(row.sha256)
+        records = read_records(row.sha256, root=cache)
         path = review_path(
-            row.report_date.isoformat(), row.sha256 or "", root=REVIEW_DIR
+            row.report_date.isoformat(), row.sha256 or "", root=review_dir
         )
         verdict = (
             judge(
@@ -915,28 +948,50 @@ def handle_issues(
 ) -> Ledger:
     """Open and close the planned issues; record new issue numbers.
 
-    `gh` runs only inside GitHub Actions and not in a dry run, so elsewhere
-    new uploads keep no issue number and a later run opens their issue.
+    An upload due an issue first adopts an open issue whose marker names it,
+    one opened by a run whose ledger was never written, and only the rest go
+    in a new issue. `gh` runs only inside GitHub Actions and not in a dry
+    run, so elsewhere new uploads keep no issue number and a later run opens
+    their issue.
     """
     ledger = dict(ledger)
     run_url = _run_url()
-    if plan.held:
-        reports = [result.held[k] for k in plan.held]
+    existing = {
+        n: body
+        for n, body in open_issues(dry_run=dry_run).items()
+        if n not in plan.close
+    }
+
+    def adopt(
+        keys: list[UploadKey], marker: Callable[[UploadKey], str]
+    ) -> list[UploadKey]:
+        """Adopt an open issue for each upload it marks; return the rest."""
+        untracked = []
+        for key in keys:
+            number = next((n for n, b in existing.items() if marker(key) in b), None)
+            if number is None:
+                untracked.append(key)
+            else:
+                ledger[key] = ledger[key]._replace(issue_number=number)
+        return untracked
+
+    if held := adopt(plan.held, lambda k: held_marker(result.held[k].sha256)):
+        reports = [result.held[k] for k in held]
         number = create_issue(
             title=issue_title(len(reports)),
             body=issue_body(reports, run_url=run_url),
             dry_run=dry_run,
         )
-        for key in plan.held:
+        for key in held:
             ledger[key] = ledger[key]._replace(issue_number=number)
-    if plan.stale:
-        rows = [ledger[k] for k in plan.stale]
+    if stale := adopt(plan.stale, lambda k: pending_marker(*k)):
+        rows = [ledger[k] for k in stale]
         number = create_issue(
             title=pending_title(len(rows)),
             body=pending_body(rows, run_url=run_url),
             dry_run=dry_run,
         )
-        for key in plan.stale:
+        for key in stale:
             ledger[key] = ledger[key]._replace(issue_number=number)
     for number, keys in plan.close.items():
         lines = [
@@ -976,7 +1031,8 @@ def pending_body(rows: Sequence[LedgerRow], *, run_url: str) -> str:
         f"| {r.report_date} | {r.media_id} | {r.modified} | {r.extracted_at} |"
         for r in rows
     ]
-    lines += ["", f"Run: {run_url}"]
+    lines += ["", f"Run: {run_url}", ""]
+    lines += [pending_marker(r.media_id, r.modified) for r in rows]
     return "\n".join(lines) + "\n"
 
 
@@ -1043,35 +1099,41 @@ def write_release(result: Release, ledger: Ledger) -> None:
 
 
 def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
-    """Check a review pull request: it passes when release would release it.
+    """Check a review pull request: it passes when release would succeed.
 
-    The changes must follow the review file rules (`check_diff`). Then each
-    report whose review file changed goes through `judge`, as release reads
-    it, with the working tree's gazetteer and review file; the check passes
-    when no cell is left open, publisher discrepancies included.
+    The changes must follow the review file rules (`check_diff`). Then
+    release runs on the working tree of `repo`, writing nothing and opening
+    no issue, and its outputs go through `check_outputs` against the dates
+    released at the merge base. Each report whose review file changed goes
+    through `judge`, as release reads it, so each cell it leaves open,
+    publisher discrepancies included, gets its own message.
 
     Args:
         base: The branch the pull request merges into.
-        repo: The repository root.
+        repo: The checkout whose data (manifest, ledger, cache, review files
+            and gazetteer) is checked.
 
     Returns:
-        One message per problem: a broken rule, a review that does not
-        apply, or a cell still open. Empty when the pull request passes.
+        One message per problem: a broken rule, release raising, an upload
+        released at the merge base that would no longer be released or
+        superseded, a review that does not apply, or a cell still open.
+        Empty when the pull request passes.
     """
     diff = check_diff(base=base, repo=repo)
     if diff.errors:
         return diff.errors
-    gazetteer_file = GAZETTEER_PATH.relative_to(ROOT)
+    gazetteer_path = _in(repo, GAZETTEER_PATH)
     try:
-        gazetteer = load_gazetteer(repo / gazetteer_file)
+        gazetteer = load_gazetteer(gazetteer_path)
     except ValueError as e:
-        return [f"{gazetteer_file}: {e}"]
+        return [f"{gazetteer_path.relative_to(repo)}: {e}"]
 
-    errors: list[str] = []
+    errors = _check_release(repo, merge_base=diff.merge_base, gazetteer=gazetteer)
+    cache = _in(repo, CACHE_DIR)
     for path in diff.reviews:
         name = path.relative_to(repo).as_posix()
         sha256 = next((r["sha256"] for r in read_review(path) if r["reason"]), None)
-        records = read_records(sha256, root=repo / CACHE_DIR.relative_to(ROOT))
+        records = read_records(sha256, root=cache)
         if not records.complete:
             errors.append(f"{name}: no cached extraction for {sha256}")
             continue
@@ -1082,6 +1144,49 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
         errors += [f"{name}: {_open_message(f)}" for f in verdict.open_flags]
         _log_discrepancies(name, verdict)
     return errors
+
+
+def _check_release(repo: Path, *, merge_base: str, gazetteer: Gazetteer) -> list[str]:
+    """What would stop release on the working tree of `repo`.
+
+    Release raising, or an upload `released` in the merge base's ledger that
+    would be neither released nor superseded.
+    """
+    base = _base_ledger(repo, merge_base)
+    try:
+        result = release(
+            read_manifest(repo=repo),
+            read_ledger(repo=repo),
+            gazetteer=gazetteer,
+            now=datetime.now(UTC).isoformat(timespec="seconds"),
+            repo=repo,
+        )
+    except ValueError as e:
+        return [f"Release would fail: {e}"]
+
+    errors: list[str] = []
+    for key, row in sorted(base.items()):
+        after = result.ledger.get(key)
+        status = "dropped from the ledger" if after is None else after.status
+        if row.status == "released" and status not in ("released", "superseded"):
+            errors.append(
+                f"{row.report_date} upload (media {key[0]}, modified {key[1]}) "
+                f"was released and would now be {status}"
+            )
+    released = {r.report_date for r in base.values() if r.status == "released"}
+    try:
+        check_outputs(result, previous_dates=released)
+    except ValueError as e:
+        errors.append(f"Release would fail: {e}")
+    return errors
+
+
+def _base_ledger(repo: Path, merge_base: str) -> Ledger:
+    """The ledger committed at `merge_base`; empty if it had none."""
+    path = STATUS_PATH.relative_to(ROOT).as_posix()
+    if not git(repo, "ls-tree", "--name-only", merge_base, "--", path):
+        return {}
+    return _parse_ledger(git(repo, "show", f"{merge_base}:{path}").encode())
 
 
 def _open_message(flag: Flag) -> str:
@@ -1236,10 +1341,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--base", default="origin/main", help="branch a review pull request merges into"
     )
+    parser.add_argument(
+        "--repo",
+        type=Path,
+        default=ROOT,
+        help="checkout whose data the check reads (default: this one)",
+    )
     args = parser.parse_args(argv)
     if args.command == "check":
         try:
-            errors = check_review(base=args.base)
+            errors = check_review(base=args.base, repo=args.repo.resolve())
         except subprocess.CalledProcessError as e:
             print(
                 f"git {' '.join(e.cmd[3:])} failed: {e.stderr.strip()}", file=sys.stderr

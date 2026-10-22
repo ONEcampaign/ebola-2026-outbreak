@@ -28,10 +28,15 @@ must read. Whether the reviewed report would then be released is decided by
 `drc_2026_sitreps_extract.py check`, through the same function release uses.
 
 One issue per run lists the held reports and tags the reviewers. Issues are
-opened, commented on and closed with `gh`, only inside GitHub Actions.
+opened, commented on and closed with `gh`, only inside GitHub Actions. Each
+issue carries the label `sitrep-review` and a hidden marker per upload it
+tracks (`held_marker`, `pending_marker`), so a run that finds an open issue
+already tracking an upload adopts it instead of opening another, whether or
+not the ledger recorded its number.
 """
 
 import csv
+import json
 import logging
 import os
 import re
@@ -82,6 +87,8 @@ BLANK = "blank"
 ABSENT = "absent"
 # `reviewed_value` of a placeholder whose section the reviewer has typed in.
 DONE = "done"
+# Label of every issue the pipeline opens, and what it searches for.
+LABEL = "sitrep-review"
 _INTEGER = re.compile(r"\d+")
 _DECIMAL = re.compile(r"\d+\.\d+")
 
@@ -499,8 +506,20 @@ def issue_body(held: Sequence[HeldReport], *, run_url: str) -> str:
         "the pull request releases the report.",
         "",
         f"Run: {run_url}",
+        "",
+        *(held_marker(r.sha256) for r in held),
     ]
     return "\n".join(lines) + "\n"
+
+
+def held_marker(sha256: str) -> str:
+    """The hidden line marking an issue as tracking a held report's PDF."""
+    return f"<!-- sitrep-upload:{sha256} -->"
+
+
+def pending_marker(media_id: int, modified: str) -> str:
+    """The hidden line marking an issue as tracking a pending upload."""
+    return f"<!-- sitrep-pending:{media_id}:{modified} -->"
 
 
 def _gh(args: list[str], *, body: str | None, dry_run: bool) -> str | None:
@@ -522,9 +541,43 @@ def _gh(args: list[str], *, body: str | None, dry_run: bool) -> str | None:
     return result.stdout.strip()
 
 
+def open_issues(*, dry_run: bool = False) -> dict[int, str]:
+    """The bodies of open issues labelled `LABEL`, by number; empty when skipped."""
+    out = _gh(
+        [
+            "issue",
+            "list",
+            "--label",
+            LABEL,
+            "--state",
+            "open",
+            "--json",
+            "number,body",
+            "--limit",
+            "1000",
+        ],
+        body=None,
+        dry_run=dry_run,
+    )
+    return {} if out is None else {i["number"]: i["body"] for i in json.loads(out)}
+
+
 def create_issue(*, title: str, body: str, dry_run: bool = False) -> int | None:
-    """Open an issue and return its number, or None when skipped."""
-    url = _gh(["issue", "create", "--title", title], body=body, dry_run=dry_run)
+    """Open an issue labelled `LABEL` and return its number, or None when skipped.
+
+    `gh issue create --label` refuses a label the repository lacks, so the
+    label is created first; `--force` makes that a no-op when it exists.
+    """
+    _gh(
+        ["label", "create", LABEL, "--force", "--description", "DRC sitrep review"],
+        body=None,
+        dry_run=dry_run,
+    )
+    url = _gh(
+        ["issue", "create", "--title", title, "--label", LABEL],
+        body=body,
+        dry_run=dry_run,
+    )
     return None if url is None else int(url.rstrip("/").rsplit("/", 1)[1])
 
 
@@ -546,11 +599,13 @@ class ReviewDiff(NamedTuple):
     """A review pull request's changes against its base.
 
     `reviews` are the changed review files, as paths under the repository.
-    `errors` holds one message per rule the changes break.
+    `errors` holds one message per rule the changes break. `merge_base` is
+    the commit the changes are measured from.
     """
 
     reviews: list[Path]
     errors: list[str]
+    merge_base: str
 
 
 def check_diff(*, base: str = "origin/main", repo: Path = ROOT) -> ReviewDiff:
@@ -565,10 +620,10 @@ def check_diff(*, base: str = "origin/main", repo: Path = ROOT) -> ReviewDiff:
         base: The branch the pull request merges into.
         repo: The repository root.
     """
-    merge_base = _git(repo, "merge-base", base, "HEAD")
+    merge_base = git(repo, "merge-base", base, "HEAD")
     changes = [
         line.split("\t", 1)
-        for line in _git(
+        for line in git(
             repo, "diff", "--name-status", "--no-renames", merge_base
         ).splitlines()
     ]
@@ -592,10 +647,11 @@ def check_diff(*, base: str = "origin/main", repo: Path = ROOT) -> ReviewDiff:
                 f"{path}: a review pull request may change only `reviewed_value` "
                 f"in existing files of {review_dir}/ and rows of {gazetteer_file}"
             )
-    return ReviewDiff(reviews, errors)
+    return ReviewDiff(reviews, errors, merge_base)
 
 
-def _git(repo: Path, *args: str) -> str:
+def git(repo: Path, *args: str) -> str:
+    """Run git in `repo` and return its output, stripped."""
     result = subprocess.run(
         ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
     )
@@ -604,7 +660,7 @@ def _git(repo: Path, *args: str) -> str:
 
 def _check_gazetteer(repo: Path, merge_base: str, path: str) -> list[str]:
     """The gazetteer may gain or change rows, and lose none."""
-    old = _git(repo, "show", f"{merge_base}:{path}").splitlines()
+    old = git(repo, "show", f"{merge_base}:{path}").splitlines()
     new = (repo / path).read_text().splitlines()
     if new[:1] != old[:1]:
         return [f"{path}: the header changed"]
@@ -616,7 +672,7 @@ def _check_gazetteer(repo: Path, merge_base: str, path: str) -> list[str]:
 def _check_review(repo: Path, merge_base: str, path: str) -> list[str]:
     """Problems with the shape of one changed review file."""
     try:
-        old = _records(_git(repo, "show", f"{merge_base}:{path}"), path)
+        old = _records(git(repo, "show", f"{merge_base}:{path}"), path)
         new = _records((repo / path).read_text(), path)
     except ValueError as e:
         return [str(e)]

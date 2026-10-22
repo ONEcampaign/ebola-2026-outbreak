@@ -4,9 +4,11 @@ import csv
 import json
 import re
 import subprocess
+from datetime import date
 from pathlib import Path
 from typing import Any
 
+import polars as pl
 import pytest
 
 from ebola_2026_outbreak import drc_2026_sitrep_review as review
@@ -30,6 +32,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     ModelResult,
     RowKey,
     Section,
+    Status,
     TextRow,
     Values,
     load_gazetteer,
@@ -38,7 +41,11 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     write_words,
 )
 from ebola_2026_outbreak.drc_2026_sitrep_validate import check_sums, reconcile
-from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
+from ebola_2026_outbreak.drc_2026_sitreps_download import (
+    MANIFEST_PATH,
+    MANIFEST_SCHEMA,
+    ROOT,
+)
 
 SHA = "ab" * 32
 DATE = "2026-10-14"
@@ -395,6 +402,7 @@ def test_gh_is_skipped_outside_actions_or_in_dry_run(
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
 
     assert review.create_issue(title="t", body="b", dry_run=dry_run) is None
+    assert review.open_issues(dry_run=dry_run) == {}
     review.comment_issue(1, body="b", dry_run=dry_run)
     review.close_issue(1, comment="c", dry_run=dry_run)
     assert gh_calls == []
@@ -410,13 +418,15 @@ def test_gh_runs_in_actions(
     review.close_issue(42, comment="Released.")
 
     assert [c[:3] for c in gh_calls] == [
+        ["gh", "label", "create"],
         ["gh", "issue", "create"],
         ["gh", "issue", "comment"],
         ["gh", "issue", "close"],
     ]
-    assert gh_calls[0][3:5] == ["--title", "Review; echo"]
-    assert gh_calls[0][-1] == body
-    assert gh_calls[1][-1] == "Released."
+    assert "--force" in gh_calls[0]
+    assert gh_calls[1][3:7] == ["--title", "Review; echo", "--label", review.LABEL]
+    assert gh_calls[1][-1] == body
+    assert gh_calls[2][-1] == "Released."
 
 
 # Pull request check (drc_2026_sitreps_extract.py check)
@@ -439,10 +449,35 @@ def git(repo: Path, *args: str) -> None:
 
 
 def make_repo(
-    tmp_path: Path, gemini: dict[RowKey, Values], mistral: dict[RowKey, Values]
+    tmp_path: Path,
+    gemini: dict[RowKey, Values],
+    mistral: dict[RowKey, Values],
+    *,
+    status: Status = "held",
 ) -> tuple[Path, Path]:
-    """A repository with a held report's cache, gazetteer and review file."""
+    """A repository holding one report in its manifest and ledger.
+
+    The report has its cache, the gazetteer and, if anything is flagged, its
+    review file.
+    """
     repo = tmp_path / "repo"
+    manifest = repo / MANIFEST_PATH.relative_to(ROOT)
+    manifest.parent.mkdir(parents=True)
+    upload = {
+        "report_date": date.fromisoformat(DATE),
+        "sitrep_number": 152,
+        "is_latest": True,
+        "media_id": 1,
+        "modified": "t1",
+        "source_url": PDF,
+    }
+    pl.DataFrame(
+        [{c: upload.get(c) for c in MANIFEST_SCHEMA}], schema=MANIFEST_SCHEMA
+    ).write_csv(manifest)
+    ledger = ex.LedgerRow(date.fromisoformat(DATE), 1, "t1", SHA, status, *[None] * 7)
+    ex.ledger_frame({(1, "t1"): ledger}).write_csv(
+        repo / ex.STATUS_PATH.relative_to(ROOT)
+    )
     cache = repo / CACHE_DIR.relative_to(ROOT)
     gazetteer = load_gazetteer(write_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT)))
     for name, rows in (("gemini", gemini), ("mistral", mistral)):
@@ -462,16 +497,17 @@ def make_repo(
     )
     sum_flags, _ = check_sums(reconciled.accepted, set())
     path = review.review_path(DATE, SHA, root=repo / REVIEW_DIR.relative_to(ROOT))
-    write_review(
-        path,
-        review_rows(
-            [*reconciled.flags, *sum_flags],
-            report_date=DATE,
-            sha256=SHA,
-            pdf_url=PDF,
-            text_rows=text_layer(),
-        ),
-    )
+    if flags := [*reconciled.flags, *sum_flags]:
+        write_review(
+            path,
+            review_rows(
+                flags,
+                report_date=DATE,
+                sha256=SHA,
+                pdf_url=PDF,
+                text_rows=text_layer(),
+            ),
+        )
 
     git(repo, "init", "-q")
     git(repo, "add", ".")
@@ -664,3 +700,20 @@ def test_check_ignores_a_row_no_longer_flagged(
     fill(path, B_cum_confirmed=typed)
     assert read_review(path)[-1]["reviewed_value"] == typed
     assert check_pr(repo) == []
+
+
+def test_check_fails_a_gazetteer_edit_that_unreleases_a_report(
+    tmp_path: Path, check_pr: Any
+) -> None:
+    repo, path = make_repo(tmp_path, TRUTH, TRUTH, status="released")
+    assert not path.exists()
+    assert check_pr(repo) == []
+
+    # Moving zone A to another province flags the released report's row.
+    write_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT), "Tshopo,A,\nIturi,B,\n")
+    errors = check_pr(repo)
+    assert (
+        f"{DATE} upload (media 1, modified t1) was released and would now be held"
+        in errors
+    )
+    assert any(e.startswith("Release would fail: Dates would drop out") for e in errors)

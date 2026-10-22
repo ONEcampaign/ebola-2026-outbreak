@@ -205,6 +205,36 @@ def test_normalise_type_checks_counts(cases: Any, expected: Any) -> None:
     assert isinstance(value, int)
 
 
+@pytest.mark.parametrize(
+    ("extraction", "message"),
+    [
+        (
+            raw(
+                zones=[
+                    {
+                        k: v
+                        for k, v in zone_row("Ituri", "Bunia").items()
+                        if k != "cum_confirmed"
+                    }
+                ]
+            ),
+            "zones.cum_confirmed is missing",
+        ),
+        (
+            {k: v for k, v in raw().items() if k != "zones"},
+            "extraction.zones is missing",
+        ),
+        (raw(zones=None), "zones is not a list"),
+    ],
+    ids=["missing-field", "missing-section", "null-section"],
+)
+def test_normalise_names_what_breaks_the_schema(
+    extraction: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        normalise(extraction, GAZETTEER)
+
+
 def test_cache_round_trip(tmp_path: Path) -> None:
     sha = "ab" * 32
     assert read_model_result(sha, "gemini", root=tmp_path) is None

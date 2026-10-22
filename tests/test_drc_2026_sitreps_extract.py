@@ -3,6 +3,7 @@
 import csv
 import json
 import shutil
+import subprocess
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -153,6 +154,7 @@ def issues(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
     def close(number: int, *, comment: str, dry_run: bool = False) -> None:
         calls.append(("close", number))
 
+    monkeypatch.setattr(ex, "open_issues", lambda *, dry_run=False: {})
     monkeypatch.setattr(ex, "create_issue", create)
     monkeypatch.setattr(ex, "close_issue", close)
     return calls
@@ -483,15 +485,19 @@ def test_release_refuses_to_drop_a_released_date() -> None:
 
 @pytest.fixture
 def clients(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
-    """Fake clients answering with SitRep 157; `fail` maps a model to its error."""
-    state: dict[str, Any] = {"calls": [], "fail": {}, "model": {}}
+    """Fake clients answering with SitRep 157.
+
+    `fail` maps a model to its error, `model` to the model id it returns and
+    `answer` to the raw extraction it returns.
+    """
+    state: dict[str, Any] = {"calls": [], "fail": {}, "model": {}, "answer": {}}
 
     def fake(extractor: str, pin: str):
         def extract(pdf_path: Path) -> ModelResult:
             state["calls"].append(extractor)
             if error := state["fail"].get(extractor):
                 raise error
-            result = _result(_raw_157(), pin)
+            result = _result(state["answer"].get(extractor, _raw_157()), pin)
             return result._replace(model_id_returned=state["model"].get(extractor, pin))
 
         return extract
@@ -524,38 +530,71 @@ def test_extract_fills_cache_once(
     assert _status()[710]["status"] == "held"
 
 
+def _without_zones() -> dict[str, Any]:
+    return {k: v for k, v in _raw_157().items() if k != "zones"}
+
+
 @pytest.mark.parametrize(
-    ("fail", "model"),
+    ("fail", "model", "answer"),
     [
-        ({"gemini": httpx.ConnectError("down")}, {}),
-        ({"mistral": httpx.HTTPStatusError("429", request=None, response=None)}, {}),
-        ({"gemini": gemini.GeminiError("finishReason: MAX_TOKENS")}, {}),
-        ({"mistral": ValueError("no document_annotation")}, {}),
-        ({}, {"mistral": "mistral-ocr-5-0"}),
+        ({"gemini": httpx.ConnectError("down")}, {}, {}),
+        (
+            {"mistral": httpx.HTTPStatusError("429", request=None, response=None)},
+            {},
+            {},
+        ),
+        ({"gemini": gemini.GeminiError("finishReason: MAX_TOKENS")}, {}, {}),
+        ({"mistral": ValueError("no document_annotation")}, {}, {}),
+        ({}, {"mistral": "mistral-ocr-5-0"}, {}),
+        ({}, {}, {"gemini": _without_zones()}),
     ],
-    ids=["transport", "status", "gemini", "annotation", "model-id"],
+    ids=["transport", "status", "gemini", "annotation", "model-id", "malformed"],
 )
 def test_extractor_failure_leaves_upload_pending(
     clients: dict[str, Any],
     issues: list[tuple[str, Any]],
     fail: dict[str, Exception],
     model: dict[str, str],
+    answer: dict[str, dict[str, Any]],
 ) -> None:
-    clients["fail"], clients["model"] = fail, model
+    clients["fail"], clients["model"], clients["answer"] = fail, model, answer
     ex.run(None, now=NOW)
 
     row = _status()[710]
     assert row["status"] == "pending"
     assert row["extracted_at"] == NOW
-    failed = next(iter(fail or model))
+    failed = next(iter(fail or model or answer))
     assert not cache_path(row["sha256"], failed, root=ex.CACHE_DIR).exists()
     assert issues == []
 
     # The next run retries only the missing answer, and releases.
-    clients["fail"], clients["model"], clients["calls"] = {}, {}, []
+    clients["fail"], clients["model"], clients["answer"] = {}, {}, {}
+    clients["calls"] = []
     ex.run(None, now=NOW)
     assert clients["calls"] == [failed]
     assert _status()[710]["status"] == "held"
+
+
+class PDFSyntaxError(Exception):
+    """An error outside `EXTRACTOR_ERRORS`, as pdfminer raises on a bad PDF."""
+
+
+def test_word_dump_failure_leaves_upload_pending(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def damaged(pdf: Path, out: Path) -> Path:
+        raise PDFSyntaxError("damaged PDF")
+
+    monkeypatch.setattr(ex, "dump_words", damaged)
+    lines = ex.run(None, now=NOW)
+
+    assert "Extract: 1 uploads lacked records; 0 complete, 1 pending" in lines
+    row = _status()[710]
+    assert (row["status"], row["extracted_at"]) == ("pending", NOW)
+    assert row["sha256"] is not None
+    assert clients["calls"] == []
 
 
 def test_pending_upload_opens_an_issue_on_day_three(
@@ -635,3 +674,62 @@ def test_dry_run_with_keys_caches_answers_and_writes_no_release(
     assert "Release: 0 released, 1 held, 0 pending, 0 superseded" in lines
     assert any(line.startswith("Would write review file") for line in lines)
     assert any(line.startswith("Would open an issue for 1 held") for line in lines)
+
+
+# Issues through gh
+
+
+@pytest.fixture
+def gh(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """A fake gh inside Actions; `open` maps open issue numbers to bodies."""
+    state: dict[str, Any] = {"open": {}, "calls": []}
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+
+    def run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        state["calls"].append(args[1:3])
+        out = {
+            ("issue", "list"): json.dumps(
+                [{"number": n, "body": b} for n, b in state["open"].items()]
+            ),
+            ("issue", "create"): "https://github.com/o/r/issues/99\n",
+        }.get(tuple(args[1:3]), "")
+        return subprocess.CompletedProcess(args, 0, out)
+
+    monkeypatch.setattr(review.subprocess, "run", run)
+    return state
+
+
+@pytest.mark.parametrize(
+    ("orphan", "number"), [(False, 99), (True, 5)], ids=["new", "adopted"]
+)
+def test_held_report_adopts_an_orphan_issue(
+    gh: dict[str, Any], orphan: bool, number: int
+) -> None:
+    _manifest((1, "t1"))
+    _ledger((1, "t1", SHA_A))
+    _hold_96()
+    if orphan:
+        # Opened by a run whose ledger was never committed.
+        gh["open"] = {5: f"Review\n\n{review.held_marker(SHA_A)}\n"}
+
+    ex.run("release", now=NOW)
+
+    assert _status()[1]["issue_number"] == number
+    assert (["issue", "create"] in gh["calls"]) is not orphan
+
+
+def test_pending_upload_adopts_an_orphan_issue(
+    clients: dict[str, Any], gh: dict[str, Any]
+) -> None:
+    clients["fail"] = {"gemini": httpx.ConnectError("down")}
+    for day in ("2026-10-20", "2026-10-21"):
+        ex.run(None, now=f"{day}T12:00:00+00:00")
+    gh["open"] = {
+        4: f"Review\n\n{review.held_marker(SHA_A)}\n",
+        5: f"Pending\n\n{review.pending_marker(710, 't1')}\n",
+    }
+
+    ex.run(None, now="2026-10-22T12:00:00+00:00")
+
+    assert _status()[710]["issue_number"] == 5
+    assert ["issue", "create"] not in gh["calls"]
