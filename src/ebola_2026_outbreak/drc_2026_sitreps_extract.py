@@ -272,7 +272,7 @@ class Verdict(NamedTuple):
 
     `text_rows` are the text-layer rows the report was reconciled with.
     `review_error` says why a review file was not applied, if it was not.
-    `unapplied` are the review rows whose cell was never open.
+    `unapplied` are the placeholder rows whose cell was never open.
     """
 
     values: dict[RowKey, Values]
@@ -282,6 +282,11 @@ class Verdict(NamedTuple):
     text_rows: dict[RowKey, TextRow]
     review_error: str | None = None
     unapplied: tuple[ReviewRow, ...] = ()
+
+    @property
+    def releasable(self) -> bool:
+        """No cell is open and the review file, if any, applied."""
+        return not self.open_flags and self.review_error is None
 
     @property
     def open_cells(self) -> set[Cell]:
@@ -553,10 +558,11 @@ def judge(
     checked only once they are typed in, so its failure opens cells after
     the first pass. A row's key is read through the gazetteer, so a row typed
     under a spelling the gazetteer has since gained answers the canonical
-    row's cell. A row whose cell is never open (after a gazetteer edit, say)
-    is not applied and is listed in `unapplied`. A review that does not read
-    or apply is ignored, with the reason in `review_error`, so the report
-    stays held. A row that lacks a field without a flag on it gets one, so a
+    row's cell. A placeholder row whose cell is never open (after a gazetteer
+    edit, say) is not applied and is listed in `unapplied`. A row a reviewer
+    added for a cell that is never open makes the review not apply. A review
+    that does not read or apply is ignored, with the reason in
+    `review_error`, and the report stays held. A row that lacks a field without a flag on it gets one, so a
     missing value cannot be released as a printed blank.
 
     Args:
@@ -610,7 +616,11 @@ def _apply_review(
     """Apply the review rows of every cell ever open; see `judge`.
 
     The cells reached only grow, so the loop ends. Returns the merged values,
-    the verified cells and the rows never applied.
+    the verified cells and the placeholder rows never applied.
+
+    Raises:
+        ValueError: If an added row names an unknown zone, or answers no cell
+            the review reaches, naming each such row.
     """
     check_added(review, gazetteer=gazetteer)
     answers = [(r, _review_cells(r, gazetteer)) for r in review]
@@ -621,9 +631,19 @@ def _apply_review(
         reached |= _cells(_open(flags, values, verified)[0])
         rows = [r for r, cells in answers if cells & reached]
         if len(rows) == applied:
-            return values, verified, tuple(r for r, c in answers if not c & reached)
+            break
         values, verified = apply(accepted, rows, gazetteer=gazetteer)
         applied = len(rows)
+    unapplied = [r for r, cells in answers if not cells & reached]
+    if added := [r for r in unapplied if not r["reason"]]:
+        raise ValueError(
+            "; ".join(
+                f"{describe(RowKey(r['section'], r['province'], r['zone']))} "
+                f"{r['field']} is not a cell under review; remove the row"
+                for r in added
+            )
+        )
+    return values, verified, tuple(unapplied)
 
 
 def _open(
@@ -697,7 +717,7 @@ def release(
         row = _with_records(row, records, now=now)._replace(
             discrepancies=len(verdict.discrepancies)
         )
-        if not verdict.open_flags:
+        if verdict.releasable:
             out[upload.key] = row._replace(
                 status="released",
                 flagged_cells=verdict.verified,
@@ -766,7 +786,7 @@ def release(
             if records.complete
             else None
         )
-        if verdict is None or verdict.open_flags:
+        if verdict is None or not verdict.releasable:
             raise ValueError(
                 f"{row.report_date} upload {key} was released and no longer "
                 "releases from its cache and review"
@@ -1123,9 +1143,10 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
     release runs on the working tree of `repo`, writing nothing and opening
     no issue, and its outputs go through `check_outputs` against the dates
     released at the merge base. Each report whose review file changed goes
-    through `judge`, as release reads it, so each cell it leaves open,
-    publisher discrepancies included, gets its own message, as does each
-    row a reviewer added that `judge` never applied.
+    through `judge`, as release reads it, so a review that does not apply,
+    including one with a row a reviewer added for a cell not under review,
+    gets its message, and each cell left open, publisher discrepancies
+    included, gets its own.
 
     Args:
         base: The branch the pull request merges into.
@@ -1162,12 +1183,6 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
             errors.append(f"{name}: {verdict.review_error}")
             continue
         errors += [f"{name}: {_open_message(f)}" for f in verdict.open_flags]
-        errors += [
-            f"{name}: {describe(RowKey(r['section'], r['province'], r['zone']))} "
-            f"{r['field']} is not a cell under review; remove the row"
-            for r in verdict.unapplied
-            if not r["reason"]
-        ]
         _log_discrepancies(name, verdict)
     return errors
 

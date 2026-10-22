@@ -726,6 +726,35 @@ def test_check_fails(tmp_path: Path, check_pr: Any, change: Any, message: str) -
     assert any(re.search(message, e) for e in errors), errors
 
 
+def _release_status(repo: Path) -> Status:
+    result = ex.release(
+        ex.read_manifest(repo=repo),
+        ex.read_ledger(repo=repo),
+        gazetteer=load_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT)),
+        now="2026-10-20T12:00:00+00:00",
+        repo=repo,
+    )
+    (row,) = result.ledger.values()
+    return row.status
+
+
+def test_added_row_not_under_review_holds_the_report(
+    tmp_path: Path, check_pr: Any
+) -> None:
+    repo, path = make_repo(tmp_path, *wrong_twice())
+    fill(path)
+    assert (check_pr(repo), _release_status(repo)) == ([], "released")
+
+    write_review(path, [*read_review(path), row(B, "cum_deaths", "5", "")])
+
+    name = path.relative_to(repo).as_posix()
+    assert check_pr(repo) == [
+        f"{name}: zones / Ituri / B cum_deaths is not a cell under review; "
+        "remove the row"
+    ]
+    assert _release_status(repo) == "held"
+
+
 @pytest.mark.parametrize("typed", ["", "99"])
 def test_check_ignores_a_row_no_longer_flagged(
     tmp_path: Path, check_pr: Any, typed: str

@@ -143,6 +143,40 @@ def test_unprinted_row_not_located(tmp_path: Path) -> None:
     assert rows[RowKey("zones", "Ituri", "Damas")].located
 
 
+@pytest.mark.parametrize("dash", ["—", "-"])
+def test_dash_holds_the_row(tmp_path: Path, dash: str) -> None:
+    # The publisher prints "—" for a zero (SitRep 123, Sud-Ubangi "ZS
+    # actuellement"). Under Buta's blank community deaths it is no value of
+    # the column: the row is held, so neither a null nor a 0 matches.
+    dump = json.loads((FIXTURES / "SitRep_157.json").read_text())
+    page, top = next(
+        (p, w.split(" ", 1)[0])
+        for p, words in dump["pages"].items()
+        for w in words
+        if w.endswith(" Buta")
+    )
+    swab = next(
+        w.split(" ")
+        for words in dump["pages"].values()
+        for w in words
+        if w.endswith(" (Swab+)")
+    )
+    x = (float(swab[1]) + float(swab[2])) / 2
+    dump["pages"][page].append(f"{top} {x - 4} {x + 4} {dash}")
+    path = tmp_path / "SitRep_157.json"
+    path.write_text(json.dumps(dump))
+    buta = RowKey("zones", "Bas-Uélé", "Buta")
+    truth = TRUTH["157"][buta]
+    assert truth["community_deaths"] is None
+
+    rows = read_rows(path, GAZETTEER)
+
+    assert rows[buta].located
+    assert rows[buta].cells is None
+    for value in (None, 0):
+        assert not row_matches(rows[buta], truth | {"community_deaths": value}, "zones")
+
+
 def _shift(text: str, dx: float) -> Callable[[str], str]:
     """An edit moving each dump word printing `text` by `dx` points."""
 
@@ -188,8 +222,10 @@ def test_unplaced_values_hold_the_row(
 # under "ZS historiquement" rather than "touchées". 125: Sud-Ubangi prints
 # its CFR on two lines, and the "%" sits as near the Total row's "ZS dans 5
 # provinces" text as its own label, so the row is held. 128: the extractor
-# splits header words into glyph runs ("N" "o" "uv" "eaux"). 152: "ZS
-# actuellement" cells print on two lines around their row's label.
+# splits header words into glyph runs ("N" "o" "uv" "eaux"). 123 and 128
+# print "—" in Sud-Ubangi's "ZS actuellement", which is no field, so the row
+# is placed. 152: "ZS actuellement" cells print on two lines around their
+# row's label.
 #
 # Two other uploads hold one row each for what the PDF prints: SitRep 116's
 # Buta CFR is "1", and SitRep 137's Ituri "ZS actuellement" is "25.36".

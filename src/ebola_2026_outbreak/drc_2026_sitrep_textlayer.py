@@ -17,7 +17,7 @@ Method, on the pdfplumber words of the PDF and their x extents:
   line and some cells on two lines around it. A value word about as near to
   another line leaves the rows it might belong to ambiguous. Each word in
   the row's band is cut to digits, comma, percent and slash ("sur" reads as
-  "/", "NA" and "ND" stay, "(" splits a word).
+  "/", "NA", "ND" and a dash stay, "(" splits a word).
 - A table starts at a capitalised "Létalité" header word and ends at the
   first Total row before the next such word. The table is the province
   summary when a province row prints "a/b" (ZS touchées), else the zone table.
@@ -45,7 +45,9 @@ A key found twice is not located, so an ambiguous page is flagged and the row
 is not guessed. A located row has no cells when a value word near it is
 ambiguous, its table's header words are missing, repeated or out of order,
 a cell sits near the boundary of two columns, two cells fall in one column,
-or a cell does not read as one value of its column. `row_matches` then
+or a cell does not read as one value of its column. A dash, which the
+publisher prints for a zero, reads as no value of any field column, so its
+row is held rather than read as blank or 0. `row_matches` then
 fails, so the row is held.
 
 `row_matches` compares field by field. A blank cell prints nothing and a
@@ -103,8 +105,11 @@ CELL_GRAMMAR = {
     "percent": re.compile(r"\d+(?:,\d{1,2})? ?%|NA|ND"),
     # "28/36 77,8 %", from "28/36 (77,8 %)"; the share is dropped.
     "zs": re.compile(r"(\d+) ?/ ?(\d+)(?: \d+,\d+ ?%)?|NA|ND"),
+    # "ZS actuellement" is not a field, so a dash there holds no row. A dash
+    # in any field column fails its grammar, so it never reads as a blank.
+    "zs_current": re.compile(r"\d+ ?/ ?\d+(?: \d+,\d+ ?%)?|NA|ND|—"),
 }
-COLUMN_KIND = {"cfr_pct": "percent", "zs": "zs", "zs_current": "zs"}
+COLUMN_KIND = {"cfr_pct": "percent", "zs": "zs", "zs_current": "zs_current"}
 
 
 class Word(NamedTuple):
@@ -123,8 +128,18 @@ class Word(NamedTuple):
 
     @property
     def is_token(self) -> bool:
-        """NA/ND cells and the "sur" of "20 sur 36" are values, not labels."""
-        return bool(re.fullmatch(r"N[AD]\W*", self.text)) or self.text == "sur"
+        """NA/ND cells, dashes and the "sur" of "20 sur 36" are values, not
+        labels."""
+        return (
+            bool(re.fullmatch(r"N[AD]\W*", self.text))
+            or self.text == "sur"
+            or self.is_dash
+        )
+
+    @property
+    def is_dash(self) -> bool:
+        """A dash-only word, which the publisher prints for a zero."""
+        return bool(re.fullmatch("[-\u2010-\u2015\u2212]+", self.text))
 
     @property
     def is_alpha(self) -> bool:
@@ -132,9 +147,12 @@ class Word(NamedTuple):
 
     @property
     def value(self) -> str:
-        """The word as a printed value: "(77,8" -> "77,8", "NA!" -> "NA"."""
+        """The word as a printed value: "(77,8" -> "77,8", "NA!" -> "NA", any
+        dash -> "—"."""
         if self.text == "sur":
             return "/"
+        if self.is_dash:
+            return "—"
         if self.is_token:
             return self.text[:2]
         return re.sub(r"[^\d,%/(]", "", self.text).replace("(", " ").strip()
