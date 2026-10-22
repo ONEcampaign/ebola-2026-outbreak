@@ -1,8 +1,8 @@
 """HTTP fetching shared by the scrapers and the sitrep extractors.
 
 Both verbs retry network errors and transient server statuses with exponential
-backoff. API keys travel in request headers only: URLs appear in retry log
-lines and in httpx exception messages, headers appear in neither.
+backoff. API keys travel in request headers only. URLs appear in retry log
+lines and in httpx exception messages, and headers appear in neither.
 """
 
 import logging
@@ -86,7 +86,7 @@ def get(
 
     Args:
         url: URL to fetch.
-        client: Client to send through; tests pass one built on
+        client: Client to send through. Tests pass one built on
             `httpx.MockTransport`. A short-lived client is used if None.
         timeout: Per-request timeout in seconds.
 
@@ -113,8 +113,8 @@ def post(
     Args:
         url: URL to post to. Must not carry an API key.
         json: Body, serialised as JSON.
-        headers: Extra headers, including any API key; never logged.
-        client: Client to send through; tests pass one built on
+        headers: Extra headers, including any API key, which is not logged.
+        client: Client to send through. Tests pass one built on
             `httpx.MockTransport`. A short-lived client is used if None.
         timeout: Per-request timeout in seconds.
 

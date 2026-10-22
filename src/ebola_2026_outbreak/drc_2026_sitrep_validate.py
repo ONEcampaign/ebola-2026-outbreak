@@ -34,10 +34,10 @@ values:
    a section with no row at all is flagged as a whole.
 
 A blank counts as 0 in a sum. A check with an operand still under review is
-skipped; a missing row is flagged by check 6, so no check goes unchecked
+skipped, and a missing row is flagged by check 6, so no check goes unchecked
 silently. A failed check flags `sum_mismatch` on every operand a machine
 accepted, since two models can make the same error the text layer cannot
-see: a value shifted into an adjacent blank cell prints the same token
+see. A value shifted into an adjacent blank cell prints the same token
 string. A failed check whose operands a reviewer has all verified is a
 publisher discrepancy, released as printed and recorded.
 """
@@ -206,7 +206,7 @@ def check_sums(
         `section_missing` flags on every field of each missing row, on the
         zones of each subtotal row with none, and on each section with no
         row at all, then `sum_mismatch` flags on the
-        machine-accepted operands of every failed check, one per cell; and a
+        machine-accepted operands of every failed check, one per cell, and a
         discrepancy for each failed check whose operands are all verified.
     """
     provinces = sorted({k.province for k in values if k.province in _PROVINCES})
@@ -270,7 +270,7 @@ def _failures(
         if not present([cfr, deaths, cases]) or values[key]["cfr_pct"] is None:
             continue
         computed = 100 * value(deaths) / value(cases) if value(cases) else 0.0
-        # The epsilon keeps a rounding tie in: 3 / 16 is 18.75, printed 18.7.
+        # The epsilon keeps a rounding tie in (3 / 16 is 18.75, printed 18.7).
         if abs(value(cfr) - computed) > CFR_TOLERANCE + 1e-9:
             yield cfr, [deaths, cases], values[key]["cfr_pct"], round(computed, 2)
 

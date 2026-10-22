@@ -11,28 +11,28 @@ Two steps, run in this order by default:
   `pending`; the next run tries again, and the answer is not cached. Any
   other error on an upload (a damaged PDF, say) is logged with its traceback
   and leaves that upload pending too, keeping what was cached before it.
-- `release` needs neither keys nor PDFs: it is a function of committed files
+- `release` needs neither keys nor PDFs. It is a function of committed files
   (the manifest, the cache, the review CSVs, the gazetteer and the status
   ledger). For every cached latest upload it normalises both answers and
   reads the text-layer rows from the cached words, both with the current
   gazetteer, reconciles the answers against the rows, applies a completed
   review whose sha256 matches, and runs the sum checks. A report with
   nothing open is released. Otherwise it is held and its review CSV is
-  written. A review CSV that exists already is never rewritten, since a
-  reviewer may be filling it: open cells it lacks (after a gazetteer edit, or
-  a sum that runs only once a held row is typed in) are appended as new rows,
-  and filled cells that are never open are ignored.
+  written. An existing review CSV is not rewritten, since a reviewer may be
+  filling it. Open cells it lacks (after a gazetteer edit, or a sum that
+  runs only once a held row is typed in) are appended as new rows, and
+  filled rows for cells that are not open are ignored.
 
 `by_zone.csv` and `headline.csv` are rebuilt from every released upload. A
 report date whose latest upload is held or pending keeps the values of the
-upload released before it, so no date drops out while a re-upload waits;
-that older upload is marked `superseded` once the new one is released. The
+upload released before it, so no date drops out while a re-upload waits. That
+older upload is marked `superseded` once the new one is released. The
 ledger (`extraction_status.csv`) keeps one row per upload. Its `extracted_at`
 is when the cached answers were requested, or, for a pending upload, when
 extraction was first tried, which is what the three-day issue rule counts
 from.
 
-`check` tests a review pull request: after the review file rules of
+`check` tests a review pull request. After the review file rules of
 `drc_2026_sitrep_review.check_diff`, it runs the whole of release on the
 pull request's tree without writing or opening anything, so the check passes
 exactly when release would succeed there. It fails when release would raise,
@@ -41,20 +41,20 @@ superseded (a gazetteer edit can do that to a report nobody is reviewing),
 and on each cell a changed review file leaves open. `--repo` points it, and
 every path it reads, at another checkout's data.
 
-Issues: a run that newly holds reports opens one issue listing them; a run
-that finds uploads pending for `PENDING_DAYS` days running opens one issue
-for those. The ledger records each upload's issue, and each issue carries a
+A run that newly holds reports opens one issue listing them, and a run that
+finds uploads pending for `PENDING_DAYS` days running opens one issue for
+those. The ledger records each upload's issue, and each issue carries a
 hidden marker per upload, so no run opens a second issue for an upload
-already tracked: an open issue whose marker names the upload is adopted even
+already tracked. An open issue whose marker names the upload is adopted even
 when its number never reached the ledger. An issue is commented on and
-closed once none of its uploads is held or pending any more.
+closed once none of its uploads is held or pending.
 
 Release computes everything first, then checks that no output key repeats
 and no previously released date drops out, and only then opens issues and
 writes files. `--dry-run` governs what release writes: no output, ledger
 or review file, and no issue. Extract always caches what it fetches, since
-the cache is content-addressed and an answer paid for is worth keeping;
-without both API keys, a dry run lists the uploads it would extract and
+the cache is content-addressed and an answer paid for is worth keeping.
+Without both API keys, a dry run lists the uploads it would extract and
 calls nothing.
 """
 
@@ -249,7 +249,7 @@ type Ledger = dict[UploadKey, LedgerRow]
 
 
 class Records(NamedTuple):
-    """What the cache holds for one PDF; None where a record is missing.
+    """What the cache holds for one PDF, with None where a record is missing.
 
     `words` is the cached word dump of the PDF's table pages, or any source
     `read_rows` reads, such as the PDF itself.
@@ -280,7 +280,7 @@ class Verdict(NamedTuple):
 
     @property
     def open_cells(self) -> set[Cell]:
-        """Distinct open cells; a missing section counts once."""
+        """Distinct open cells. A missing section counts once."""
         return _cells(self.open_flags)
 
 
@@ -398,7 +398,7 @@ def _new_row(upload: Upload) -> LedgerRow:
 def _with_records(row: LedgerRow, records: Records, *, now: str) -> LedgerRow:
     """Record the cached model ids and when extraction happened.
 
-    A complete cache dates from its latest request; an incomplete one from
+    A complete cache dates from its latest request, an incomplete one from
     the first attempt, kept from earlier runs.
     """
     results = [r for r in (records.gemini, records.mistral) if r is not None]
@@ -437,7 +437,7 @@ def extract(
             schema.
         now: UTC timestamp of the run, ISO 8601.
         report_date: Extract only this date.
-        call: Download and call the APIs; False only lists what would be
+        call: Download and call the APIs. False only lists what would be
             extracted.
     """
     ledger = dict(ledger)
@@ -452,7 +452,7 @@ def extract(
                 failed.append(upload.key)
                 ledger[upload.key] = row
                 continue
-            # Any error is scoped to this upload: it stays pending, keeps what
+            # Any error is scoped to this upload. It stays pending, keeps what
             # its cache gained, and the run moves on to the next upload.
             try:
                 # A new upload may replace a PDF of the same media id in place.
@@ -486,8 +486,8 @@ def _fill(pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer) -> 
     """Compute and cache each missing record of one PDF.
 
     Each record is cached as soon as it is made, and a model that fails is
-    logged and left missing, so one model's outage does not cost the other's
-    answer again. An answer that breaks the extraction schema, or names a
+    logged and left missing, so one model's outage leaves the other's answer
+    in the cache. An answer that breaks the extraction schema, or names a
     model other than the pin, counts as a failure.
     """
     if records.words is None:
@@ -542,17 +542,17 @@ def judge(
     a report here. The answers are normalised, and the text-layer rows read
     from the cached words, with `gazetteer`.
 
-    Review rows apply to a fixed point: the rows whose cell is open apply,
+    Review rows apply to a fixed point. The rows whose cell is open apply,
     the open cells are worked out again, and the rows of newly opened cells
     apply too, until no new row applies. A sum whose operands were held is
     checked only once they are typed in, so its failure opens cells after
     the first pass. A row's key is read through the gazetteer, so a row typed
     under a spelling the gazetteer has since gained answers the canonical
-    row's cell. A filled row whose cell is never open (after a gazetteer
+    row's cell. A filled row whose cell is not open (after a gazetteer
     edit, say) is ignored. A review that does not read or apply is ignored,
     with the reason in `review_error`, so the report stays held. A row that
-    lacks a field without a flag on it gets one, so a missing value is never
-    released as a printed blank.
+    lacks a field without a flag on it gets one, so a missing value cannot
+    be released as a printed blank.
 
     Args:
         records: A complete cache.
@@ -617,7 +617,7 @@ def _open(
 ) -> tuple[list[Flag], list[Discrepancy]]:
     """The open flags and publisher discrepancies of reviewed values.
 
-    `flags` are the reconcile flags; one on a cell a reviewer verified is
+    `flags` are the reconcile flags, and one on a cell a reviewer verified is
     closed.
     """
     # A flagged row missing from the merged values was dismissed as absent.
@@ -723,8 +723,9 @@ def release(
             )
             appended[path] = missing
 
-    # Uploads no longer latest: the last released one of a date whose latest
-    # upload is not released stays published; every other is superseded.
+    # Of the uploads that are no longer latest, the last released one of a date
+    # whose latest upload is not released stays published and every other is
+    # superseded.
     by_date = {u.report_date: u for u in uploads}
     older = sorted(
         (r for k, r in ledger.items() if k not in out),
@@ -755,7 +756,8 @@ def release(
                 "releases from its cache and review"
             )
         latest = by_date.get(row.report_date)
-        # The latest upload's sitrep number: a re-upload is the same report.
+        # A re-upload is the same report, so it takes the latest upload's
+        # sitrep number.
         upload = Upload(
             row.report_date,
             latest.sitrep_number if latest else None,
@@ -892,10 +894,9 @@ def plan_issues(
     """Decide which issues to open and close.
 
     An upload keeps its issue while it stays in the status the issue was
-    opened for. A newly held upload goes in the run's held issue; an upload
-    pending for `PENDING_DAYS` days with no issue goes in the run's pending
-    issue. An issue none of whose uploads is held or pending any more
-    closes.
+    opened for. A newly held upload goes in the run's held issue, and an
+    upload pending for `PENDING_DAYS` days with no issue goes in the run's
+    pending issue. An issue none of whose uploads is held or pending closes.
 
     Args:
         before: The ledger the run started from.
@@ -1001,7 +1002,7 @@ def handle_issues(
         ]
         close_issue(
             number,
-            comment="No report listed here is held or pending any more:\n\n"
+            comment="No report listed here is held or pending now:\n\n"
             + "\n".join(lines)
             + f"\n\nRun: {run_url}\n",
             dry_run=dry_run,
@@ -1021,7 +1022,7 @@ def pending_body(rows: Sequence[LedgerRow], *, run_url: str) -> str:
         f"{' '.join(REVIEWERS)}: extraction has failed for {PENDING_DAYS} days "
         "running on the uploads below, through an API error, an answer that "
         "breaks the schema, or a model id other than its pin. The run log "
-        "names the error. Each run tries again; this issue closes itself once "
+        "names the error. Each run tries again. This issue closes itself once "
         "every upload is extracted.",
         "",
         "| Report date | Media id | Modified | First tried |",
@@ -1099,7 +1100,7 @@ def write_release(result: Release, ledger: Ledger) -> None:
 
 
 def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
-    """Check a review pull request: it passes when release would succeed.
+    """Check a review pull request, which passes when release would succeed.
 
     The changes must follow the review file rules (`check_diff`). Then
     release runs on the working tree of `repo`, writing nothing and opening

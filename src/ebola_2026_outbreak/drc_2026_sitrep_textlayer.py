@@ -30,13 +30,13 @@ Method, on the pdfplumber words of the PDF:
   the zone rows that follow belong to it. A zone named like its province
   (Tshopo) follows its own subtotal row.
 
-A key found twice is not located, so an ambiguous page is flagged rather than
-guessed. `row_matches` compares exactly: a blank prints nothing and a printed
-0 prints "0", so blank-for-0 and 0-for-blank both fail; a space may split a
-number only at a thousands boundary or before "%". A CFR matches a printing
-with 0 to 2 decimals within 0.05 of the value. The check cannot see a value
-moved into an adjacent blank cell of the same row ("1, blank" and "blank, 1"
-print alike); the sum checks catch that.
+A key found twice is not located, so an ambiguous page is flagged and the row
+is not guessed. `row_matches` compares exactly. A blank prints nothing and a
+printed 0 prints "0", so blank-for-0 and 0-for-blank both fail. A space may
+split a number only at a thousands boundary or before "%". A CFR matches a
+printing with 0 to 2 decimals within 0.05 of the value. The check cannot see
+a value moved into an adjacent blank cell of the same row ("1, blank" and
+"blank, 1" print alike). The sum checks catch that.
 
 `dump_words` writes the words of a PDF's table pages as a JSON fixture, which
 `read_rows` reads as it reads the PDF.

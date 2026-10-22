@@ -84,7 +84,7 @@ def extract(
 
     Args:
         pdf_path: The sitrep PDF.
-        client: Client to send through; tests pass one built on
+        client: Client to send through. Tests pass one built on
             `httpx.MockTransport`. A short-lived client is used if None.
         model: Model id to request.
 

@@ -1,6 +1,6 @@
 """Check the sitrep extraction pipeline against 13 hand-checked reports.
 
-The golden set is SitReps 96 to 157 in the current layout
+The golden set is 13 current-layout reports between SitReps 96 and 157
 (`tests/fixtures/sitrep_golden/reports.csv`: report date, number, ministry
 URL, the PDF's sha256 and its word dump). Their truth is
 `tests/fixtures/sitrep_words/truth.csv` for the table rows, read from the
@@ -9,18 +9,19 @@ text layer and checked against the PDFs, and
 against the rendered first page.
 
 A report is scored by `judge`, the function release decides with, given no
-review: a value is accepted when `judge` leaves its cell closed, so a value
-the sum checks flag is held, not accepted. Cells of a held report that are
-closed still count as accepted, so the score covers every report, released
-or not. `compare` lists every accepted value that differs from the truth. Truth was adjudicated only where earlier
-extractions disagreed, so 0 accepted-wrong values on this set is a regression
-pin, not a measured error rate.
+review. A value is accepted when `judge` leaves its cell closed, so a value
+the sum checks flag is held. Closed cells of a held report still count as
+accepted, so the score covers every report, released or not. `compare` lists
+every accepted value that differs from the truth. Truth was adjudicated only
+where earlier extractions disagreed, so 0 accepted-wrong values on this set
+is a regression pin, not a measured error rate.
 
 Subcommands:
 
-- `record` runs the production clients (or one, with `--extractor`) on the 13 PDFs and saves each raw
-  `ModelResult` as `recorded/<extractor>/<report_date>.json`, the fixtures of
-  the offline test (`tests/test_drc_2026_sitrep_golden.py`).
+- `record` runs the production clients (or one, with `--extractor`) on the 13
+  PDFs and saves each raw `ModelResult` as
+  `recorded/<extractor>/<report_date>.json`, the fixtures of the offline test
+  (`tests/test_drc_2026_sitrep_golden.py`).
 - `run` is the live check, run weekly by `.github/workflows/sitrep_golden.yml`.
   It downloads each PDF by URL, checks its sha256, runs both clients without
   the cache, and prints accepted-wrong values, the flag rate and the returned
@@ -115,7 +116,7 @@ class WrongCell(NamedTuple):
 
 
 class SourceError(RuntimeError):
-    """A golden PDF can no longer be fetched, or is not the recorded file."""
+    """A golden PDF cannot be fetched, or differs from the recorded file."""
 
 
 # Fixtures

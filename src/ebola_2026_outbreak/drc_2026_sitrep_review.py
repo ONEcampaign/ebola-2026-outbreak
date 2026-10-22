@@ -17,8 +17,8 @@ fill.
 The reviewer types each value as printed (a whole number, a decimal with a
 point, or `blank` for an empty cell) and opens a pull request. An unknown
 zone name is settled by adding it, or an alias, to the gazetteer in the same
-pull request. `apply` merges the reviewed values into the accepted ones;
-every reviewed cell counts as verified for `check_sums`, so a sum that fails
+pull request. `apply` merges the reviewed values into the accepted ones.
+Every reviewed cell counts as verified for `check_sums`, so a sum that fails
 on verified values only is a publisher discrepancy, released as printed.
 
 `check_diff` holds a review pull request to its shape: it may change only
@@ -333,8 +333,8 @@ def apply(
     A row flagged `unknown_name` whose cells read `absent` is not in the PDF:
     its key, as printed in the review, is dropped from the values and none of
     its cells is verified, so `check_sums` runs on the rest. A row the
-    gazetteer now resolves is a real zone and cannot be dismissed. A
-    `duplicate_row` row takes the real row's values; `absent` there would
+    gazetteer resolves is a real zone and cannot be dismissed. A
+    `duplicate_row` row takes the real row's values. `absent` there would
     drop the canonical row and is refused.
 
     A row's names are re-normalised with `gazetteer`, the way `normalise`
@@ -495,14 +495,14 @@ def issue_body(held: Sequence[HeldReport], *, run_url: str) -> str:
         "know. Add the zone, or this spelling to its `aliases` (separated by "
         f"`|`), in `data/reference/{GAZETTEER_PATH.name}`, and fill its values. "
         f"If the name is a misreading and the table has no such row, type "
-        f"`{ABSENT}` in each of its cells instead; a zone the misreading hid "
+        f"`{ABSENT}` in each of its cells instead. A zone the misreading hid "
         "shows up as its own flag.",
         "4. Open a pull request and write `Refs #N` in its description, where N "
-        "is this issue's number. Do not write `Closes`: this issue closes "
-        "itself once every report in it is released.",
+        "is this issue's number. Do not write `Closes`, because this issue "
+        "closes itself once every report in it is released.",
         "5. The pull request's check confirms the report would be released "
-        "with the values typed: every open cell is filled and the table sums "
-        "hold. A row whose cell is no longer flagged needs no value. Merging "
+        "with the values typed, meaning every open cell is filled and the table "
+        "sums hold. A row whose cell is not flagged needs no value. Merging "
         "the pull request releases the report.",
         "",
         f"Run: {run_url}",
@@ -566,7 +566,7 @@ def create_issue(*, title: str, body: str, dry_run: bool = False) -> int | None:
     """Open an issue labelled `LABEL` and return its number, or None when skipped.
 
     `gh issue create --label` refuses a label the repository lacks, so the
-    label is created first; `--force` makes that a no-op when it exists.
+    label is created first. `--force` makes that a no-op when it exists.
     """
     _gh(
         ["label", "create", LABEL, "--force", "--description", "DRC sitrep review"],
@@ -665,7 +665,7 @@ def _check_gazetteer(repo: Path, merge_base: str, path: str) -> list[str]:
     if new[:1] != old[:1]:
         return [f"{path}: the header changed"]
     if len(new) < len(old):
-        return [f"{path}: rows were removed; add aliases instead"]
+        return [f"{path}: rows were removed (add aliases instead)"]
     return []
 
 
@@ -721,7 +721,7 @@ def _changed_columns(
             for p in placeholders
         ):
             errors.append(
-                f"line {line}: changed a column other than reviewed_value; rows may "
+                f"line {line}: changed a column other than reviewed_value. Rows may "
                 "be added, with an empty reason, only for the section and province "
                 "of a row with an empty field"
             )

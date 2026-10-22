@@ -121,7 +121,7 @@ LEVELS: dict[Section, str] = {
     "zone_subtotals": "province",
     "zone_total": "national",
 }
-# Output indicator labels; the first three match drc_2026_sitreps_parse.
+# Output indicator labels. The first three match drc_2026_sitreps_parse.
 ZONE_INDICATORS = {
     "cum_confirmed": "Cumulative confirmed cases",
     "cum_deaths": "Cumulative confirmed deaths",
@@ -247,7 +247,7 @@ class HealthZone(NamedTuple):
 
 
 # Name key -> every zone it names. More than one only when provinces share a
-# zone name; the model's province then picks one.
+# zone name, and the model's province then picks one.
 type Gazetteer = dict[str, tuple[HealthZone, ...]]
 
 
@@ -303,8 +303,8 @@ JSON_SCHEMA = _object(
 def schema_for(extractor: Extractor) -> dict[str, Any]:
     """Return the response schema to send to one extractor.
 
-    Every vendor-specific change to the schema belongs here. Both take
-    `JSON_SCHEMA` unchanged today.
+    Every vendor-specific change to the schema belongs here. Both extractors
+    take `JSON_SCHEMA` unchanged.
     """
     return copy.deepcopy(JSON_SCHEMA)
 
@@ -381,7 +381,7 @@ def load_gazetteer(path: Path = GAZETTEER_PATH) -> Gazetteer:
     """Read the health-zone gazetteer.
 
     Args:
-        path: CSV with columns `province, zone, aliases`; aliases are
+        path: CSV with columns `province, zone, aliases`. Aliases are
             `|`-separated.
 
     Returns:

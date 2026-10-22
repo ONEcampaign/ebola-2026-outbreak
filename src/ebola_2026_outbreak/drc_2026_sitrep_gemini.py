@@ -6,8 +6,8 @@ Every page of the PDF is rendered to a PNG at 110 dpi and sent in one
 256-colour palette blurs small digits. Gemini returns the extraction as JSON
 text in its first candidate.
 
-Temperature is not sent: Gemini 3.6 Flash and newer ignore it, so repeated
-calls can differ. The cache and the Mistral cross-check supply determinism.
+Temperature is not sent, because Gemini 3.6 Flash and newer ignore it.
+Repeated calls can differ. The cache and the Mistral cross-check supply determinism.
 The response's `modelVersion` is recorded so a silent model change shows up
 against the pin.
 
@@ -119,7 +119,7 @@ def extract(
 
     Args:
         pdf_path: The sitrep PDF.
-        client: Client to send through; tests pass one built on
+        client: Client to send through. Tests pass one built on
             `httpx.MockTransport`. A short-lived client is used if None.
         model: Gemini model id to request.
 
