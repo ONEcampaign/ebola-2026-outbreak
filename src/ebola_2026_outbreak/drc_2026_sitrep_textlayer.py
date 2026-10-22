@@ -12,35 +12,41 @@ Method, on the pdfplumber words of the PDF and their x extents:
   canonical province, a gazetteer zone or alias, or "Total". A label may wrap
   onto the next line ("Makiso-" / "Kisangani"). It is a row label only when
   no other alphabetic word shares its line, which rules out narrative text.
-- The row's band runs from the label's top down to just above the next
-  alphabetic word, since some rows print their values a point or two above or
-  below the label. Each word in the band is cut to digits, comma, percent and
-  slash ("sur" reads as "/", "NA" and "ND" stay, "(" splits a word).
+- A value word belongs to the row whose label is the nearest alphabetic word
+  above or below it, since rows print values a few points off the label's
+  line and some cells on two lines around it. A value word about as near to
+  another line leaves the rows it might belong to ambiguous. Each word in
+  the row's band is cut to digits, comma, percent and slash ("sur" reads as
+  "/", "NA" and "ND" stay, "(" splits a word).
 - A table starts at a capitalised "Létalité" header word and ends at the
   first Total row before the next such word. The table is the province
   summary when a province row prints "a/b" (ZS touchées), else the zone table.
   A zone table without an "intra-CTE" header is skipped, so its rows are not
   located.
 - The header runs from as far above "Létalité" as the first row is below
-  it. One header word marks each column ("(n)" twice, "Nouv.", "(Swab+)",
+  it, with words the extractor split into glyph runs joined again. One
+  header word marks each column ("(n)" twice, "Nouv.", "(Swab+)",
   "intra-CTE", "Total" in the zone table; "Nouveaux", "Cas", "Décès",
-  "touchées", "actuellement" in the province summary), and the phrase
-  holding it on its line gives the column's x extent. The columns must come
-  out in a known order: the zone table's, or the province summary's with
-  "Nouveaux cas" first (SitRep 105 onwards) or last (SitRep 96).
-- Band words a few points apart form one cell ("1 984", "28/36 (77,8 %)").
+  "historiquement" or else "touchées", "actuellement" in the province
+  summary), and the phrase holding it on its line gives the column's x
+  extent. The columns must come out in a known order: the zone table's, or
+  the province summary's with "Nouveaux cas" first (SitRep 105 onwards) or
+  last (SitRep 96).
+- Band words a few points apart form one cell ("1 984", "28/36 (77,8 %)"),
+  and a "%" ends a cell on its line. A cell on two lines reads line by line.
   Each column reaches halfway to its neighbours, and a cell belongs to the
   column whose reach holds its centre with a margin. A column with no cell
-  is blank.
+  is blank. The placed cells, read left to right, must give back the band.
 - In the zone table a province label opens that province's subtotal row and
   the zone rows that follow belong to it. A zone named like its province
   (Tshopo) follows its own subtotal row.
 
 A key found twice is not located, so an ambiguous page is flagged and the row
-is not guessed. A located row has no cells when its table's header words are
-missing, repeated or out of order, a cell sits near the boundary of two
-columns, two cells fall in one column, or a cell does not read as one value
-of its column. `row_matches` then fails, so the row is held.
+is not guessed. A located row has no cells when a value word near it is
+ambiguous, its table's header words are missing, repeated or out of order,
+a cell sits near the boundary of two columns, two cells fall in one column,
+or a cell does not read as one value of its column. `row_matches` then
+fails, so the row is held.
 
 `row_matches` compares field by field. A blank cell prints nothing and a
 printed 0 prints "0", so blank-for-0, 0-for-blank and a value moved into an
@@ -80,8 +86,9 @@ from ebola_2026_outbreak.drc_2026_sitreps_parse import PROVINCES
 logger = logging.getLogger(__name__)
 
 TOL = 3  # points: words this close vertically share a line
+AMBIGUITY = 2  # points: a value word this much nearer one line than another is clear
 WRAP = 12  # points: a wrapped label's next word starts within this distance
-SPLIT_GAP = 0.5  # points: header words closer than this are one split word
+SPLIT_GAP = 0.5  # points: header words within this gap or overlap are one word
 CELL_GAP = 6  # points: words of one cell are at most this far apart
 GUARD = 3  # points: a cell's centre is at least this far inside its column
 CFR_TOLERANCE = 0.05 + 1e-9
@@ -140,6 +147,7 @@ class Row(NamedTuple):
     page: int
     top: float
     words: tuple[Word, ...]
+    ambiguous: bool  # a value word near the row may belong to another line
 
     @property
     def pos(self) -> tuple[int, float]:
@@ -246,32 +254,49 @@ def _find_rows(words: list[Word], keys: Set[str]) -> list[Row]:
     """Every table row labelled with a name in `keys`, in reading order.
 
     A label sharing its line with another alphabetic word is running text
-    ("Au total, 26 décès"), and a label with no value in its band is not a
+    ("Au total, 26 décès"). Each value word belongs to the row whose label
+    is the nearest alphabetic word above or below it, since a row may print
+    a value a few points off its label's line, or a cell on two lines
+    straddling it. A value word whose distance to another line is within
+    `AMBIGUITY` of its distance to the nearest makes every row it might
+    belong to ambiguous. A label with no value and no ambiguity is not a
     row.
     """
     rows: list[Row] = []
     for page in sorted({w.page for w in words}):
         page_words = [w for w in words if w.page == page]
         alpha = [w for w in page_words if w.is_alpha]
-        for label in _labels(alpha, keys):
-            own, first = set(label), label[0]
-            if any(
-                o not in own and abs(o.top - w.top) <= TOL for w in label for o in alpha
-            ):
-                continue
-            below = [o.top for o in alpha if o not in own and o.top > first.top + TOL]
-            end = min(below, default=math.inf) - TOL
-            band = sorted(
-                (
-                    o
-                    for o in page_words
-                    if not o.is_alpha and o.value and first.top - TOL <= o.top < end
-                ),
-                key=lambda o: o.x0,
+        labels = [
+            label
+            for label in _labels(alpha, keys)
+            if not any(
+                o not in label and abs(o.top - w.top) <= TOL
+                for w in label
+                for o in alpha
             )
-            if band:
+        ]
+        owner = {w: i for i, label in enumerate(labels) for w in label}
+        bands: list[list[Word]] = [[] for _ in labels]
+        ambiguous = [False] * len(labels)
+        for o in page_words:
+            if o.is_alpha or not o.value or not alpha:
+                continue
+            nearest = min(alpha, key=lambda a: abs(a.top - o.top))
+            row = owner.get(nearest)
+            if row is not None:
+                bands[row].append(o)
+            reach = abs(nearest.top - o.top) + AMBIGUITY
+            for a in alpha:
+                rival = owner.get(a)
+                if rival != row and abs(a.top - o.top) < reach:
+                    for i in (row, rival):
+                        if i is not None:
+                            ambiguous[i] = True
+        for label, band, unclear in zip(labels, bands, ambiguous, strict=True):
+            if band or unclear:
                 key = "".join(w.key for w in label)
-                rows.append(Row(key, first.page, first.top, tuple(band)))
+                band.sort(key=lambda o: o.x0)
+                rows.append(Row(key, page, label[0].top, tuple(band), unclear))
     return rows
 
 
@@ -325,7 +350,7 @@ def _header(words: list[Word], table: Table) -> list[Word]:
             (
                 i
                 for i, j in enumerate(joined)
-                if abs(j.top - w.top) <= TOL and 0 <= w.x0 - j.x1 < SPLIT_GAP
+                if abs(j.top - w.top) <= TOL and abs(w.x0 - j.x1) < SPLIT_GAP
             ),
             None,
         )
@@ -379,6 +404,9 @@ def _province_columns(header: list[Word]) -> Columns | None:
     zones and "zs_current" the optional "ZS actuellement" cell.
 
     "Cas" is the last "cas" left of "Décès", since "Nouveaux cas" prints one.
+    The ZS column is marked by "historiquement" where the header prints "ZS
+    historiquement touchées", since a left-aligned ZS cell starts under it,
+    and by "touchées" otherwise.
     A table title ("Répartition des cas et décès confirmés") reaching into
     the header brings a second "décès", which leaves the columns unresolved.
     """
@@ -389,7 +417,8 @@ def _province_columns(header: list[Word]) -> Columns | None:
         "cum_confirmed": cases[-1] if cases else None,
         "cum_deaths": deaths,
         "cfr_pct": _one(w for w in header if w.key == "letalite"),
-        "zs": _one(w for w in header if w.key == "touchees"),
+        "zs": _one(w for w in header if w.key == "historiquement")
+        or _one(w for w in header if w.key == "touchees"),
     }
     if any(w.key == "actuellement" for w in header):
         markers["zs_current"] = _one(w for w in header if w.key == "actuellement")
@@ -415,28 +444,50 @@ def _zone_columns(header: list[Word]) -> Columns | None:
     return _columns(markers, header, [ZONE_TABLE_FIELDS])
 
 
+def _reading_order(cell: list[Word]) -> list[Word]:
+    """A cell's words line by line, then left to right: a cell printed on two
+    lines ("25/36 (69,4" over "%)") reads as one value."""
+    lines: list[list[Word]] = []
+    for word in sorted(cell, key=lambda w: w.top):
+        if lines and word.top - lines[-1][0].top <= TOL:
+            lines[-1].append(word)
+        else:
+            lines.append([word])
+    return [w for line in lines for w in sorted(line, key=lambda w: w.x0)]
+
+
 def _column_text(row: Row, columns: Columns) -> dict[str, str | None] | None:
     """Each column's printed text, None for a blank, or None for the row when
     a cell is not clearly under one column or two cells share one.
 
     Words at most `CELL_GAP` points apart form one cell ("1 984", "28/36
-    (77,8 %)"). Each column reaches halfway to its neighbours' header
-    phrases, and an outer column as far outward as inward. A cell belongs to
-    the column whose reach holds its centre, at least `GUARD` points inside,
-    which holds for left-aligned, centred and right-aligned cells.
+    (77,8 %)"), and a word ending in "%" closes its cell on its line, since
+    a ZS cell can start closer than that after a CFR. Each column reaches
+    halfway to its neighbours' header phrases, and an outer column as far
+    outward as inward. A cell belongs to the column whose reach holds its centre, at
+    least `GUARD` points inside, which holds for left-aligned, centred and
+    right-aligned cells. The placed cells, read left to right, must give back
+    the row's band.
     """
     cells: list[list[Word]] = []
     for word in row.words:
-        if cells and word.x0 - cells[-1][-1].x1 <= CELL_GAP:
+        if (
+            cells
+            and word.x0 - max(w.x1 for w in cells[-1]) <= CELL_GAP
+            and not (
+                cells[-1][-1].value.endswith("%")
+                and abs(cells[-1][-1].top - word.top) <= TOL
+            )
+        ):
             cells[-1].append(word)
         else:
             cells.append([word])
 
     inner = [(a[2] + b[1]) / 2 for a, b in itertools.pairwise(columns)]
     bounds = [2 * columns[0][1] - inner[0], *inner, 2 * columns[-1][2] - inner[-1]]
-    text: dict[str, str | None] = dict.fromkeys(column for column, _, _ in columns)
+    placed: dict[str, list[Word]] = {}
     for cell in cells:
-        centre = (cell[0].x0 + cell[-1].x1) / 2
+        centre = (cell[0].x0 + max(w.x1 for w in cell)) / 2
         under = [
             column
             for (column, _, _), (lo, hi) in zip(
@@ -444,16 +495,25 @@ def _column_text(row: Row, columns: Columns) -> dict[str, str | None] | None:
             )
             if lo + GUARD <= centre <= hi - GUARD
         ]
-        if len(under) != 1 or text[under[0]] is not None:
+        if len(under) != 1 or under[0] in placed:
             return None
-        text[under[0]] = " ".join(w.value for w in cell)
-    return text
+        placed[under[0]] = cell
+
+    in_order = [w for column, _, _ in columns for w in placed.get(column, [])]
+    if " ".join(w.value for w in in_order) != row.band:
+        return None
+    return {
+        column: " ".join(w.value for w in _reading_order(placed[column]))
+        if column in placed
+        else None
+        for column, _, _ in columns
+    }
 
 
 def _cells(row: Row, columns: Columns) -> dict[str, str | None] | None:
     """The row's printed text by field, or None when a cell is unclear or
     does not read as one value of its column."""
-    text = _column_text(row, columns)
+    text = None if row.ambiguous else _column_text(row, columns)
     if text is None:
         return None
     cells: dict[str, str | None] = {}

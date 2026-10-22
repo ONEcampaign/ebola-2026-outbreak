@@ -181,6 +181,97 @@ def test_unplaced_values_hold_the_row(
     assert not row_matches(rows[ZONE], TRUTH["157"][ZONE], "zones")
 
 
+# Province tables of uploads outside the golden set, cut to the table's
+# lines, each pinning a layout the reader once failed on. 117: the Total row
+# prints its values a few points above its label, closer to it than to the
+# Bas-Uélé row above. 123: a ZS cell starts 4.7 points after the CFR's "%",
+# under "ZS historiquement" rather than "touchées". 125: Sud-Ubangi prints
+# its CFR on two lines, and the "%" sits as near the Total row's "ZS dans 5
+# provinces" text as its own label, so the row is held. 128: the extractor
+# splits header words into glyph runs ("N" "o" "uv" "eaux"). 152: "ZS
+# actuellement" cells print on two lines around their row's label.
+#
+# Two other uploads hold one row each for what the PDF prints: SitRep 116's
+# Buta CFR is "1", and SitRep 137's Ituri "ZS actuellement" is "25.36".
+PROVINCE_TABLES = FIXTURES / "province_tables"
+
+
+@pytest.mark.parametrize(
+    ("sitrep", "total", "held"),
+    [
+        # total: the Total row's new cases, cases, deaths and affected zones.
+        ("117", (86, 6843, 3310, 61), set()),
+        ("123", (87, 7345, 3545, 62), set()),
+        ("125", None, {"Sud-Ubangi"}),
+        ("128", (58, 7672, 3699, 63), set()),
+        ("152", (68, 9212, 4441, 65), set()),
+    ],
+)
+def test_province_table_layouts(
+    sitrep: str, total: tuple[int, ...] | None, held: set[str]
+) -> None:
+    rows = read_rows(PROVINCE_TABLES / f"SitRep_{sitrep}.json", GAZETTEER)
+    provinces = {k.province: r for k, r in rows.items() if k.section == "provinces"}
+
+    assert {p for p, r in provinces.items() if r.located and r.cells is None} == held
+    if total is not None:
+        fields = ("new_confirmed", "cum_confirmed", "cum_deaths", "zs_affected")
+        sums = tuple(
+            sum(
+                int(r.cells[f].replace(" ", ""))
+                for r in provinces.values()
+                if r.cells is not None
+            )
+            for f in fields
+        )
+        assert sums == total
+
+
+def _zone_table(tmp_path: Path, cte_top: float) -> Path:
+    """A zone table whose Mambasa row prints its CTE death at `cte_top`;
+    the Mahagi row above it, at 145, has no CTE value."""
+    header = ["(n)", "(n)", "Létalité", "Nouv.", "(Swab+)", "intra-CTE", "Total"]
+    words = [f"100 {100 + 50 * i} {120 + 50 * i} {w}" for i, w in enumerate(header)]
+    for top, label, cells in [
+        (130, "Ituri", ("40", "14", "35,0%", "6", "0", "1", "1")),
+        (145, "Mahagi", ("4", "1", "25,0%", None, None, None, "0")),
+        (160, "Mambasa", ("36", "13", "36,1%", "6", "0", None, "1")),
+        (175, "Total", ("40", "14", "35,0%", "6", "0", "1", "1")),
+    ]:
+        words.append(f"{top} 40 60 {label}")
+        words += [
+            f"{top} {105 + 50 * i} {112 + 50 * i} {c}"
+            for i, c in enumerate(cells)
+            if c is not None
+        ]
+    words.append(f"{cte_top} 355 362 1")
+    path = tmp_path / "words.json"
+    path.write_text(json.dumps({"pages": {"2": words}}))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("cte_top", "mahagi", "mambasa"),
+    [
+        # 3.4 points above its own row, 11.6 below Mahagi's: Mambasa's.
+        (156.6, None, "1"),
+        # Midway between the two rows: neither row is placed.
+        (152.5, "unplaced", "unplaced"),
+    ],
+)
+def test_value_word_belongs_to_the_nearest_row(
+    tmp_path: Path, cte_top: float, mahagi: str | None, mambasa: str | None
+) -> None:
+    rows = read_rows(_zone_table(tmp_path, cte_top), GAZETTEER)
+    for zone, cte in (("Mahagi", mahagi), ("Mambasa", mambasa)):
+        cells = rows[RowKey("zones", "Ituri", zone)].cells
+        if cte == "unplaced":
+            assert cells is None
+        else:
+            assert cells is not None
+            assert cells["cte_deaths"] == cte
+
+
 @pytest.mark.parametrize(
     ("cells", "values", "matches"),
     [
