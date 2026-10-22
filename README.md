@@ -64,9 +64,11 @@ scrape at 12:30 and 18:00 UTC (`extract`, then `release`) and writes:
   status (`released`, `held`, `pending` or `superseded`) and the number of cells
   flagged.
 
-A report is released only when every value is agreed by both models and
-confirmed by the PDF, or typed by a person. Otherwise it is held, and the run
-opens one issue that tags the reviewers. To review a held report:
+A report is released when every value is accepted or typed by a person. A
+table row is accepted when each field matches the PDF text layer, whether both
+models agree on it or only one model matches. A headline figure is accepted
+when both models agree. Otherwise the report is held, and the run opens one
+issue that tags the reviewers. To review a held report:
 
 1. Open its file in `data/review/drc_2026/`. Each row is a cell to check, with
    the PDF page to open in `pdf_url`.

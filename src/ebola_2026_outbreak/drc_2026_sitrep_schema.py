@@ -587,12 +587,30 @@ def cache_path(
     return root / sha256 / f"{name}.json"
 
 
-def _write_json(path: Path, data: object) -> None:
-    """Write JSON through a temporary file, so a crash leaves no partial file."""
+def atomic_write(path: Path, data: str | bytes) -> Path:
+    """Write a file through a temporary one, so a crash leaves no partial file.
+
+    Creates the directory.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    tmp = path.with_name(path.name + ".tmp")
+    if isinstance(data, str):
+        tmp.write_text(data)
+    else:
+        tmp.write_bytes(data)
     tmp.replace(path)
+    return path
+
+
+def save_model_result(path: Path, result: ModelResult) -> Path:
+    """Write a model's answer to `path` as a JSON object of the `ModelResult` fields."""
+    text = json.dumps(result._asdict(), indent=2, ensure_ascii=False) + "\n"
+    return atomic_write(path, text)
+
+
+def load_model_result(path: Path) -> ModelResult:
+    """Read a `ModelResult` written by `save_model_result`."""
+    return ModelResult(**json.loads(path.read_text()))
 
 
 def write_model_result(
@@ -602,9 +620,7 @@ def write_model_result(
 
     The record is a JSON object with the `ModelResult` fields as keys.
     """
-    path = cache_path(sha256, extractor, root=root)
-    _write_json(path, result._asdict())
-    return path
+    return save_model_result(cache_path(sha256, extractor, root=root), result)
 
 
 def read_model_result(
@@ -612,9 +628,7 @@ def read_model_result(
 ) -> ModelResult | None:
     """Read a cached model answer, or None if the PDF has none yet."""
     path = cache_path(sha256, extractor, root=root)
-    if not path.exists():
-        return None
-    return ModelResult(**json.loads(path.read_text()))
+    return load_model_result(path) if path.exists() else None
 
 
 def write_words(sha256: str, dump: Path, *, root: Path = CACHE_DIR) -> Path:
@@ -626,12 +640,7 @@ def write_words(sha256: str, dump: Path, *, root: Path = CACHE_DIR) -> Path:
             `drc_2026_sitrep_textlayer.dump_words` writes them.
         root: The cache directory.
     """
-    path = cache_path(sha256, "words", root=root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_bytes(dump.read_bytes())
-    tmp.replace(path)
-    return path
+    return atomic_write(cache_path(sha256, "words", root=root), dump.read_bytes())
 
 
 def read_words(sha256: str, *, root: Path = CACHE_DIR) -> Path | None:

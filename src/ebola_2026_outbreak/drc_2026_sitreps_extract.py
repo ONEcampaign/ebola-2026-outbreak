@@ -100,9 +100,9 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
     pending_marker,
     read_review,
     resolve,
+    review_csv,
     review_path,
     review_rows,
-    write_review,
 )
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     CACHE_DIR,
@@ -123,6 +123,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Status,
     TextRow,
     Values,
+    atomic_write,
     load_gazetteer,
     normalise,
     read_model_result,
@@ -472,8 +473,8 @@ def extract(
             # Any error is scoped to this upload. It stays pending, keeps what
             # its cache gained, and the run moves on to the next upload.
             try:
-                # A new upload may replace a PDF of the same media id in place.
-                pdf = download(_media_item(upload), refresh=row.sha256 is None)
+                # `build_manifest` has already refreshed a replaced upload.
+                pdf = download(_media_item(upload))
                 sha256 = sha256_file(pdf)
                 row = row._replace(sha256=sha256)
                 records = _fill(pdf, sha256, read_records(sha256), gazetteer=gazetteer)
@@ -1147,41 +1148,28 @@ def ledger_frame(ledger: Ledger) -> pl.DataFrame:
     ).sort("report_date", "media_id", "modified")
 
 
-def _write_csv(df: pl.DataFrame, path: Path) -> None:
-    """Write a CSV through a temporary file, so a crash leaves no partial file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".csv.tmp")
-    df.write_csv(tmp)
-    tmp.replace(path)
-
-
 def write_ledger(ledger: Ledger) -> None:
     """Write the status ledger."""
     frame = ledger_frame(ledger)
     if frame.select("media_id", "modified").is_duplicated().any():
         raise ValueError("Duplicate uploads in the status ledger")
-    _write_csv(frame, STATUS_PATH)
+    atomic_write(STATUS_PATH, frame.write_csv())
 
 
 def write_release(result: Release, ledger: Ledger) -> None:
     """Write review files, outputs and the ledger."""
     for path, rows in result.reviews.items():
-        tmp = path.with_suffix(".csv.tmp")
-        write_review(tmp, rows)
-        tmp.replace(path)
+        atomic_write(path, review_csv(rows))
     for path, rows in result.appended.items():
         # Rows go after the existing ones, which stay byte for byte, so a
         # reviewer's open pull request still merges, unless it edits the
         # file's last row: git reports a conflict with the lines appended
         # after it.
-        tmp = path.with_suffix(".csv.tmp")
-        write_review(tmp, rows)
-        _, new = tmp.read_text().split("\n", 1)
+        _, new = review_csv(rows).split("\n", 1)
         existing = path.read_text()
-        tmp.write_text(existing + ("" if existing.endswith("\n") else "\n") + new)
-        tmp.replace(path)
-    _write_csv(result.by_zone, BY_ZONE_PATH)
-    _write_csv(result.headline, HEADLINE_PATH)
+        atomic_write(path, existing + ("" if existing.endswith("\n") else "\n") + new)
+    atomic_write(BY_ZONE_PATH, result.by_zone.write_csv())
+    atomic_write(HEADLINE_PATH, result.headline.write_csv())
     write_ledger(ledger)
 
 

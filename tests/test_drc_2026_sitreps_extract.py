@@ -549,7 +549,7 @@ def clients(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setattr(
         ex, "dump_words", lambda _, out: shutil.copyfile(WORDS_157, out)
     )
-    monkeypatch.setattr(ex, "download", lambda item, refresh=False: pdf)
+    monkeypatch.setattr(ex, "download", lambda item: pdf)
     _manifest((710, "t1"))
     return state
 

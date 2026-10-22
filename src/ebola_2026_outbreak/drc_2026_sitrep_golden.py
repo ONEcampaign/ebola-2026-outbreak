@@ -33,7 +33,6 @@ Subcommands:
 
 import argparse
 import csv
-import json
 import logging
 import sys
 import tempfile
@@ -59,8 +58,11 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Section,
     Values,
     load_gazetteer,
+    load_model_result,
+    save_model_result,
     sha256_file,
 )
+from ebola_2026_outbreak.drc_2026_sitrep_textlayer import dump_words
 from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
 from ebola_2026_outbreak.drc_2026_sitreps_extract import ARBITRATION, Records, judge
 
@@ -185,14 +187,10 @@ def write_recorded(
     A record over `MAX_RECORD_BYTES` drops `response["pages"]`, Mistral's
     per-page markdown; `extraction_raw` and the model ids stay.
     """
-    record = result._asdict()
-    text = json.dumps(record, indent=2, ensure_ascii=False) + "\n"
-    if len(text.encode()) > MAX_RECORD_BYTES and "pages" in result.response:
-        record["response"] = {k: v for k, v in result.response.items() if k != "pages"}
-        text = json.dumps(record, indent=2, ensure_ascii=False) + "\n"
-    path = recorded_path(extractor, report, root=root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path = save_model_result(recorded_path(extractor, report, root=root), result)
+    if path.stat().st_size > MAX_RECORD_BYTES and "pages" in result.response:
+        response = {k: v for k, v in result.response.items() if k != "pages"}
+        save_model_result(path, result._replace(response=response))
     return path
 
 
@@ -211,7 +209,7 @@ def read_recorded(
             f"No recorded {extractor} response for {report.report_date} at {path}; "
             f"run `drc_2026_sitrep_golden.py record --extractor {extractor}`"
         )
-    return ModelResult(**json.loads(path.read_text()))
+    return load_model_result(path)
 
 
 # Scoring
@@ -372,10 +370,17 @@ def run(*, limit: int | None = None) -> int:
                         f"{result.model_id_returned}, recorded {pinned}"
                     )
 
-            outcome = score(
-                Records(results["gemini"], results["mistral"], pdf),
-                gazetteer=gazetteer,
-            )
+            # Words come from a dump, as production reads them, so the check
+            # covers page selection too.
+            try:
+                dump = dump_words(pdf, Path(tmp) / f"{report.sha256}.words.json")
+                outcome = score(
+                    Records(results["gemini"], results["mistral"], dump),
+                    gazetteer=gazetteer,
+                )
+            except ValueError as e:
+                failures.append(f"{label}: scoring failed: {e}")
+                continue
             report_truth = truth[report.sitrep_no]
             wrong = compare(outcome.accepted, report_truth)
             cells = outcome.flagged

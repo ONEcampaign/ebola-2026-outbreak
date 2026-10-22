@@ -68,3 +68,56 @@ def test_post_raises(statuses: list[int], attempts: int) -> None:
     with pytest.raises(httpx.HTTPStatusError):
         fetch.post(URL, json={}, headers={}, client=client_for(statuses, seen))
     assert len(seen) == attempts
+
+
+def client_raising(
+    errors: list[httpx.TransportError | None], seen: list[httpx.Request]
+) -> httpx.Client:
+    """A client whose transport raises each of `errors` in turn, then answers 200."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        error = errors[len(seen) - 1] if len(seen) <= len(errors) else None
+        if error is not None:
+            raise error
+        return httpx.Response(200, json={"ok": True})
+
+    return httpx.Client(transport=httpx.MockTransport(handle))
+
+
+def test_post_retries_connect_error() -> None:
+    seen: list[httpx.Request] = []
+    response = fetch.post(
+        URL,
+        json={},
+        headers={},
+        client=client_raising([httpx.ConnectError("refused")], seen),
+    )
+    assert response.json() == {"ok": True}
+    assert len(seen) == 2
+
+
+def test_post_does_not_retry_read_timeout() -> None:
+    seen: list[httpx.Request] = []
+    with pytest.raises(httpx.ReadTimeout):
+        fetch.post(
+            URL,
+            json={},
+            headers={},
+            client=client_raising([httpx.ReadTimeout("slow")], seen),
+        )
+    assert len(seen) == 1
+
+
+def test_post_does_not_retry_server_error() -> None:
+    seen: list[httpx.Request] = []
+    with pytest.raises(httpx.HTTPStatusError):
+        fetch.post(URL, json={}, headers={}, client=client_for([500, 200], seen))
+    assert len(seen) == 1
+
+
+def test_get_retries_read_timeout() -> None:
+    seen: list[httpx.Request] = []
+    response = fetch.get(URL, client=client_raising([httpx.ReadTimeout("slow")], seen))
+    assert response.json() == {"ok": True}
+    assert len(seen) == 2

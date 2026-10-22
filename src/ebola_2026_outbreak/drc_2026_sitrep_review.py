@@ -40,6 +40,7 @@ not the ledger recorded its number.
 """
 
 import csv
+import io
 import json
 import logging
 import os
@@ -65,6 +66,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Section,
     TextRow,
     Values,
+    atomic_write,
     canonical_key,
     name_key,
 )
@@ -225,15 +227,19 @@ def review_rows(
     return [cells[c] for c in sorted(cells, key=order)]
 
 
+def review_csv(rows: Iterable[ReviewRow]) -> str:
+    """The text of a review CSV holding `rows`."""
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({**row, "page": "" if row["page"] is None else row["page"]})
+    return out.getvalue()
+
+
 def write_review(path: Path, rows: Iterable[ReviewRow]) -> Path:
     """Write review rows as CSV, creating the directory."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=COLUMNS, lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({**row, "page": "" if row["page"] is None else row["page"]})
-    return path
+    return atomic_write(path, review_csv(rows))
 
 
 def read_review(path: Path) -> list[ReviewRow]:

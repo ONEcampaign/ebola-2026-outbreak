@@ -11,9 +11,11 @@ Record the fixtures with `drc_2026_sitrep_golden.py record`.
 
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from ebola_2026_outbreak import drc_2026_sitrep_golden as golden
 from ebola_2026_outbreak.drc_2026_sitrep_golden import (
     NO_TRUTH_ROW,
     WORDS_DIR,
@@ -124,3 +126,41 @@ def test_oversized_record_drops_page_markdown(tmp_path: Path) -> None:
     write_recorded("mistral", REPORTS[0], result, root=tmp_path)
     kept = read_recorded("mistral", REPORTS[0], root=tmp_path)
     assert kept == result._replace(response={"model": "mistral-ocr-4-1"})
+
+
+def test_run_logs_a_failed_report_and_scores_the_rest(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    failing, *rest = REPORTS[:3]
+    by_name = {r.report_date: r for r in REPORTS}
+
+    def failing_score(records: Records, **kwargs: Any) -> Score:
+        if records.words == WORDS_DIR / failing.words:
+            raise ValueError("bad row")
+        return score(records, **kwargs)
+
+    monkeypatch.setattr(golden, "fetch_pdf", lambda report, _: Path(report.report_date))
+    monkeypatch.setattr(
+        golden,
+        "dump_words",
+        lambda pdf, _: WORDS_DIR / by_name[pdf.name].words,
+    )
+    monkeypatch.setattr(golden, "score", failing_score)
+    monkeypatch.setattr(
+        golden,
+        "EXTRACT",
+        {
+            e: lambda pdf, e=e: read_recorded(e, by_name[pdf.name])
+            for e in ("gemini", "mistral")
+        },
+    )
+
+    assert golden.run(limit=3) == 1
+    captured = capsys.readouterr()
+    assert f"SitRep {failing.sitrep_no}" in captured.err
+    assert "scoring failed: bad row" in captured.err
+    for report in rest:
+        assert (
+            f"SitRep {report.sitrep_no} ({report.report_date}): 0 accepted-wrong"
+            in (captured.out)
+        )
