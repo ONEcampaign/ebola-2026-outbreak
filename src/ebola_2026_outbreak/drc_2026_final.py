@@ -5,6 +5,11 @@ Mirrors the West Africa 2014-16 outputs so the two outbreaks stack:
     - Final: cumulative confirmed cases only, one row per date, with the same
       indicator label as the West Africa final output.
 
+Dates with no parsed sitrep are backfilled with INRB's digitised national
+banner figures (see `drc_2026_inrb`), and the `source` column of the
+intermediate records which rows came from where. On shared dates the parsed
+sitrep wins and INRB is only a cross-check.
+
 The national totals are cross-checked against the WHO table, which WHO
 updates from the previous day's DRC sitrep.
 """
@@ -14,6 +19,8 @@ import logging
 import polars as pl
 
 from ebola_2026_outbreak.aggregate import forward_fill_cumulative
+from ebola_2026_outbreak.drc_2026_inrb import OUTPUT_PATH as INRB_PATH
+from ebola_2026_outbreak.drc_2026_inrb import SCHEMA as INRB_SCHEMA
 from ebola_2026_outbreak.drc_2026_sitreps_parse import (
     INDICATORS,
     OUTBREAK,
@@ -40,6 +47,7 @@ SITREP_CASES = INDICATORS["cases"]
 FINAL_INDICATOR = "Cumulative number of confirmed Ebola cases"
 WHO_COUNTRY = "Democratic Republic of the Congo"
 WHO_CASES = "Confirmed cases"
+SOURCE_SITREP, SOURCE_INRB = "sitrep_pdf", "inrb"
 
 
 def sum_by_date_indicator(df: pl.DataFrame) -> pl.DataFrame:
@@ -52,14 +60,83 @@ def sum_by_date_indicator(df: pl.DataFrame) -> pl.DataFrame:
         df.group_by("date", "indicator")
         .agg(pl.when(pl.col("value").null_count() == 0).then(pl.col("value").sum()))
         .sort("date", "indicator")
-        .select(pl.lit(OUTBREAK).alias("outbreak"), "date", "indicator", "value")
+        .select(
+            pl.lit(OUTBREAK).alias("outbreak"),
+            "date",
+            "indicator",
+            "value",
+            pl.lit(SOURCE_SITREP).alias("source"),
+        )
     )
+
+
+def backfill_from_inrb(
+    *, intermediate: pl.DataFrame, inrb: pl.DataFrame
+) -> pl.DataFrame:
+    """Add INRB national rows for dates with no parsed sitrep.
+
+    Args:
+        intermediate: Sitrep national rows from `sum_by_date_indicator`.
+        inrb: INRB national rows (see `drc_2026_inrb.SCHEMA`).
+
+    Returns:
+        `intermediate` plus the INRB rows on its missing dates, sorted.
+
+    Raises:
+        ValueError: If the row count after the merge is not the sum of both
+            inputs.
+    """
+    missing = inrb.filter(~pl.col("date").is_in(intermediate["date"].implode()))
+    nulls = missing.filter(pl.col("value").is_null())
+    for row in nulls.iter_rows(named=True):
+        logger.warning("INRB %s missing on %s", row["indicator"], row["date"])
+    added = missing.drop_nulls("value").select(
+        "outbreak", "date", "indicator", "value", pl.lit(SOURCE_INRB).alias("source")
+    )
+
+    merged = pl.concat([intermediate, added]).sort("date", "indicator")
+    if merged.height != intermediate.height + added.height:
+        raise ValueError("Row count changed unexpectedly in INRB backfill")
+    if added.height:
+        logger.info(
+            "Backfilled %d rows on %d dates (%s to %s) from INRB",
+            added.height,
+            added["date"].n_unique(),
+            added["date"].min(),
+            added["date"].max(),
+        )
+    return merged
+
+
+def cross_check_inrb(*, intermediate: pl.DataFrame, inrb: pl.DataFrame) -> None:
+    """Log where parsed sitrep totals differ from INRB's on shared dates."""
+    compared = intermediate.filter(pl.col("source") == SOURCE_SITREP).join(
+        inrb.select("date", "indicator", pl.col("value").alias("inrb_value")),
+        on=["date", "indicator"],
+        how="inner",
+    )
+    mismatches = compared.filter(pl.col("value") != pl.col("inrb_value"))
+    logger.info(
+        "INRB cross-check: %d shared rows, %d match",
+        compared.height,
+        compared.height - mismatches.height,
+    )
+    for row in mismatches.iter_rows(named=True):
+        logger.warning(
+            "%s %s: sitrep %d, INRB %d",
+            row["date"],
+            row["indicator"].lower(),
+            row["value"],
+            row["inrb_value"],
+        )
 
 
 def build_final(intermediate: pl.DataFrame) -> pl.DataFrame:
     """Keep national cumulative confirmed cases, relabelled to match West Africa."""
-    final = intermediate.filter(pl.col("indicator") == SITREP_CASES).with_columns(
-        indicator=pl.lit(FINAL_INDICATOR)
+    final = (
+        intermediate.filter(pl.col("indicator") == SITREP_CASES)
+        .with_columns(indicator=pl.lit(FINAL_INDICATOR))
+        .select("outbreak", "date", "indicator", "value")
     )
     if final.is_empty():
         raise ValueError(f"No rows for indicator {SITREP_CASES!r}")
@@ -105,6 +182,12 @@ def main() -> None:
     )
 
     intermediate = sum_by_date_indicator(filled)
+    if INRB_PATH.exists():
+        inrb = pl.read_csv(INRB_PATH, schema=INRB_SCHEMA)
+        cross_check_inrb(intermediate=intermediate, inrb=inrb)
+        intermediate = backfill_from_inrb(intermediate=intermediate, inrb=inrb)
+    else:
+        logger.warning("No INRB series at %s; skipping backfill", INRB_PATH.name)
     intermediate.write_csv(INTERMEDIATE_PATH)
     logger.info("Wrote %d rows to %s", intermediate.height, INTERMEDIATE_PATH.name)
 

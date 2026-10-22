@@ -8,12 +8,17 @@ import pytest
 
 from ebola_2026_outbreak.drc_2026_final import (
     FINAL_INDICATOR,
+    SOURCE_INRB,
+    SOURCE_SITREP,
+    backfill_from_inrb,
     build_final,
+    cross_check_inrb,
     cross_check_who,
     sum_by_date_indicator,
 )
 
-D1, D2 = date(2026, 10, 17), date(2026, 10, 18)
+D0, D1, D2 = date(2026, 10, 16), date(2026, 10, 17), date(2026, 10, 18)
+DEATHS = "Cumulative confirmed deaths"
 CASES, NEW = "Cumulative confirmed cases", "New confirmed cases (24h)"
 
 
@@ -60,3 +65,52 @@ def test_cross_check_logs_mismatch(
         cross_check_who(final, who)
     assert "2 shared dates, 1 match" in caplog.text
     assert "2026-10-18: sitrep total 131, WHO 130.0" in caplog.text
+
+
+@pytest.fixture
+def inrb() -> pl.DataFrame:
+    """INRB rows on one date the sitreps miss and one they share."""
+    return pl.DataFrame(
+        {
+            "outbreak": ["drc_2026"] * 4,
+            "date": [D0, D0, D0, D2],
+            "indicator": [CASES, DEATHS, NEW, CASES],
+            "value": [100, 40, None, 999],
+            "source_ref": ["abc"] * 4,
+        }
+    )
+
+
+def test_backfill_from_inrb(provinces: pl.DataFrame, inrb: pl.DataFrame) -> None:
+    intermediate = sum_by_date_indicator(provinces)
+    out = backfill_from_inrb(intermediate=intermediate, inrb=inrb)
+    added = out.filter(pl.col("source") == SOURCE_INRB)
+    # Only the missing date is added, and its null row is dropped.
+    assert added.select("date", "indicator", "value").rows() == [
+        (D0, CASES, 100),
+        (D0, DEATHS, 40),
+    ]
+    # The sitrep value wins on the shared date.
+    shared = out.filter(pl.col("date") == D2, pl.col("indicator") == CASES)
+    assert shared.select("value", "source").rows() == [(131, SOURCE_SITREP)]
+    assert out.height == intermediate.height + 2
+
+
+def test_build_final_after_backfill(
+    provinces: pl.DataFrame, inrb: pl.DataFrame
+) -> None:
+    merged = backfill_from_inrb(
+        intermediate=sum_by_date_indicator(provinces), inrb=inrb
+    )
+    final = build_final(merged)
+    assert final.columns == ["outbreak", "date", "indicator", "value"]
+    assert final["value"].to_list() == [100, 110, 131]
+
+
+def test_cross_check_inrb_logs_mismatch(
+    provinces: pl.DataFrame, inrb: pl.DataFrame, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO):
+        cross_check_inrb(intermediate=sum_by_date_indicator(provinces), inrb=inrb)
+    assert "1 shared rows, 0 match" in caplog.text
+    assert "2026-10-18 cumulative confirmed cases: sitrep 131, INRB 999" in caplog.text
