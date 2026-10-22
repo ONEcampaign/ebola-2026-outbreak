@@ -75,6 +75,13 @@ other private, out-of-pocket). Data come from WHO's GHED via `bblocks.data_impor
 the method of `expenditure_by_source.csv` in
 [topic_health_financing](https://github.com/ONEcampaign/topic_health_financing).
 
+`uv run python src/ebola_2026_outbreak/drc_debt_vs_health.py` writes
+`data/output/drc_debt_service_health_spending.csv`: one row per year from 2013 with DR
+Congo's external debt service and domestic general government health
+expenditure (GHED's GGHE-D), both in millions of current USD. Debt service sums
+the outflows to every creditor in ONE's net flows dataset, which must be saved
+first at `data/raw/net_flows_agg.parquet`.
+
 ### Tests
 
 ```bash
