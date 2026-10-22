@@ -38,7 +38,7 @@ SHA_A, SHA_B = "aa" * 32, "bb" * 32
 
 ZONE = RowKey("zones", "Tshopo", "Makiso-Kisangani")
 # A zone-table row matching the SitRep 96 Gemini fixture; CTE deaths is blank.
-ZONE_ROW_96 = "12 6 50,0 % 1 0 0"
+ZONE_ROW_96 = ("12", "6", "50,0 %", "1", "0", None, "0")
 
 
 def _result(raw: dict[str, Any], model: str) -> ModelResult:
@@ -64,10 +64,20 @@ def _cache(sha: str, raw: dict[str, Any], words: Path) -> None:
     write_words(sha, words, root=ex.CACHE_DIR)
 
 
-def _line(top: int, label: str, band: str) -> list[str]:
-    """Dump words of one table row: its label, then each printed token."""
-    tokens = [f"{top} {100 + 30 * i} {t}" for i, t in enumerate(band.split())]
-    return [f"{top} 40 {label}", *tokens]
+def _header(*words: str) -> list[str]:
+    """Dump words of a table header at top 100, column i at x 100 + 50 i."""
+    return [f"100 {100 + 50 * i} {120 + 50 * i} {w}" for i, w in enumerate(words)]
+
+
+def _line(top: int, label: str, cells: tuple[str | None, ...]) -> list[str]:
+    """Dump words of one table row: its label, then each cell's words under
+    its column's header, None leaving the cell blank."""
+    words = [f"{top} 40 60 {label}"]
+    for i, cell in enumerate(cells):
+        for j, t in enumerate((cell or "").split()):
+            x = 100 + 50 * i + 10 * j
+            words.append(f"{top} {x} {x + 8} {t}")
+    return words
 
 
 def _words_96(
@@ -79,13 +89,13 @@ def _words_96(
     table: the Tshopo subtotal row (left out when `subtotal` is False), a
     zone row labelled `zone` (left out when None), and the Total row.
     """
+    province_row = ("1", "12", "6", "50,0 %", "1/23")
     province = [
-        "100 30 Nouveaux",
-        "100 100 Létalité",
-        *_line(130, "Tshopo", "1 12 6 50,0 % 1/23"),
-        *_line(150, "Total", "1 12 6 50,0 % 1/23"),
+        *_header("Nouveaux", "Cas", "Décès", "Létalité", "touchées"),
+        *_line(130, "Tshopo", province_row),
+        *_line(150, "Total", province_row),
     ]
-    zones = ["100 100 Létalité", "100 250 intra-CTE"]
+    zones = _header("(n)", "(n)", "Létalité", "Nouv.", "(Swab+)", "intra-CTE", "Total")
     if subtotal:
         zones += _line(130, "Tshopo", ZONE_ROW_96)
     if zone is not None:

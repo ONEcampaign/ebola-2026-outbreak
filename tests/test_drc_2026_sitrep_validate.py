@@ -111,7 +111,7 @@ def match(text: TextRow, values: Values, section: Section) -> bool:
 
 def text_layer(rows: dict[RowKey, Values]) -> dict[RowKey, TextRow]:
     return {
-        key: TextRow(key, printed(values, key.section), True, 2)
+        key: TextRow(key, printed(values, key.section), True, 2, None)
         for key, values in rows.items()
         if key.section != "kpis"
     }
@@ -209,7 +209,7 @@ def test_row_not_located_holds_the_row() -> None:
     truth = report()
     text_rows = text_layer(truth)
     del text_rows[A]
-    text_rows[B] = TextRow(B, None, False, None)
+    text_rows[B] = TextRow(B, None, False, None, None)
 
     result = run(truth, truth, text_rows)
 
@@ -465,10 +465,11 @@ def test_empty_report_flags_every_section() -> None:
     }
 
 
-def test_shift_into_blank_cell_passes_the_text_and_fails_the_daily_sum() -> None:
+def test_shift_into_blank_cell_fails_the_daily_sum() -> None:
     # Both models move zone A's CTE death into the blank community column.
-    # The printed row "10 2 20,0 1 1 1" reads the same either way, so the
-    # text layer accepts it; only the zones-to-subtotal sum sees the shift.
+    # The stub text layer compares tokens, and "10 2 20,0 1 1 1" reads the
+    # same either way, so it accepts the shift; the zones-to-subtotal sum
+    # still sees it.
     truth = report()
     shifted = changed(truth, A, community_deaths=1, cte_deaths=None)
 

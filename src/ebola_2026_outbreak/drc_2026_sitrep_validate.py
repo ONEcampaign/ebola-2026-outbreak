@@ -2,8 +2,8 @@
 
 `reconcile` decides, row by row, which values two models agree on and the
 PDF text layer confirms. A table row is accepted when both models give the
-same row and it matches the row's printed string. When the models disagree
-and exactly one model's row matches the printed string, that row is accepted
+same row and it matches the row's printed cells. When the models disagree
+and exactly one model's row matches the printed cells, that row is accepted
 (text-layer arbitration, switched off with `arbitration=False`). Every other
 row is held: a row the text layer did not locate, a row whose name is unknown
 or filed under the wrong province, or a row both models read the same way but
@@ -14,7 +14,10 @@ and the text cannot settle has the fields the models dispute flagged
 accepted only when both models give the same value.
 
 Model agreement is exact, percentages included: 48.3 and 48.30000001
-disagree. Only the matcher compares a printed CFR within 0.05.
+disagree. Only the matcher compares a printed CFR within 0.05. The matcher
+compares each field with the cell printed in its own column, so a value
+moved into an adjacent blank cell, or a 0 swapped with a blank, does not
+match.
 
 `check_sums` then checks the report's arithmetic on the accepted and reviewed
 values:
@@ -37,8 +40,7 @@ A blank counts as 0 in a sum. A check with an operand still under review is
 skipped, and a missing row is flagged by check 6, so no check goes unchecked
 silently. A failed check flags `sum_mismatch` on every operand a machine
 accepted, since two models can make the same error the text layer cannot
-see. A value shifted into an adjacent blank cell prints the same token
-string. A failed check whose operands a reviewer has all verified is a
+see. A failed check whose operands a reviewer has all verified is a
 publisher discrepancy, released as printed and recorded.
 """
 
@@ -64,7 +66,7 @@ from ebola_2026_outbreak.drc_2026_sitreps_parse import PROVINCES
 # Largest gap between a printed CFR and the CFR its counts give.
 CFR_TOLERANCE = 0.05
 
-# Whether a model's values reproduce a row's printed string.
+# Whether a model's values reproduce a row's printed cells.
 type Matcher = Callable[[TextRow, Values, Section], bool]
 # One value of the report: (row, field).
 type Cell = tuple[RowKey, str]

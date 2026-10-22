@@ -203,14 +203,20 @@ class ModelResult(NamedTuple):
 class TextRow(NamedTuple):
     """A table row as printed in the PDF text layer.
 
-    `printed` is the row's tokens after the name, joined by single spaces
-    ("12 6 50,0 1 0 0 0"), or None when the row was not located.
+    `printed` is the row's tokens after the name, left to right and joined by
+    single spaces ("12 6 50,0 % 1 0 0"), or None when the row was not located.
+    `cells` holds the printed text of each of the section's fields, keyed by
+    field, with None for a blank cell: {"cum_confirmed": "12", ...,
+    "cte_deaths": None}. A province's "28/36" cell gives "28" to `zs_affected`
+    and "36" to `zs_total`. `cells` is None when the row was not located or
+    its values could not be placed in columns.
     """
 
     key: RowKey
     printed: str | None
     located: bool
     page: int | None
+    cells: dict[str, str | None] | None
 
 
 class Extraction(NamedTuple):
@@ -589,7 +595,7 @@ def write_words(sha256: str, dump: Path, *, root: Path = CACHE_DIR) -> Path:
 
     Args:
         sha256: The PDF's sha256.
-        dump: The words of the PDF's table pages, as
+        dump: The words of the PDF's table pages with their x extents, as
             `drc_2026_sitrep_textlayer.dump_words` writes them.
         root: The cache directory.
     """

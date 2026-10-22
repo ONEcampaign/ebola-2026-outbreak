@@ -115,7 +115,7 @@ def match(text: TextRow, values: Values, section: Section) -> bool:
 
 def text_layer() -> dict[RowKey, TextRow]:
     return {
-        key: TextRow(key, json.dumps(values, sort_keys=True), True, 3)
+        key: TextRow(key, json.dumps(values, sort_keys=True), True, 3, None)
         for key, values in TRUTH.items()
         if key.section != "kpis"
     }

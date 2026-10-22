@@ -2,11 +2,11 @@
 
 The text layer is the third, model-free reading of each sitrep. `read_rows`
 finds every province summary row, zone row, zone-table subtotal row and the
-zone table's Total row, and records the row's printed tokens. `row_matches`
-then says whether a model's values for that row are exactly what the page
-prints.
+zone table's Total row, and records what each of the row's cells prints.
+`row_matches` then says whether a model's values for that row are exactly
+what the page prints.
 
-Method, on the pdfplumber words of the PDF:
+Method, on the pdfplumber words of the PDF and their x extents:
 
 - A row label is a run of words whose name keys join to a known name: a
   canonical province, a gazetteer zone or alias, or "Total". A label may wrap
@@ -15,38 +15,49 @@ Method, on the pdfplumber words of the PDF:
 - The row's band runs from the label's top down to just above the next
   alphabetic word, since some rows print their values a point or two above or
   below the label. Each word in the band is cut to digits, comma, percent and
-  slash ("sur" reads as "/", "NA" and "ND" stay, "(" splits a word) and the
-  words are joined left to right by single spaces: "6 960 3 217 46,2 %".
+  slash ("sur" reads as "/", "NA" and "ND" stay, "(" splits a word).
 - A table starts at a capitalised "Létalité" header word and ends at the
   first Total row before the next such word. The table is the province
   summary when a province row prints "a/b" (ZS touchées), else the zone table.
-- The column order comes from the header words. The province summary prints
-  "Nouveaux cas" last in SitRep 96 and first from SitRep 105; a new-last row
-  is stored new-first, so every province row reads new, cases, deaths, CFR,
-  ZS a/b, then the optional "ZS actuellement" a/b. The zone table prints the
-  cumulative columns, then the day's (header "intra-CTE"). A table whose
-  header matches no known layout is skipped, so its rows are not located.
+  A zone table without an "intra-CTE" header is skipped, so its rows are not
+  located.
+- The header runs from as far above "Létalité" as the first row is below
+  it. One header word marks each column ("(n)" twice, "Nouv.", "(Swab+)",
+  "intra-CTE", "Total" in the zone table; "Nouveaux", "Cas", "Décès",
+  "touchées", "actuellement" in the province summary), and the phrase
+  holding it on its line gives the column's x extent. The columns must come
+  out in a known order: the zone table's, or the province summary's with
+  "Nouveaux cas" first (SitRep 105 onwards) or last (SitRep 96).
+- Band words a few points apart form one cell ("1 984", "28/36 (77,8 %)").
+  Each column reaches halfway to its neighbours, and a cell belongs to the
+  column whose reach holds its centre with a margin. A column with no cell
+  is blank.
 - In the zone table a province label opens that province's subtotal row and
   the zone rows that follow belong to it. A zone named like its province
   (Tshopo) follows its own subtotal row.
 
 A key found twice is not located, so an ambiguous page is flagged and the row
-is not guessed. `row_matches` compares exactly. A blank prints nothing and a
-printed 0 prints "0", so blank-for-0 and 0-for-blank both fail. A space may
-split a number only at a thousands boundary or before "%". A CFR matches a
-printing with 0 to 2 decimals within 0.05 of the value. The check cannot see
-a value moved into an adjacent blank cell of the same row ("1, blank" and
-"blank, 1" print alike). The sum checks catch that.
+is not guessed. A located row has no cells when its table's header words are
+missing, repeated or out of order, a cell sits near the boundary of two
+columns, two cells fall in one column, or a cell does not read as one value
+of its column. `row_matches` then fails, so the row is held.
+
+`row_matches` compares field by field. A blank cell prints nothing and a
+printed 0 prints "0", so blank-for-0, 0-for-blank and a value moved into an
+adjacent blank cell all fail. A space may split a number only at a thousands
+boundary or before "%". A CFR matches a printing with 0 to 2 decimals within
+0.05 of the value.
 
 `dump_words` writes the words of a PDF's table pages as a JSON fixture, which
 `read_rows` reads as it reads the PDF.
 """
 
+import itertools
 import json
 import logging
 import math
 import re
-from collections.abc import Iterator, Mapping, Set
+from collections.abc import Collection, Iterable, Iterator, Mapping, Set
 from pathlib import Path
 from typing import NamedTuple
 
@@ -55,6 +66,7 @@ import pdfplumber
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     FIELDS,
     PERCENT_FIELDS,
+    ZONE_TABLE_FIELDS,
     Gazetteer,
     Number,
     RowKey,
@@ -69,21 +81,33 @@ logger = logging.getLogger(__name__)
 
 TOL = 3  # points: words this close vertically share a line
 WRAP = 12  # points: a wrapped label's next word starts within this distance
+SPLIT_GAP = 0.5  # points: header words closer than this are one split word
+CELL_GAP = 6  # points: words of one cell are at most this far apart
+GUARD = 3  # points: a cell's centre is at least this far inside its column
 CFR_TOLERANCE = 0.05 + 1e-9
 
 PROVINCE_KEYS = {name_key(p): p for p in PROVINCES.values()}
 TOTAL_KEYS = frozenset({"total", "totalgeneral", "totalnational", "totalrdc"})
+NULL_TOKENS = frozenset({"NA", "ND"})
 
-NULL = r"(?:N[AD] )?"
-ZS = r"\d+ ?/ ?\d+(?: \d+,\d+ ?%)?"  # "28/36 77,8 %", from "28/36 (77,8 %)"
+# What one cell may print, by the kind of its column.
+CELL_GRAMMAR = {
+    "count": re.compile(r"\d+|\d{1,3}(?: \d{3})+|NA|ND"),
+    "percent": re.compile(r"\d+(?:,\d{1,2})? ?%|NA|ND"),
+    # "28/36 77,8 %", from "28/36 (77,8 %)"; the share is dropped.
+    "zs": re.compile(r"(\d+) ?/ ?(\d+)(?: \d+,\d+ ?%)?|NA|ND"),
+}
+COLUMN_KIND = {"cfr_pct": "percent", "zs": "zs", "zs_current": "zs"}
 
 
 class Word(NamedTuple):
-    """A pdfplumber word: 1-based page, top and left edge in points, text."""
+    """A pdfplumber word: 1-based page, top, left and right edges in points,
+    text."""
 
     page: int
     top: float
     x0: float
+    x1: float
     text: str
 
     @property
@@ -110,16 +134,20 @@ class Word(NamedTuple):
 
 
 class Row(NamedTuple):
-    """A row label and its band of printed values."""
+    """A row label and the value words of its band, left to right."""
 
     key: str  # the label's name key
     page: int
     top: float
-    band: str
+    words: tuple[Word, ...]
 
     @property
     def pos(self) -> tuple[int, float]:
         return (self.page, self.top)
+
+    @property
+    def band(self) -> str:
+        return " ".join(w.value for w in self.words)
 
 
 class Table(NamedTuple):
@@ -127,6 +155,16 @@ class Table(NamedTuple):
 
     anchor: Word
     rows: list[Row]
+
+
+# A table's columns, left to right: (column, x0, x1 of its header phrase).
+type Columns = list[tuple[str, float, float]]
+
+PROVINCE_LAYOUTS = (
+    ("new_confirmed", "cum_confirmed", "cum_deaths", "cfr_pct", "zs"),
+    ("new_confirmed", "cum_confirmed", "cum_deaths", "cfr_pct", "zs", "zs_current"),
+    ("cum_confirmed", "cum_deaths", "cfr_pct", "zs", "new_confirmed"),  # SitRep 96
+)
 
 
 # Words
@@ -149,7 +187,13 @@ def _pdf_words(pdf_path: Path) -> list[Word]:
     with pdfplumber.open(pdf_path) as pdf:
         for number, page in enumerate(pdf.pages, start=1):
             page_words = [
-                Word(number, round(w["top"], 2), round(w["x0"], 2), w["text"])
+                Word(
+                    number,
+                    round(w["top"], 2),
+                    round(w["x0"], 2),
+                    round(w["x1"], 2),
+                    w["text"],
+                )
                 for w in page.extract_words()
             ]
             words.extend(sorted(_drop_page_number(page_words)))
@@ -161,8 +205,8 @@ def _dump_words(path: Path) -> list[Word]:
     words: list[Word] = []
     for page, lines in json.loads(path.read_text())["pages"].items():
         for line in lines:
-            top, x0, text = line.split(" ", 2)
-            words.append(Word(int(page), float(top), float(x0), text))
+            top, x0, x1, text = line.split(" ", 3)
+            words.append(Word(int(page), float(top), float(x0), float(x1), text))
     return sorted(words)
 
 
@@ -217,18 +261,17 @@ def _find_rows(words: list[Word], keys: Set[str]) -> list[Row]:
                 continue
             below = [o.top for o in alpha if o not in own and o.top > first.top + TOL]
             end = min(below, default=math.inf) - TOL
-            band_words = sorted(
+            band = sorted(
                 (
                     o
                     for o in page_words
-                    if not o.is_alpha and first.top - TOL <= o.top < end
+                    if not o.is_alpha and o.value and first.top - TOL <= o.top < end
                 ),
                 key=lambda o: o.x0,
             )
-            band = " ".join(v for o in band_words if (v := o.value))
             if band:
                 key = "".join(w.key for w in label)
-                rows.append(Row(key, first.page, first.top, band))
+                rows.append(Row(key, first.page, first.top, tuple(band)))
     return rows
 
 
@@ -260,47 +303,187 @@ def _tables(words: list[Word], rows: list[Row]) -> list[Table]:
     return tables
 
 
-def _header(words: list[Word], anchor: Word) -> list[Word]:
-    """Header words: the anchor's page, from 50 pt above it to 25 pt below."""
-    return [
+def _header(words: list[Word], table: Table) -> list[Word]:
+    """Alphabetic words of a table's header, left to right.
+
+    The header is centred on the "Létalité" cell, so it runs from as far
+    above the anchor as the first row is below it. Words the extractor split
+    with no gap ("No" "uv.") are joined.
+    """
+    anchor, first = table.anchor, table.rows[0]
+    if first.page != anchor.page:
+        return []
+    lo = 2 * anchor.top - first.top
+    header = [
         w
         for w in words
-        if w.page == anchor.page and anchor.top - 50 <= w.top <= anchor.top + 25
+        if w.page == anchor.page and w.is_alpha and lo <= w.top < first.top
     ]
-
-
-def _new_first(band: str) -> str:
-    """Move a trailing "Nouveaux cas" cell to the front of a province band.
-
-    "6 960 3 217 46,2 % 28/36 77,8 % 42" becomes "42 6 960 3 217 46,2 % 28/36
-    77,8 %". A band without a ZS cell is left as printed and will not match.
-    """
-    m = re.fullmatch(rf"(.*?{ZS})((?: (?:\d+|N[AD]))*)", band)
-    return f"{m[2].strip()} {m[1]}".strip() if m else band
-
-
-def _province_rows(words: list[Word], table: Table) -> Iterator[tuple[RowKey, Row]]:
-    header = _header(words, table.anchor)
-    new = [w.x0 for w in header if w.key.startswith("nouv")]
-    if not new:
-        logger.warning(
-            "Province table on page %d: no new-cases header", table.anchor.page
+    joined: list[Word] = []
+    for w in sorted(header, key=lambda w: w.x0):
+        i = next(
+            (
+                i
+                for i, j in enumerate(joined)
+                if abs(j.top - w.top) <= TOL and 0 <= w.x0 - j.x1 < SPLIT_GAP
+            ),
+            None,
         )
-        return
-    new_last = min(new) > table.anchor.x0
+        if i is None:
+            joined.append(w)
+        else:
+            joined[i] = joined[i]._replace(x1=w.x1, text=joined[i].text + w.text)
+    return joined
+
+
+def _one(words: Iterable[Word]) -> Word | None:
+    found = list(words)
+    return found[0] if len(found) == 1 else None
+
+
+def _phrase(word: Word, header: list[Word]) -> tuple[float, float]:
+    """x extent of the phrase holding `word` on its header line: the words
+    joined to it by gaps of at most `CELL_GAP` ("Total décès confirmés")."""
+    line = [w for w in header if abs(w.top - word.top) <= TOL]
+    lo = hi = line.index(word)
+    while lo > 0 and line[lo].x0 - line[lo - 1].x1 <= CELL_GAP:
+        lo -= 1
+    while hi + 1 < len(line) and line[hi + 1].x0 - line[hi].x1 <= CELL_GAP:
+        hi += 1
+    return line[lo].x0, line[hi].x1
+
+
+def _columns(
+    markers: Mapping[str, Word | None],
+    header: list[Word],
+    layouts: Collection[tuple[str, ...]],
+) -> Columns | None:
+    """Columns from each column's header word, or None when a header word is
+    missing, two header phrases overlap, or the columns, left to right, are
+    not one of `layouts`."""
+    columns = []
+    for column, word in markers.items():
+        if word is None:
+            return None
+        columns.append((column, *_phrase(word, header)))
+    columns.sort(key=lambda c: c[1])
+    if tuple(c for c, _, _ in columns) not in layouts:
+        return None
+    if any(a[2] >= b[1] for a, b in itertools.pairwise(columns)):
+        return None
+    return columns
+
+
+def _province_columns(header: list[Word]) -> Columns | None:
+    """Columns of the province summary, "zs" being the "a/b" cell of affected
+    zones and "zs_current" the optional "ZS actuellement" cell.
+
+    "Cas" is the last "cas" left of "Décès", since "Nouveaux cas" prints one.
+    A table title ("Répartition des cas et décès confirmés") reaching into
+    the header brings a second "décès", which leaves the columns unresolved.
+    """
+    deaths = _one(w for w in header if w.key == "deces")
+    cases = [w for w in header if w.key == "cas" and deaths and w.x1 < deaths.x0]
+    markers = {
+        "new_confirmed": _one(w for w in header if w.key.startswith("nouv")),
+        "cum_confirmed": cases[-1] if cases else None,
+        "cum_deaths": deaths,
+        "cfr_pct": _one(w for w in header if w.key == "letalite"),
+        "zs": _one(w for w in header if w.key == "touchees"),
+    }
+    if any(w.key == "actuellement" for w in header):
+        markers["zs_current"] = _one(w for w in header if w.key == "actuellement")
+    return _columns(markers, header, PROVINCE_LAYOUTS)
+
+
+def _zone_columns(header: list[Word]) -> Columns | None:
+    """Columns of the zone table, by "Cas (n)" and "Décès (n)", "Létalité",
+    then the day's "Nouv. Cas", "(Swab+)", "intra-CTE" and "Total"."""
+    counts = [w for w in header if w.key == "n"]
+    cfr = _one(w for w in header if w.key == "letalite")
+    markers = {
+        "cum_confirmed": counts[0] if len(counts) == 2 else None,
+        "cum_deaths": counts[1] if len(counts) == 2 else None,
+        "cfr_pct": cfr,
+        "new_confirmed": _one(w for w in header if w.key.startswith("nouv")),
+        "community_deaths": _one(w for w in header if "swab" in w.key),
+        "cte_deaths": _one(w for w in header if w.key == "intracte"),
+        "total_deaths_day": _one(
+            w for w in header if w.key == "total" and cfr and w.x0 > cfr.x1
+        ),
+    }
+    return _columns(markers, header, [ZONE_TABLE_FIELDS])
+
+
+def _column_text(row: Row, columns: Columns) -> dict[str, str | None] | None:
+    """Each column's printed text, None for a blank, or None for the row when
+    a cell is not clearly under one column or two cells share one.
+
+    Words at most `CELL_GAP` points apart form one cell ("1 984", "28/36
+    (77,8 %)"). Each column reaches halfway to its neighbours' header
+    phrases, and an outer column as far outward as inward. A cell belongs to
+    the column whose reach holds its centre, at least `GUARD` points inside,
+    which holds for left-aligned, centred and right-aligned cells.
+    """
+    cells: list[list[Word]] = []
+    for word in row.words:
+        if cells and word.x0 - cells[-1][-1].x1 <= CELL_GAP:
+            cells[-1].append(word)
+        else:
+            cells.append([word])
+
+    inner = [(a[2] + b[1]) / 2 for a, b in itertools.pairwise(columns)]
+    bounds = [2 * columns[0][1] - inner[0], *inner, 2 * columns[-1][2] - inner[-1]]
+    text: dict[str, str | None] = dict.fromkeys(column for column, _, _ in columns)
+    for cell in cells:
+        centre = (cell[0].x0 + cell[-1].x1) / 2
+        under = [
+            column
+            for (column, _, _), (lo, hi) in zip(
+                columns, itertools.pairwise(bounds), strict=True
+            )
+            if lo + GUARD <= centre <= hi - GUARD
+        ]
+        if len(under) != 1 or text[under[0]] is not None:
+            return None
+        text[under[0]] = " ".join(w.value for w in cell)
+    return text
+
+
+def _cells(row: Row, columns: Columns) -> dict[str, str | None] | None:
+    """The row's printed text by field, or None when a cell is unclear or
+    does not read as one value of its column."""
+    text = _column_text(row, columns)
+    if text is None:
+        return None
+    cells: dict[str, str | None] = {}
+    for column, printed in text.items():
+        m = None
+        if printed is not None:
+            m = CELL_GRAMMAR[COLUMN_KIND.get(column, "count")].fullmatch(printed)
+            if m is None:
+                return None
+        if column == "zs":
+            pair = (m[1], m[2]) if m and m[1] else (printed, printed)
+            cells["zs_affected"], cells["zs_total"] = pair
+        elif column != "zs_current":
+            cells[column] = printed
+    return cells
+
+
+# Rows by key
+
+
+def _province_rows(table: Table) -> Iterator[tuple[RowKey, Row]]:
     for row in table.rows:
         if row.key in PROVINCE_KEYS:
-            band = _new_first(row.band) if new_last else row.band
-            yield (
-                RowKey("provinces", PROVINCE_KEYS[row.key], ""),
-                row._replace(band=band),
-            )
+            yield RowKey("provinces", PROVINCE_KEYS[row.key], ""), row
 
 
 def _zone_rows(
-    words: list[Word], table: Table, gazetteer: Gazetteer
+    header: list[Word], table: Table, gazetteer: Gazetteer
 ) -> Iterator[tuple[RowKey, Row]]:
-    if not any("intra" in w.key for w in _header(words, table.anchor)):
+    if not any("intra" in w.key for w in header):
         logger.warning("Zone table on page %d: unknown layout", table.anchor.page)
         return
     province = None
@@ -339,25 +522,32 @@ def read_rows(source: Path, gazetteer: Gazetteer) -> dict[RowKey, TextRow]:
         One `TextRow` per canonical province (in `provinces` and
         `zone_subtotals`), per gazetteer zone, and for `zone_total`. A row
         the text layer does not print, or prints twice, has
-        `located=False`.
+        `located=False`. A located row whose values cannot be placed in
+        columns has `cells=None`.
     """
     words = _load_words(source)
     keys = set(gazetteer) | set(PROVINCE_KEYS) | TOTAL_KEYS
     rows = _find_rows(words, keys)
 
-    found: dict[RowKey, list[Row]] = {}
+    found: dict[RowKey, list[tuple[Row, dict[str, str | None] | None]]] = {}
     for table in _tables(words, rows):
-        province_table = any(
+        header = _header(words, table)
+        if any(
             r.key in PROVINCE_KEYS and re.search(r"\d ?/ ?\d", r.band)
             for r in table.rows
-        )
-        located = (
-            _province_rows(words, table)
-            if province_table
-            else _zone_rows(words, table, gazetteer)
-        )
+        ):
+            located = _province_rows(table)
+            columns = _province_columns(header)
+        else:
+            located = _zone_rows(header, table, gazetteer)
+            columns = _zone_columns(header)
+        if columns is None:
+            logger.warning("Table on page %d: columns unresolved", table.anchor.page)
         for key, row in located:
-            found.setdefault(key, []).append(row)
+            cells = None if columns is None else _cells(row, columns)
+            if columns is not None and cells is None:
+                logger.warning("Row %s: values not placed in columns", key)
+            found.setdefault(key, []).append((row, cells))
 
     expected = [
         RowKey(section, province, "")
@@ -373,71 +563,25 @@ def read_rows(source: Path, gazetteer: Gazetteer) -> dict[RowKey, TextRow]:
         if len(hits) > 1:
             logger.warning("Row %s printed %d times; not located", key, len(hits))
         if len(hits) == 1:
-            out[key] = TextRow(key, hits[0].band, True, hits[0].page)
+            row, cells = hits[0]
+            out[key] = TextRow(key, row.band, True, row.page, cells)
         else:
-            out[key] = TextRow(key, None, False, None)
+            out[key] = TextRow(key, None, False, None, None)
     return out
 
 
 # Matching
 
 
-def _count(value: Number) -> str | None:
-    """Pattern for a count as printed, with its trailing space."""
-    if isinstance(value, bool) or value < 0 or value != int(value):
-        return None
-    return f"{int(value):,}".replace(",", " ?") + " "
-
-
-def _percent(value: Number) -> str | None:
-    """Pattern for every printing of a percentage within the tolerance.
-
-    Tables print one decimal; some rows print none or two ("100,00%").
-    """
-    if isinstance(value, bool) or value < 0:
-        return None
-    printed = []
-    for decimals in (0, 1, 2):
-        scale = 10**decimals
-        lo = math.ceil((value - CFR_TOLERANCE) * scale)
-        hi = math.floor((value + CFR_TOLERANCE) * scale)
-        for k in range(lo, hi + 1):
-            whole = f"{k // scale:,}".replace(",", " ?")
-            printed.append(whole + (f",{k % scale:0{decimals}d}" if decimals else ""))
-    if not printed:
-        return None
-    return "(?:" + "|".join(printed) + ") ?% "
-
-
-def _cell(values: Mapping[str, Number | None], field: str) -> str | None:
-    value = values.get(field)
+def _cell_matches(cell: str | None, value: Number | None, field: str) -> bool:
     if value is None:
-        return NULL
-    return _percent(value) if field in PERCENT_FIELDS else _count(value)
-
-
-def _pattern(values: Mapping[str, Number | None], section: Section) -> str | None:
-    """Pattern for the printed row, or None when a value cannot be printed."""
-    if section == "provinces":
-        affected, total = values.get("zs_affected"), values.get("zs_total")
-        if affected is None and total is None:
-            zs = NULL
-        elif affected is None or total is None:
-            return None
-        else:
-            a, b = _count(affected), _count(total)
-            if a is None or b is None:
-                return None
-            zs = rf"{a.rstrip()} ?/ ?{b.rstrip()}(?: \d+,\d+ ?%)? "
-        cells = [
-            _cell(values, f) for f in ("new_confirmed", "cum_confirmed", "cum_deaths")
-        ]
-        cells += [_cell(values, "cfr_pct"), zs, rf"(?:{ZS} )?"]
-    else:
-        cells = [_cell(values, f) for f in FIELDS[section]]
-    if any(c is None for c in cells):
-        return None
-    return "".join(c for c in cells if c is not None)
+        return cell is None or cell in NULL_TOKENS
+    if cell is None or cell in NULL_TOKENS or isinstance(value, bool) or value < 0:
+        return False
+    if field in PERCENT_FIELDS:
+        printed = float(cell.rstrip(" %").replace(",", "."))
+        return abs(printed - value) <= CFR_TOLERANCE
+    return value == int(value) and int(cell.replace(" ", "")) == value
 
 
 def row_matches(
@@ -449,22 +593,17 @@ def row_matches(
         text_row: From `read_rows`.
         values: The row's fields, as in `Extraction.rows`; a missing field
             counts as null.
-        section: The row's section, which fixes the column order.
+        section: The row's section, which fixes its fields.
 
     Returns:
-        False when the row was not located, a value cannot be printed (a
-        negative or fractional count, half a ZS pair), or the printed tokens
-        differ: a null prints nothing or NA, a count prints its digits with an
-        optional space at each thousands boundary, and a percentage prints
-        within 0.05 of the value with 0 to 2 decimals.
+        False when the row's cells are unknown, or any field differs from
+        its cell: a null needs a blank or NA cell, a count needs its exact
+        whole number, and a percentage needs a printing within 0.05 of it.
     """
-    if not text_row.located or text_row.printed is None:
+    cells = text_row.cells
+    if not text_row.located or cells is None:
         return False
-    pattern = _pattern(values, section)
-    return (
-        pattern is not None
-        and re.fullmatch(pattern, text_row.printed + " ") is not None
-    )
+    return all(_cell_matches(cells[f], values.get(f), f) for f in FIELDS[section])
 
 
 # Fixtures
@@ -474,7 +613,7 @@ def dump_words(pdf_path: Path, out_path: Path) -> Path:
     """Write the words of a sitrep's table pages as a JSON fixture.
 
     The fixture holds the PDF's name and sha256, and for each page from a
-    table's header to its Total row one "top x0 text" string per word, in
+    table's header to its Total row one "top x0 x1 text" string per word, in
     reading order. Whole pages are kept, since a row's band and its
     running-text test read the words around it.
 
@@ -493,7 +632,9 @@ def dump_words(pdf_path: Path, out_path: Path) -> Path:
         "source": pdf_path.name,
         "sha256": sha256_file(pdf_path),
         "pages": {
-            str(page): [f"{w.top} {w.x0} {w.text}" for w in words if w.page == page]
+            str(page): [
+                f"{w.top} {w.x0} {w.x1} {w.text}" for w in words if w.page == page
+            ]
             for page in sorted(pages)
         },
     }
