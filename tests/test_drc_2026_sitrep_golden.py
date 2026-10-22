@@ -1,9 +1,8 @@
 """Offline golden-set test of the sitrep extraction pipeline.
 
 For each of the 13 golden reports, the recorded Gemini and Mistral responses
-in `fixtures/sitrep_golden/recorded/` are normalised, reconciled with the
-text-layer rows of the report's word dump, and sum-checked, with text-layer
-arbitration on and off. No accepted value may differ from the truth, and the
+in `fixtures/sitrep_golden/recorded/` and the report's word dump go through
+`judge` with no review, with text-layer arbitration on and off. No accepted value may differ from the truth, and the
 share of cells held for review must stay under a ceiling, so a rise in flags
 fails here with its count instead of landing on reviewers.
 
@@ -19,23 +18,22 @@ from ebola_2026_outbreak.drc_2026_sitrep_golden import (
     NO_TRUTH_ROW,
     WORDS_DIR,
     Report,
+    Score,
     WrongCell,
     compare,
-    evaluate,
-    flagged_cells,
     load_reports,
     load_truth,
     read_recorded,
+    score,
     truth_cells,
     write_recorded,
 )
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     ModelResult,
-    Reconciled,
     RowKey,
     load_gazetteer,
 )
-from ebola_2026_outbreak.drc_2026_sitrep_textlayer import read_rows
+from ebola_2026_outbreak.drc_2026_sitreps_extract import Records
 
 GAZETTEER = load_gazetteer()
 REPORTS = load_reports()
@@ -48,16 +46,13 @@ FLAG_RATE_CEILING = {True: 0.004, False: 0.032}
 
 
 @cache
-def outcome(report: Report, *, arbitration: bool) -> Reconciled:
-    gemini = read_recorded("gemini", report)
-    mistral = read_recorded("mistral", report)
-    return evaluate(
-        gemini.extraction_raw,
-        mistral.extraction_raw,
-        read_rows(WORDS_DIR / report.words, GAZETTEER),
-        gazetteer=GAZETTEER,
-        arbitration=arbitration,
+def outcome(report: Report, *, arbitration: bool) -> Score:
+    records = Records(
+        read_recorded("gemini", report),
+        read_recorded("mistral", report),
+        WORDS_DIR / report.words,
     )
+    return score(records, gazetteer=GAZETTEER, arbitration=arbitration)
 
 
 @pytest.mark.parametrize("arbitration", [True, False], ids=["arbitration", "strict"])
@@ -69,13 +64,19 @@ def test_no_accepted_value_is_wrong(report: Report, arbitration: bool) -> None:
 
 @pytest.mark.parametrize("arbitration", [True, False], ids=["arbitration", "strict"])
 def test_flag_rate_under_ceiling(arbitration: bool) -> None:
-    flagged = sum(
-        flagged_cells(outcome(r, arbitration=arbitration).flags) for r in REPORTS
-    )
+    flagged = sum(outcome(r, arbitration=arbitration).flagged for r in REPORTS)
     total = sum(truth_cells(TRUTH[r.sitrep_no]) for r in REPORTS)
     assert flagged / total <= FLAG_RATE_CEILING[arbitration], (
         f"{flagged} of {total} cells flagged ({flagged / total:.1%})"
     )
+
+
+def test_arbitration_reaches_judge() -> None:
+    flagged = {
+        arbitration: sum(outcome(r, arbitration=arbitration).flagged for r in REPORTS)
+        for arbitration in (True, False)
+    }
+    assert flagged[False] > flagged[True]
 
 
 def test_every_report_has_truth_and_its_word_dump() -> None:

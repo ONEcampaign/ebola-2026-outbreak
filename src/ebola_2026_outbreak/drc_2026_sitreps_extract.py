@@ -4,20 +4,22 @@ Two steps, run in this order by default:
 
 - `extract` needs the API keys and the PDFs. For every latest upload of a
   report date from `ZONE_START` onwards, it downloads the PDF if absent and
-  fills whatever its cache lacks: the text-layer rows, Gemini's answer and
-  Mistral's answer, keyed on the PDF's sha256. An upload whose cache is
-  complete costs no API call. An API error, an answer that breaks the
-  schema, or a returned model id other than the pin leaves the upload
+  fills whatever its cache lacks: the words of its table pages, Gemini's
+  answer and Mistral's answer, keyed on the PDF's sha256. An upload whose
+  cache is complete costs no API call. An API error, an answer that breaks
+  the schema, or a returned model id other than the pin leaves the upload
   `pending`; the next run tries again, and the answer is not cached.
 - `release` needs neither keys nor PDFs: it is a function of committed files
   (the manifest, the cache, the review CSVs, the gazetteer and the status
-  ledger). For every cached latest upload it normalises both answers,
-  reconciles them against the text layer, applies a completed review whose
-  sha256 matches, and runs the sum checks. A report with nothing open is
-  released. Otherwise it is held and its review CSV is written. A review CSV
-  that exists already is never rewritten, since a reviewer may be filling
-  it: open cells it lacks (after a gazetteer edit, say) are appended as new
-  rows, and filled cells that are no longer flagged are ignored.
+  ledger). For every cached latest upload it normalises both answers and
+  reads the text-layer rows from the cached words, both with the current
+  gazetteer, reconciles the answers against the rows, applies a completed
+  review whose sha256 matches, and runs the sum checks. A report with
+  nothing open is released. Otherwise it is held and its review CSV is
+  written. A review CSV that exists already is never rewritten, since a
+  reviewer may be filling it: open cells it lacks (after a gazetteer edit, or
+  a sum that runs only once a held row is typed in) are appended as new rows,
+  and filled cells that are never open are ignored.
 
 `by_zone.csv` and `headline.csv` are rebuilt from every released upload. A
 report date whose latest upload is held or pending keeps the values of the
@@ -53,6 +55,7 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -71,9 +74,11 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
     check_diff,
     close_issue,
     create_issue,
+    describe,
     issue_body,
     issue_title,
     read_review,
+    resolve,
     review_path,
     review_rows,
     write_review,
@@ -100,13 +105,18 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     load_gazetteer,
     normalise,
     read_model_result,
-    read_text_rows,
+    read_words,
     sha256_file,
     write_model_result,
-    write_text_rows,
+    write_words,
 )
-from ebola_2026_outbreak.drc_2026_sitrep_textlayer import read_rows, row_matches
+from ebola_2026_outbreak.drc_2026_sitrep_textlayer import (
+    dump_words,
+    read_rows,
+    row_matches,
+)
 from ebola_2026_outbreak.drc_2026_sitrep_validate import (
+    Cell,
     Matcher,
     check_sums,
     reconcile,
@@ -227,20 +237,25 @@ type Ledger = dict[UploadKey, LedgerRow]
 
 
 class Records(NamedTuple):
-    """What the cache holds for one PDF; None where a record is missing."""
+    """What the cache holds for one PDF; None where a record is missing.
+
+    `words` is the cached word dump of the PDF's table pages, or any source
+    `read_rows` reads, such as the PDF itself.
+    """
 
     gemini: ModelResult | None
     mistral: ModelResult | None
-    text_rows: dict[RowKey, TextRow] | None
+    words: Path | None
 
     @property
     def complete(self) -> bool:
-        return None not in (self.gemini, self.mistral, self.text_rows)
+        return None not in (self.gemini, self.mistral, self.words)
 
 
 class Verdict(NamedTuple):
     """A report's values after reconciling, review and sum checks.
 
+    `text_rows` are the text-layer rows the report was reconciled with.
     `review_error` says why a review file was not applied, if it was not.
     """
 
@@ -248,7 +263,13 @@ class Verdict(NamedTuple):
     open_flags: list[Flag]
     verified: int
     discrepancies: list[Discrepancy]
+    text_rows: dict[RowKey, TextRow]
     review_error: str | None = None
+
+    @property
+    def open_cells(self) -> set[Cell]:
+        """Distinct open cells; a missing section counts once."""
+        return _cells(self.open_flags)
 
 
 class Release(NamedTuple):
@@ -331,7 +352,7 @@ def read_records(sha256: str | None, *, root: Path | None = None) -> Records:
     gemini_result, mistral_result = (
         read_model_result(sha256, e, root=root) for e in EXTRACTORS
     )
-    return Records(gemini_result, mistral_result, read_text_rows(sha256, root=root))
+    return Records(gemini_result, mistral_result, read_words(sha256, root=root))
 
 
 def _new_row(upload: Upload) -> LedgerRow:
@@ -389,8 +410,8 @@ def extract(
         manifest: From `read_manifest`.
         ledger: From `read_ledger`; it holds each known upload's sha256, so
             an upload whose cache is complete needs no PDF.
-        gazetteer: From `load_gazetteer`, for the text layer and to check
-            each answer against the schema.
+        gazetteer: From `load_gazetteer`, to check each answer against the
+            schema.
         now: UTC timestamp of the run, ISO 8601.
         report_date: Extract only this date.
         call: Download and call the APIs; False only lists what would be
@@ -439,10 +460,10 @@ def _fill(pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer) -> 
     answer again. An answer that breaks the extraction schema, or names a
     model other than the pin, counts as a failure.
     """
-    if records.text_rows is None:
-        text_rows = read_rows(pdf, gazetteer)
-        records = records._replace(text_rows=text_rows)
-        write_text_rows(sha256, text_rows.values(), root=CACHE_DIR)
+    if records.words is None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dump = dump_words(pdf, Path(tmp) / "words.json")
+            records = records._replace(words=write_words(sha256, dump, root=CACHE_DIR))
     for extractor in EXTRACTORS:
         if getattr(records, extractor) is not None:
             continue
@@ -479,62 +500,110 @@ def _call(extractor: Extractor, pdf: Path) -> ModelResult:
 
 
 def judge(
-    records: Records, *, gazetteer: Gazetteer, review_file: Path | None
+    records: Records,
+    *,
+    gazetteer: Gazetteer,
+    review_file: Path | None,
+    arbitration: bool = ARBITRATION,
 ) -> Verdict:
     """Reconcile a report's cached answers, apply its review, check its sums.
 
-    Release and the review pull request check both decide a report here.
-    Only review rows for cells flagged before the review are applied, so a
-    value filled for a cell no longer flagged (after a gazetteer edit, say)
-    is ignored. A review that does not read or apply is ignored, with the
-    reason in `review_error`, so the report stays held. A row that lacks a field without a
-    flag on it gets one, so a missing value is never released as a printed
-    blank.
+    Release, the review pull request check and the golden scorer all decide
+    a report here. The answers are normalised, and the text-layer rows read
+    from the cached words, with `gazetteer`.
+
+    Review rows apply to a fixed point: the rows whose cell is open apply,
+    the open cells are worked out again, and the rows of newly opened cells
+    apply too, until no new row applies. A sum whose operands were held is
+    checked only once they are typed in, so its failure opens cells after
+    the first pass. A row's key is read through the gazetteer, so a row typed
+    under a spelling the gazetteer has since gained answers the canonical
+    row's cell. A filled row whose cell is never open (after a gazetteer
+    edit, say) is ignored. A review that does not read or apply is ignored,
+    with the reason in `review_error`, so the report stays held. A row that
+    lacks a field without a flag on it gets one, so a missing value is never
+    released as a printed blank.
 
     Args:
         records: A complete cache.
         gazetteer: From `load_gazetteer`.
         review_file: The report's review CSV, if it exists.
+        arbitration: Accept the one model's row the text layer confirms when
+            the models disagree, as in `reconcile`.
     """
-    assert records.gemini and records.mistral and records.text_rows is not None
+    assert records.gemini and records.mistral and records.words is not None
+    text_rows = read_rows(records.words, gazetteer)
     reconciled = reconcile(
         normalise(records.gemini.extraction_raw, gazetteer),
         normalise(records.mistral.extraction_raw, gazetteer),
-        records.text_rows,
+        text_rows,
         match=MATCH,
-        arbitration=ARBITRATION,
+        arbitration=arbitration,
     )
     values, verified = reconciled.accepted, set()
     review_error = None
     if review_file is not None:
-        flagged_before = _cells(
-            [*reconciled.flags, *check_sums(reconciled.accepted, set())[0]]
-        )
         try:
-            rows = [
-                r for r in read_review(review_file) if _review_cell(r) in flagged_before
-            ]
-            values, verified = apply(reconciled.accepted, rows, gazetteer=gazetteer)
+            values, verified = _apply_review(
+                reconciled.flags,
+                reconciled.accepted,
+                read_review(review_file),
+                gazetteer=gazetteer,
+            )
         except ValueError as e:
             review_error = str(e)
             logger.warning("Not applying %s: %s", review_file.name, e)
+    open_flags, discrepancies = _open(reconciled.flags, values, verified)
+    return Verdict(
+        values, open_flags, len(verified), discrepancies, text_rows, review_error
+    )
 
+
+def _apply_review(
+    flags: list[Flag],
+    accepted: dict[RowKey, Values],
+    review: list[ReviewRow],
+    *,
+    gazetteer: Gazetteer,
+) -> tuple[dict[RowKey, Values], set[Cell]]:
+    """Apply the review rows of every cell ever open; see `judge`.
+
+    The cells reached only grow, so the loop ends.
+    """
+    values, verified = accepted, set()
+    reached: set[Cell] = set()
+    applied = 0
+    while True:
+        reached |= _cells(_open(flags, values, verified)[0])
+        rows = [r for r in review if _review_cell(r, gazetteer) in reached]
+        if len(rows) == applied:
+            return values, verified
+        values, verified = apply(accepted, rows, gazetteer=gazetteer)
+        applied = len(rows)
+
+
+def _open(
+    flags: list[Flag], values: dict[RowKey, Values], verified: set[Cell]
+) -> tuple[list[Flag], list[Discrepancy]]:
+    """The open flags and publisher discrepancies of reviewed values.
+
+    `flags` are the reconcile flags; one on a cell a reviewer verified is
+    closed.
+    """
     # A flagged row missing from the merged values was dismissed as absent.
     open_flags = [
-        f
-        for f in reconciled.flags
-        if f.key in values and (f.key, f.field) not in verified
+        f for f in flags if f.key in values and (f.key, f.field) not in verified
     ]
     sum_flags, discrepancies = check_sums(values, verified)
     open_flags += sum_flags
-    flagged = {(f.key, f.field) for f in open_flags}
+    flagged = _cells(open_flags)
     open_flags += [
         Flag(key, field, "section_missing")
         for key, row in sorted(values.items())
         for field in FIELDS[key.section]
         if field not in row and (key, field) not in flagged
     ]
-    return Verdict(values, open_flags, len(verified), discrepancies, review_error)
+    return open_flags, discrepancies
 
 
 def release(
@@ -591,12 +660,12 @@ def release(
             continue
 
         out[upload.key] = row._replace(
-            status="held", flagged_cells=len(_cells(verdict.open_flags))
+            status="held", flagged_cells=len(verdict.open_cells)
         )
         held[upload.key] = HeldReport(
             report_date=upload.report_date.isoformat(),
             sha256=sha256,
-            cells=len(_cells(verdict.open_flags)),
+            cells=len(verdict.open_cells),
             review_path=_relative(path),
             pdf_url=upload.source_url,
         )
@@ -605,17 +674,17 @@ def release(
             report_date=upload.report_date.isoformat(),
             sha256=sha256,
             pdf_url=upload.source_url,
-            text_rows=records.text_rows or {},
+            text_rows=verdict.text_rows,
         )
         if not path.exists():
             reviews[path] = rows
             continue
         try:
-            present = {(_review_cell(r)) for r in read_review(path)}
+            present = {_review_cell(r, gazetteer) for r in read_review(path)}
         except ValueError as e:
             logger.warning("Not extending %s: %s", path.name, e)
             continue
-        if missing := [r for r in rows if _review_cell(r) not in present]:
+        if missing := [r for r in rows if _review_cell(r, gazetteer) not in present]:
             logger.warning(
                 "%s lacks %d open cells; appending them", path.name, len(missing)
             )
@@ -680,30 +749,27 @@ def _log_discrepancies(report: str, verdict: Verdict) -> None:
         logger.info(
             "Publisher discrepancy in %s: %s %s printed %s, sums to %s",
             report,
-            _describe(d.key),
+            describe(d.key),
             d.field,
             d.printed,
             d.computed,
         )
 
 
-def _describe(key: RowKey) -> str:
-    return " / ".join(part for part in key if part)
-
-
-def _cells(flags: Sequence[Flag]) -> set[tuple[RowKey, str]]:
+def _cells(flags: Sequence[Flag]) -> set[Cell]:
     return {(f.key, f.field or "") for f in flags}
 
 
-def _review_cell(row: ReviewRow) -> tuple[RowKey, str]:
+def _review_cell(row: ReviewRow, gazetteer: Gazetteer) -> Cell:
     """The flagged cell a review row answers.
 
-    A row a reviewer added under a placeholder answers the placeholder: its
-    province's missing zones, or the whole section.
+    A flagged row answers its row's cell, read through the gazetteer as
+    `apply` reads it. A row a reviewer added under a placeholder answers the
+    placeholder: its province's missing zones, or the whole section.
     """
     key = RowKey(row["section"], row["province"], row["zone"])
     if row["reason"]:
-        return (key, row["field"])
+        return (resolve(key, gazetteer) or key, row["field"])
     if row["section"] == "zones" and row["province"]:
         return (RowKey("zones", row["province"], ""), "")
     return (RowKey(row["section"], "", ""), "")
@@ -1022,10 +1088,10 @@ def _open_message(flag: Flag) -> str:
     """What a reviewer must do about a cell still open."""
     if flag.field is None:
         return (
-            f"{_describe(flag.key)} rows are missing; add one row per cell under "
+            f"{describe(flag.key)} rows are missing; add one row per cell under "
             "the row with an empty field"
         )
-    cell = f"{_describe(flag.key)} {flag.field}"
+    cell = f"{describe(flag.key)} {flag.field}"
     if flag.reason == "sum_mismatch":
         return (
             f"{cell} is open (sum_mismatch): the table sums do not hold with the "

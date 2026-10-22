@@ -353,12 +353,12 @@ def apply(
     """
     review = list(review)
     for i in _unplaced(review):
-        raise ValueError(f"{_describe(_key(review[i]))}: {_UNPLACED}")
+        raise ValueError(f"{describe(_key(review[i]))}: {_UNPLACED}")
     dismissed = {_key(row) for row in review if _dismissed(row)}
     for row in review:
         if _dismissed(row) and resolve(_key(row), gazetteer) is not None:
             raise ValueError(
-                f"{_describe(_key(row))} is in the gazetteer, so it is a real zone; "
+                f"{describe(_key(row))} is in the gazetteer, so it is a real zone; "
                 f"type its values instead of {ABSENT!r}"
             )
     values = {
@@ -373,17 +373,17 @@ def apply(
         key = resolve(printed, gazetteer)
         if printed in dismissed or key in dismissed:
             raise ValueError(
-                f"{_describe(printed)} is marked {ABSENT!r} and also given values"
+                f"{describe(printed)} is marked {ABSENT!r} and also given values"
             )
         if key is None:
             raise ValueError(
-                f"{_describe(printed)} is not in the gazetteer: add the zone, or "
+                f"{describe(printed)} is not in the gazetteer: add the zone, or "
                 f"its spelling as an alias, to {GAZETTEER_PATH.name}, or type "
                 f"{ABSENT!r} if the table does not print it"
             )
         value = parse_value(row["reviewed_value"], field)
         if verified.get((key, field), value) != value:
-            raise ValueError(f"{_describe(key)} {field} is reviewed twice")
+            raise ValueError(f"{describe(key)} {field} is reviewed twice")
         verified[key, field] = value
         values.setdefault(key, {})[field] = value
     return values, set(verified)
@@ -436,7 +436,8 @@ def _key(row: ReviewRow) -> RowKey:
     return RowKey(row["section"], row["province"], row["zone"])
 
 
-def _describe(key: RowKey) -> str:
+def describe(key: RowKey) -> str:
+    """A row key as a reader names it: "zones / Tshopo / Makiso-Kisangani"."""
     return " / ".join(part for part in key if part)
 
 

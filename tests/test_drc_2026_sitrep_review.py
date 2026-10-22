@@ -35,7 +35,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     load_gazetteer,
     normalise,
     write_model_result,
-    write_text_rows,
+    write_words,
 )
 from ebola_2026_outbreak.drc_2026_sitrep_validate import check_sums, reconcile
 from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
@@ -426,6 +426,7 @@ def test_gh_runs_in_actions(
 def check_pr(monkeypatch: pytest.MonkeyPatch):
     """Run the review check on a repository, reading the stub text layer."""
     monkeypatch.setattr(ex, "MATCH", match)
+    monkeypatch.setattr(ex, "read_rows", lambda words, gazetteer: text_layer())
 
     def run(repo: Path) -> list[str]:
         return ex.check_review(base="HEAD", repo=repo)
@@ -447,7 +448,10 @@ def make_repo(
     for name, rows in (("gemini", gemini), ("mistral", mistral)):
         result = ModelResult(raw(rows), name, name, {}, "2026-10-15T12:00:00Z", {})
         write_model_result(SHA, name, result, root=cache)
-    write_text_rows(SHA, text_layer().values(), root=cache)
+    # The check reads the stub text layer in place of these words.
+    words = tmp_path / "words.json"
+    words.write_text("{}\n")
+    write_words(SHA, words, root=cache)
     (repo / "README.md").write_text("Readme\n")
 
     reconciled = reconcile(

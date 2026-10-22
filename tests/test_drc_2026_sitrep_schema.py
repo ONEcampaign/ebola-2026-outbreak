@@ -13,14 +13,13 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     HealthZone,
     ModelResult,
     RowKey,
-    TextRow,
     load_gazetteer,
     name_key,
     normalise,
     read_model_result,
-    read_text_rows,
+    read_words,
     write_model_result,
-    write_text_rows,
+    write_words,
 )
 
 GAZETTEER = load_gazetteer()
@@ -209,7 +208,7 @@ def test_normalise_type_checks_counts(cases: Any, expected: Any) -> None:
 def test_cache_round_trip(tmp_path: Path) -> None:
     sha = "ab" * 32
     assert read_model_result(sha, "gemini", root=tmp_path) is None
-    assert read_text_rows(sha, root=tmp_path) is None
+    assert read_words(sha, root=tmp_path) is None
 
     result = ModelResult(
         extraction_raw=raw(),
@@ -222,13 +221,11 @@ def test_cache_round_trip(tmp_path: Path) -> None:
     write_model_result(sha, "gemini", result, root=tmp_path)
     assert read_model_result(sha, "gemini", root=tmp_path) == result
 
-    rows = [
-        TextRow(RowKey("zones", "Ituri", "Bunia"), "12 6 50,0  0  0", True, 3),
-        TextRow(RowKey("zone_total", "", ""), None, False, None),
-    ]
-    write_text_rows(sha, rows, root=tmp_path)
-    assert read_text_rows(sha, root=tmp_path) == {row.key: row for row in rows}
+    dump = Path(__file__).parent / "fixtures" / "sitrep_words" / "SitRep_096.json"
+    path = write_words(sha, dump, root=tmp_path)
+    assert read_words(sha, root=tmp_path) == path
+    assert path.read_bytes() == dump.read_bytes()
     assert sorted(p.name for p in (tmp_path / sha).iterdir()) == [
         "gemini.json",
-        "textlayer.json",
+        "words.json",
     ]

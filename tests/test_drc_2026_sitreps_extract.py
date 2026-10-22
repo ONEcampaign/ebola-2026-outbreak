@@ -2,6 +2,7 @@
 
 import csv
 import json
+import shutil
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -16,15 +17,13 @@ from ebola_2026_outbreak import drc_2026_sitrep_review as review
 from ebola_2026_outbreak import drc_2026_sitreps_extract as ex
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     EXTRACTORS,
+    GAZETTEER_PATH,
     ModelResult,
     RowKey,
-    TextRow,
     cache_path,
-    load_gazetteer,
     write_model_result,
-    write_text_rows,
+    write_words,
 )
-from ebola_2026_outbreak.drc_2026_sitrep_textlayer import read_rows
 from ebola_2026_outbreak.drc_2026_sitreps_download import MANIFEST_SCHEMA
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -37,13 +36,8 @@ NOW = "2026-10-20T12:00:00+00:00"
 SHA_A, SHA_B = "aa" * 32, "bb" * 32
 
 ZONE = RowKey("zones", "Tshopo", "Makiso-Kisangani")
-# Text-layer rows matching the SitRep 96 Gemini fixture; CTE deaths is blank.
-TEXT_96 = {
-    RowKey("provinces", "Tshopo", ""): "1 12 6 50,0 % 1/23",
-    RowKey("zone_subtotals", "Tshopo", ""): "12 6 50,0 % 1 0 0",
-    RowKey("zone_total", "", ""): "12 6 50,0 % 1 0 0",
-    ZONE: "12 6 50,0 % 1 0 0",
-}
+# A zone-table row matching the SitRep 96 Gemini fixture; CTE deaths is blank.
+ZONE_ROW_96 = "12 6 50,0 % 1 0 0"
 
 
 def _result(raw: dict[str, Any], model: str) -> ModelResult:
@@ -58,23 +52,47 @@ def _raw_157() -> dict[str, Any]:
     return mistral.parse_annotation(json.loads(MISTRAL_157.read_text()))
 
 
-def _cache(sha: str, raw: dict[str, Any], text: dict[RowKey, TextRow]) -> None:
-    """Cache one report as both models read it, with its text layer."""
+def _cache(sha: str, raw: dict[str, Any], words: Path) -> None:
+    """Cache one report as both models read it, with its word dump."""
     write_model_result(
         sha, "gemini", _result(raw, gemini.GEMINI_MODEL), root=ex.CACHE_DIR
     )
     write_model_result(
         sha, "mistral", _result(raw, mistral.MISTRAL_OCR_MODEL), root=ex.CACHE_DIR
     )
-    write_text_rows(sha, text.values(), root=ex.CACHE_DIR)
+    write_words(sha, words, root=ex.CACHE_DIR)
 
 
-def _text_96(*, located: bool = True) -> dict[RowKey, TextRow]:
-    """SitRep 96 text rows; with `located` False the zone row is not found."""
-    rows = {key: TextRow(key, printed, True, 3) for key, printed in TEXT_96.items()}
-    if not located:
-        rows[ZONE] = TextRow(ZONE, None, False, None)
-    return rows
+def _line(top: int, label: str, band: str) -> list[str]:
+    """Dump words of one table row: its label, then each printed token."""
+    tokens = [f"{top} {100 + 30 * i} {t}" for i, t in enumerate(band.split())]
+    return [f"{top} 40 {label}", *tokens]
+
+
+def _words_96(
+    *, zone: str | None = ZONE.zone, subtotal: bool = True, name: str = "words"
+) -> Path:
+    """A word dump printing the rows of the SitRep 96 Gemini fixture.
+
+    Page 2 holds the province table, new cases first, and page 3 the zone
+    table: the Tshopo subtotal row (left out when `subtotal` is False), a
+    zone row labelled `zone` (left out when None), and the Total row.
+    """
+    province = [
+        "100 30 Nouveaux",
+        "100 100 Létalité",
+        *_line(130, "Tshopo", "1 12 6 50,0 % 1/23"),
+        *_line(150, "Total", "1 12 6 50,0 % 1/23"),
+    ]
+    zones = ["100 100 Létalité", "100 250 intra-CTE"]
+    if subtotal:
+        zones += _line(130, "Tshopo", ZONE_ROW_96)
+    if zone is not None:
+        zones += _line(150, zone, ZONE_ROW_96)
+    zones += _line(170, "Total", ZONE_ROW_96)
+    path = ex.CACHE_DIR.parent / f"{name}.json"
+    path.write_text(json.dumps({"pages": {"2": province, "3": zones}}))
+    return path
 
 
 def _manifest(*uploads: tuple[int, str]) -> None:
@@ -167,7 +185,7 @@ def test_clean_release_writes_outputs_and_ledger(
 ) -> None:
     _manifest((1, "t1"))
     _ledger((1, "t1", SHA_A))
-    _cache(SHA_A, _raw_96(), _text_96())
+    _cache(SHA_A, _raw_96(), _words_96())
 
     ex.run("release", now=NOW)
 
@@ -209,11 +227,9 @@ def test_clean_release_writes_outputs_and_ledger(
 
 
 def test_flagged_report_is_held_once(issues: list[tuple[str, Any]]) -> None:
-    raw = _raw_157()
-    gazetteer = load_gazetteer()
     _manifest((710, "t1"))
     _ledger((710, "t1", SHA_A))
-    _cache(SHA_A, raw, read_rows(WORDS_157, gazetteer))
+    _cache(SHA_A, _raw_157(), WORDS_157)
 
     ex.run("release", now=NOW)
 
@@ -239,7 +255,7 @@ def test_flagged_report_is_held_once(issues: list[tuple[str, Any]]) -> None:
 
 def _hold_96(sha: str = SHA_A) -> Path:
     """Cache SitRep 96 with its zone row missing from the text layer."""
-    _cache(sha, _raw_96(), _text_96(located=False))
+    _cache(sha, _raw_96(), _words_96(zone=None))
     return ex.REVIEW_DIR / f"{DAY}_{sha[:8]}.csv"
 
 
@@ -289,10 +305,7 @@ def test_review_file_grows_when_flags_change(
     before = path.read_text()
 
     # A changed text layer moves the flag from the zone row to its subtotal.
-    text = _text_96()
-    subtotal = RowKey("zone_subtotals", "Tshopo", "")
-    text[subtotal] = TextRow(subtotal, None, False, None)
-    write_text_rows(SHA_A, text.values(), root=ex.CACHE_DIR)
+    write_words(SHA_A, _words_96(subtotal=False), root=ex.CACHE_DIR)
     lines = ex.run("release", now=NOW)
 
     after = path.read_text()
@@ -314,6 +327,93 @@ def test_review_file_grows_when_flags_change(
     assert issues == [("create", "Review 1 held DRC sitrep"), ("close", 7)]
 
 
+def test_sum_opened_by_a_review_releases_as_a_discrepancy(
+    issues: list[tuple[str, Any]],
+) -> None:
+    _manifest((1, "t1"))
+    _ledger((1, "t1", SHA_A))
+    path = _hold_96()
+    ex.run("release", now=NOW)
+
+    # The PDF prints 13 cases for the zone and 12 for its province: the
+    # subtotal check runs once the zone is typed in, and fails.
+    _fill_review(path, {**TRUE_ZONE, "cum_confirmed": "13"})
+    ex.run("release", now=NOW)
+    assert _status()[1]["status"] == "held"
+    rows = review.read_review(path)
+    assert [(r["section"], r["field"], r["reason"]) for r in rows[7:]] == [
+        ("zone_subtotals", "cum_confirmed", "sum_mismatch")
+    ]
+
+    # The reviewer confirms the subtotal as printed. Both failures rest on
+    # verified values only: the subtotal sum, and the zone's CFR (6 of 13
+    # is not 50.0).
+    _fill_review(path, {**TRUE_ZONE, "cum_confirmed": "12"}, section="zone_subtotals")
+    ex.run("release", now=NOW)
+    row = _status()[1]
+    assert (row["status"], row["flagged_cells"], row["discrepancies"]) == (
+        "released",
+        8,
+        2,
+    )
+    by_zone = pl.read_csv(ex.BY_ZONE_PATH, schema=ex.BY_ZONE_SCHEMA)
+    cases = by_zone.filter(indicator="Cumulative confirmed cases")
+    assert dict(cases.select("level", "value").iter_rows()) == {
+        "national": 12,
+        "province": 12,
+        "zone": 13,
+    }
+
+
+MISSPELT = "Makiso-Kisangany"
+
+
+@pytest.mark.parametrize(
+    ("printed", "verified"),
+    [
+        # The text layer, read with the alias, confirms the models' row, so
+        # the typed values are not needed.
+        (MISSPELT, 0),
+        # The text layer cannot confirm it, so the typed values verify it.
+        (None, 7),
+    ],
+    ids=["pdf-prints-alias", "row-not-in-text"],
+)
+def test_alias_and_values_in_one_review_release(
+    issues: list[tuple[str, Any]],
+    paths: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    printed: str | None,
+    verified: int,
+) -> None:
+    gazetteer = paths / "zones.csv"
+    gazetteer.write_text(GAZETTEER_PATH.read_text())
+    monkeypatch.setattr(ex, "GAZETTEER_PATH", gazetteer)
+    raw = _raw_96()
+    raw["zones"][0]["zone"] = MISSPELT
+    _manifest((1, "t1"))
+    _ledger((1, "t1", SHA_A))
+    _cache(SHA_A, raw, _words_96(zone=printed))
+    ex.run("release", now=NOW)
+    path = ex.REVIEW_DIR / f"{DAY}_{SHA_A[:8]}.csv"
+    assert {(r["zone"], r["reason"]) for r in review.read_review(path)} == {
+        (MISSPELT, "unknown_name")
+    }
+
+    # One pull request adds the spelling as an alias and types the values.
+    canonical = f"Tshopo,{ZONE.zone},\n"
+    gazetteer.write_text(
+        gazetteer.read_text().replace(canonical, f"Tshopo,{ZONE.zone},{MISSPELT}\n")
+    )
+    _fill_review(path, TRUE_ZONE)
+    ex.run("release", now=NOW)
+
+    row = _status()[1]
+    assert (row["status"], row["flagged_cells"]) == ("released", verified)
+    by_zone = pl.read_csv(ex.BY_ZONE_PATH, schema=ex.BY_ZONE_SCHEMA)
+    assert by_zone.filter(level="zone")["zone"].unique().to_list() == [ZONE.zone]
+
+
 def test_review_of_replaced_upload_is_superseded(
     issues: list[tuple[str, Any]],
 ) -> None:
@@ -327,7 +427,7 @@ def test_review_of_replaced_upload_is_superseded(
     ledger = ex.read_ledger()
     ledger[1, "t2"] = ledger[1, "t1"]._replace(modified="t2", sha256=SHA_B)
     ex.write_ledger(ledger)
-    _cache(SHA_B, _raw_96(), _text_96())
+    _cache(SHA_B, _raw_96(), _words_96())
     _fill_review(old_review, TRUE_ZONE)
     ex.run("release", now=NOW)
 
@@ -344,7 +444,7 @@ def test_held_reupload_keeps_released_values(
 ) -> None:
     _manifest((1, "t1"))
     _ledger((1, "t1", SHA_A))
-    _cache(SHA_A, _raw_96(), _text_96())
+    _cache(SHA_A, _raw_96(), _words_96())
     ex.run("release", now=NOW)
 
     _manifest((1, "t1"), (2, "t2"))
@@ -366,7 +466,7 @@ def test_held_reupload_keeps_released_values(
 def test_release_refuses_to_drop_a_released_date() -> None:
     _manifest((1, "t1"))
     _ledger((1, "t1", SHA_A))
-    _cache(SHA_A, _raw_96(), _text_96())
+    _cache(SHA_A, _raw_96(), _words_96())
     ex.run("release", now=NOW)
     written = {p: p.read_text() for p in ex.STATUS_PATH.parent.iterdir()}
 
@@ -400,8 +500,9 @@ def clients(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     monkeypatch.setattr(mistral, "extract", fake("mistral", mistral.MISTRAL_OCR_MODEL))
     pdf = tmp_path / "710.pdf"
     pdf.write_bytes(WORDS_157.read_bytes())
-    # read_rows reads a word dump the way it reads a PDF.
-    monkeypatch.setattr(ex, "read_rows", lambda _, g: read_rows(WORDS_157, g))
+    monkeypatch.setattr(
+        ex, "dump_words", lambda _, out: shutil.copyfile(WORDS_157, out)
+    )
     monkeypatch.setattr(ex, "download", lambda item, refresh=False: pdf)
     _manifest((710, "t1"))
     return state
@@ -415,7 +516,7 @@ def test_extract_fills_cache_once(
     row = _status()[710]
     sha = row["sha256"]
     assert row["gemini_model"] == gemini.GEMINI_MODEL
-    for name in (*EXTRACTORS, "textlayer"):
+    for name in (*EXTRACTORS, "words"):
         assert cache_path(sha, name, root=ex.CACHE_DIR).exists()
 
     ex.run(None, now=NOW)
@@ -526,7 +627,7 @@ def test_dry_run_with_keys_caches_answers_and_writes_no_release(
     assert sorted(p.name for p in cached.iterdir()) == [
         "gemini.json",
         "mistral.json",
-        "textlayer.json",
+        "words.json",
     ]
     assert not ex.STATUS_PATH.parent.exists()
     assert not ex.REVIEW_DIR.exists()

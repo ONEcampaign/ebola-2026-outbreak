@@ -8,10 +8,11 @@ text layer and checked against the PDFs, and
 `tests/fixtures/sitrep_golden/kpis.csv` for the headline indicators, checked
 against the rendered first page.
 
-A report is scored as release would treat it: both raw responses are
-normalised, reconciled with the text-layer rows, and sum-checked; a value
-that `check_sums` flags is held, not accepted. `compare` lists every accepted
-value that differs from the truth. Truth was adjudicated only where earlier
+A report is scored by `judge`, the function release decides with, given no
+review: a value is accepted when `judge` leaves its cell closed, so a value
+the sum checks flag is held, not accepted. Cells of a held report that are
+closed still count as accepted, so the score covers every report, released
+or not. `compare` lists every accepted value that differs from the truth. Truth was adjudicated only where earlier
 extractions disagreed, so 0 accepted-wrong values on this set is a regression
 pin, not a measured error rate.
 
@@ -37,7 +38,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import httpx
 
@@ -50,22 +51,17 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     PERCENT_FIELDS,
     SECTIONS,
     Extractor,
-    Flag,
     Gazetteer,
     ModelResult,
     Number,
-    Reconciled,
     RowKey,
     Section,
-    TextRow,
     Values,
     load_gazetteer,
-    normalise,
     sha256_file,
 )
-from ebola_2026_outbreak.drc_2026_sitrep_textlayer import read_rows, row_matches
-from ebola_2026_outbreak.drc_2026_sitrep_validate import check_sums, reconcile
 from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
+from ebola_2026_outbreak.drc_2026_sitreps_extract import ARBITRATION, Records, judge
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +96,13 @@ class Report(NamedTuple):
     source_url: str
     sha256: str
     words: str
+
+
+class Score(NamedTuple):
+    """A report's accepted values and the number of cells held for review."""
+
+    accepted: dict[RowKey, Values]
+    flagged: int
 
 
 class WrongCell(NamedTuple):
@@ -213,34 +216,29 @@ def read_recorded(
 # Scoring
 
 
-def evaluate(
-    gemini_raw: Mapping[str, Any],
-    mistral_raw: Mapping[str, Any],
-    text_rows: dict[RowKey, TextRow],
-    *,
-    gazetteer: Gazetteer,
-    arbitration: bool = True,
-) -> Reconciled:
-    """Reconcile and sum-check one report as release would.
+def score(
+    records: Records, *, gazetteer: Gazetteer, arbitration: bool = ARBITRATION
+) -> Score:
+    """Judge one report with no review, as release first would.
+
+    Args:
+        records: Both recorded answers and the report's word dump or PDF.
+        gazetteer: From `load_gazetteer`.
+        arbitration: Passed to `judge`; release's setting by default.
 
     Returns:
-        The values release would accept, with every value `check_sums`
-        flags removed, and the flags of both `reconcile` and `check_sums`.
+        The values `judge` leaves no cell open on, and the count of its open
+        cells, a whole missing section counting once.
     """
-    reconciled = reconcile(
-        normalise(gemini_raw, gazetteer),
-        normalise(mistral_raw, gazetteer),
-        text_rows,
-        match=row_matches,
-        arbitration=arbitration,
+    verdict = judge(
+        records, gazetteer=gazetteer, review_file=None, arbitration=arbitration
     )
-    sum_flags, _ = check_sums(reconciled.accepted, set())
-    held = {(f.key, f.field) for f in sum_flags}
+    held = verdict.open_cells
     accepted = {
         key: {f: v for f, v in values.items() if (key, f) not in held}
-        for key, values in reconciled.accepted.items()
+        for key, values in verdict.values.items()
     }
-    return Reconciled(accepted, [*reconciled.flags, *sum_flags])
+    return Score(accepted, len(held))
 
 
 def compare(
@@ -259,11 +257,6 @@ def compare(
             elif expected_row[field] != value:
                 wrong.append(WrongCell(key, field, value, expected_row[field]))
     return wrong
-
-
-def flagged_cells(flags: Iterable[Flag]) -> int:
-    """Distinct cells held for review; a whole missing section counts once."""
-    return len({(f.key, f.field) for f in flags})
 
 
 def truth_cells(truth: Mapping[RowKey, Values]) -> int:
@@ -378,15 +371,13 @@ def run(*, limit: int | None = None) -> int:
                         f"{result.model_id_returned}, recorded {pinned}"
                     )
 
-            outcome = evaluate(
-                results["gemini"].extraction_raw,
-                results["mistral"].extraction_raw,
-                read_rows(pdf, gazetteer),
+            outcome = score(
+                Records(results["gemini"], results["mistral"], pdf),
                 gazetteer=gazetteer,
             )
             report_truth = truth[report.sitrep_no]
             wrong = compare(outcome.accepted, report_truth)
-            cells = flagged_cells(outcome.flags)
+            cells = outcome.flagged
             flagged += cells
             total += truth_cells(report_truth)
             print(

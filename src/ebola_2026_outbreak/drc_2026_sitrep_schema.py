@@ -18,11 +18,12 @@ zone's province, so a zone filed under another province, or a name it does
 not know, flags every field of that row for review. An unknown name is
 resolved by adding an alias to the gazetteer.
 
-Raw model responses and the PDF text layer's printed rows are cached in
+Raw model responses and the words of the PDF's table pages are cached in
 `data/interim/drc_2026_sitrep_extractions/<sha256>/`, keyed on the PDF's
 sha256 so a re-upload never overwrites the previous version's record. Parsed
-extractions are not cached: release normalises again from the raw responses,
-so a gazetteer change takes effect on the next run.
+extractions and text-layer rows are not cached: release normalises again
+from the raw responses and reads the rows again from the words, so a
+gazetteer change takes effect on the next run.
 """
 
 import copy
@@ -32,7 +33,7 @@ import logging
 import re
 import unicodedata
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -516,7 +517,7 @@ def sha256_file(path: Path) -> str:
 
 
 def cache_path(
-    sha256: str, name: Extractor | Literal["textlayer"], *, root: Path = CACHE_DIR
+    sha256: str, name: Extractor | Literal["words"], *, root: Path = CACHE_DIR
 ) -> Path:
     """Path of one cached record for a PDF."""
     return root / sha256 / f"{name}.json"
@@ -552,37 +553,24 @@ def read_model_result(
     return ModelResult(**json.loads(path.read_text()))
 
 
-def write_text_rows(
-    sha256: str, rows: Iterable[TextRow], *, root: Path = CACHE_DIR
-) -> Path:
-    """Cache text-layer rows as `<root>/<sha256>/textlayer.json`.
+def write_words(sha256: str, dump: Path, *, root: Path = CACHE_DIR) -> Path:
+    """Cache a word dump as `<root>/<sha256>/words.json`.
 
-    The record is a JSON array of objects with keys `section, province, zone,
-    printed, located, page`, sorted by row key.
+    Args:
+        sha256: The PDF's sha256.
+        dump: The words of the PDF's table pages, as
+            `drc_2026_sitrep_textlayer.dump_words` writes them.
+        root: The cache directory.
     """
-    records = [
-        {
-            **row.key._asdict(),
-            "printed": row.printed,
-            "located": row.located,
-            "page": row.page,
-        }
-        for row in sorted(rows)
-    ]
-    path = cache_path(sha256, "textlayer", root=root)
-    _write_json(path, records)
+    path = cache_path(sha256, "words", root=root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_bytes(dump.read_bytes())
+    tmp.replace(path)
     return path
 
 
-def read_text_rows(
-    sha256: str, *, root: Path = CACHE_DIR
-) -> dict[RowKey, TextRow] | None:
-    """Read cached text-layer rows by key, or None if the PDF has none yet."""
-    path = cache_path(sha256, "textlayer", root=root)
-    if not path.exists():
-        return None
-    rows: dict[RowKey, TextRow] = {}
-    for r in json.loads(path.read_text()):
-        key = RowKey(r["section"], r["province"], r["zone"])
-        rows[key] = TextRow(key, r["printed"], r["located"], r["page"])
-    return rows
+def read_words(sha256: str, *, root: Path = CACHE_DIR) -> Path | None:
+    """Path of a PDF's cached word dump, or None if the PDF has none yet."""
+    path = cache_path(sha256, "words", root=root)
+    return path if path.exists() else None
