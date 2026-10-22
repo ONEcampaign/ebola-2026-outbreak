@@ -1,17 +1,17 @@
 name: Sitrep review check
 
+# Runs on every pull request so main can require it. A pull request that
+# changes no review file and no gazetteer row passes at once.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "data/review/**"
-      - "data/reference/drc_2026_health_zones.csv"
 
 permissions:
   contents: read
 
 jobs:
   check:
+    name: Sitrep review check
     runs-on: ubuntu-latest
     steps:
       # The default pull_request ref is the merge with the base branch, so rows
@@ -21,24 +21,41 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Find review changes
+        id: changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- data/review data/reference/drc_2026_health_zones.csv; then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "No review file or gazetteer change"
+          else
+            echo "review=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # The checker runs from the base branch against the PR's data, so a PR
       # cannot change the code that judges it.
       - uses: actions/checkout@v7
+        if: steps.changes.outputs.review == 'true'
         with:
           ref: ${{ github.base_ref }}
           path: base
 
       - name: Install uv
+        if: steps.changes.outputs.review == 'true'
         uses: astral-sh/setup-uv@v10.0.0
 
       - name: Set up Python 3.13
+        if: steps.changes.outputs.review == 'true'
         run: uv python install '3.13'
 
       - name: Install dependencies
+        if: steps.changes.outputs.review == 'true'
         run: uv sync --frozen --project base
 
       # Passes exactly when the release job would release the reviewed reports.
       - name: Check review
+        if: steps.changes.outputs.review == 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: uv run --project base python base/src/ebola_2026_outbreak/drc_2026_sitreps_extract.py check --base "origin/$BASE_REF" --repo "$GITHUB_WORKSPACE"
