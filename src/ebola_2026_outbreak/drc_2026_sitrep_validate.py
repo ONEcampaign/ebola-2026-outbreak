@@ -29,8 +29,9 @@ values:
 6. a report missing a row it must print fails: the headline row, the zone
    table's Total row, and a subtotal row for each province with zone or
    summary rows. Each field of the missing row is flagged
-   `section_missing`, so a reviewer can enter it, and a section with no row
-   at all is flagged as a whole.
+   `section_missing`, so a reviewer can enter it. A subtotal row with no
+   zone rows under it flags its province's zones as a missing section, and
+   a section with no row at all is flagged as a whole.
 
 A blank counts as 0 in a sum. A check with an operand still under review is
 skipped; a missing row is flagged by check 6, so no check goes unchecked
@@ -202,8 +203,9 @@ def check_sums(
         verified: Cells whose value a reviewer entered.
 
     Returns:
-        `section_missing` flags on every field of each missing row and on
-        each section with no row at all, then `sum_mismatch` flags on the
+        `section_missing` flags on every field of each missing row, on the
+        zones of each subtotal row with none, and on each section with no
+        row at all, then `sum_mismatch` flags on the
         machine-accepted operands of every failed check, one per cell; and a
         discrepancy for each failed check whose operands are all verified.
     """
@@ -219,6 +221,12 @@ def check_sums(
         Flag(key, field, "section_missing")
         for key in sorted(expected - values.keys())
         for field in FIELDS[key.section]
+    )
+    zone_provinces = {k.province for k in values if k.section == "zones"}
+    flags.extend(
+        Flag(RowKey("zones", key.province, ""), None, "section_missing")
+        for key in sorted(values)
+        if key.section == "zone_subtotals" and key.province not in zone_provinces
     )
     mismatched: dict[Cell, None] = {}
     discrepancies: list[Discrepancy] = []
@@ -284,6 +292,9 @@ def _equations(
             for k in values
             if k.section == "zones" and k.province == subtotal.province
         ]
+        if not zones:
+            # Flagged as missing zones by `check_sums`.
+            continue
         for field in COUNT_FIELDS:
             yield (subtotal, field), [(z, field) for z in zones]
 

@@ -444,6 +444,15 @@ def test_missing_row_is_flagged_for_entry(
     )
 
 
+def test_subtotal_without_zones_flags_the_missing_zones() -> None:
+    values = {k: v for k, v in report().items() if k not in ITURI_ZONES}
+
+    assert check_sums(values, set()) == (
+        [Flag(RowKey("zones", "Ituri", ""), None, "section_missing")],
+        [],
+    )
+
+
 def test_empty_report_flags_every_section() -> None:
     flags, _ = check_sums({}, set())
 
