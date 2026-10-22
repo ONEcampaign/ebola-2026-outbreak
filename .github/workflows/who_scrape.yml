@@ -1,0 +1,50 @@
+name: WHO scrape
+
+on:
+  schedule:
+    # WHO updates its table daily.
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Outside the daily-scrape group, so a queued sitrep run can never cancel a
+# capture: WHO shows only the latest figures, so a lost day cannot be recovered.
+concurrency:
+  group: who-scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+
+      - name: Set up Python 3.13
+        run: uv python install '3.13'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Scrape WHO table
+        run: uv run python src/ebola_2026_outbreak/drc_2026_who.py
+
+      - name: Commit WHO table
+        run: |
+          git add data/processed/drc_2026_who_by_country.csv
+          if git diff --cached --quiet; then
+            echo "No WHO changes"
+            exit 0
+          fi
+          git commit -m "data: WHO Bundibugyo table $(date -u +%Y-%m-%d)"
+          git pull --rebase
+          git push

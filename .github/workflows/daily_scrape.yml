@@ -1,9 +1,14 @@
-name: Daily DRC 2026 scrape
+name: Daily DRC 2026 sitrep scrape
 
 on:
   schedule:
-    # WHO updates its table daily; DRC sitreps land the morning after the report date.
+    # DRC sitreps land the morning after the report date. The second run
+    # retries the day when a pending run was cancelled by a queued release run
+    # in the shared concurrency group. Download, extract and release are
+    # idempotent and the cache means no sitrep is paid for twice, so a second
+    # run on a quiet day does nothing.
     - cron: "0 12 * * *"
+    - cron: "0 18 * * *"
   workflow_dispatch:
 
 permissions:
@@ -34,22 +39,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Scrape WHO table
-        run: uv run python src/ebola_2026_outbreak/drc_2026_who.py
-
-      # WHO shows only the latest figures, so commit the capture before the
-      # sitrep steps can fail and discard it.
-      - name: Commit WHO table
-        run: |
-          git add data/processed/drc_2026_who_by_country.csv
-          if git diff --cached --quiet; then
-            echo "No WHO changes"
-            exit 0
-          fi
-          git commit -m "data: WHO Bundibugyo table $(date -u +%Y-%m-%d)"
-          git pull --rebase
-          git push
-
       # The manifest records media already seen, so only new sitreps download.
       - name: Download new sitreps
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_download.py
@@ -62,23 +51,42 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_extract.py extract
 
+      # Commit the paid-for answers and the ledger before release, so a release
+      # that fails does not discard them.
+      - name: Commit extractions
+        run: |
+          git add data/interim/drc_2026_sitrep_extractions data/processed/drc_2026_sitrep_manifest.csv data/processed/drc_2026_sitrep_extraction_status.csv
+          if git diff --cached --quiet; then
+            echo "No extraction changes"
+            exit 0
+          fi
+          git commit -m "data: DRC 2026 sitrep extractions $(date -u +%Y-%m-%d)"
+          git pull --rebase
+          git push
+
       # Release needs no keys. It opens an issue for any report held for review.
+      # A failure here must not stop the province steps, so the job fails at the
+      # end instead.
       - name: Release zone data
+        id: release
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_extract.py release
 
-      # Commit before the province steps, so a layout the province parser cannot
-      # read does not discard the paid-for extractions.
       - name: Commit zone data
+        id: commit_zone
+        continue-on-error: true
         run: |
-          git add data/interim/drc_2026_sitrep_extractions data/review/drc_2026 data/processed/drc_2026_sitrep_*.csv
+          git add data/review/drc_2026 data/processed/drc_2026_sitrep_*.csv
           if git diff --cached --quiet; then
             echo "No zone data changes"
             exit 0
           fi
           git commit -m "data: DRC 2026 sitrep zone data $(date -u +%Y-%m-%d)"
-          git pull --rebase
+          # On a conflict, drop the local commit: release output is a pure
+          # function of committed state, so the next run rebuilds it.
+          git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
           git push
 
       - name: Parse new sitreps
@@ -100,3 +108,11 @@ jobs:
           git commit -m "data: DRC 2026 sitreps $(date -u +%Y-%m-%d)"
           git pull --rebase
           git push
+
+      # continue-on-error hides a zone failure from the job result. This step
+      # runs only when every earlier step did not hard-fail, and restores it.
+      - name: Fail on zone release error
+        if: steps.release.outcome == 'failure' || steps.commit_zone.outcome == 'failure'
+        run: |
+          echo "::error::Zone release or its commit failed; see the Release zone data and Commit zone data steps"
+          exit 1
