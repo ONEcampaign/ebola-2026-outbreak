@@ -591,7 +591,8 @@ def test_check_passes_rows_added_for_cells_a_sum_opens(
         gazetteer=load_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT)),
         review_file=path,
     )
-    assert (verdict.open_flags, verdict.unapplied) == ([], ())
+    assert verdict.review_error is None
+    assert verdict.releasable
     # Released as printed: the subtotal sum, and A's CFR (2 of 11 is not 20.0).
     assert {(d.key, d.field) for d in verdict.discrepancies} == {
         (ITURI, "cum_confirmed"),

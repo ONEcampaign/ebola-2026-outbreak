@@ -272,7 +272,6 @@ class Verdict(NamedTuple):
 
     `text_rows` are the text-layer rows the report was reconciled with.
     `review_error` says why a review file was not applied, if it was not.
-    `unapplied` are the placeholder rows whose cell was never open.
     """
 
     values: dict[RowKey, Values]
@@ -281,7 +280,6 @@ class Verdict(NamedTuple):
     discrepancies: list[Discrepancy]
     text_rows: dict[RowKey, TextRow]
     review_error: str | None = None
-    unapplied: tuple[ReviewRow, ...] = ()
 
     @property
     def releasable(self) -> bool:
@@ -559,10 +557,10 @@ def judge(
     the first pass. A row's key is read through the gazetteer, so a row typed
     under a spelling the gazetteer has since gained answers the canonical
     row's cell. A placeholder row whose cell is never open (after a gazetteer
-    edit, say) is not applied and is listed in `unapplied`. A row a reviewer
-    added for a cell that is never open makes the review not apply. A review
-    that does not read or apply is ignored, with the reason in
-    `review_error`, and the report stays held. A row that lacks a field without a flag on it gets one, so a
+    edit, say) is not applied. A row a reviewer added for a cell that is
+    never open makes the review not apply. A review that does not read or
+    apply is ignored, with the reason in `review_error`, and the report stays
+    held. A row that lacks a field without a flag on it gets one, so a
     missing value cannot be released as a printed blank.
 
     Args:
@@ -582,10 +580,10 @@ def judge(
         arbitration=arbitration,
     )
     values, verified = reconciled.accepted, set()
-    review_error, unapplied = None, ()
+    review_error = None
     if review_file is not None:
         try:
-            values, verified, unapplied = _apply_review(
+            values, verified = _apply_review(
                 reconciled.flags,
                 reconciled.accepted,
                 read_review(review_file),
@@ -602,7 +600,6 @@ def judge(
         discrepancies,
         text_rows,
         review_error,
-        unapplied,
     )
 
 
@@ -612,11 +609,11 @@ def _apply_review(
     review: list[ReviewRow],
     *,
     gazetteer: Gazetteer,
-) -> tuple[dict[RowKey, Values], set[Cell], tuple[ReviewRow, ...]]:
+) -> tuple[dict[RowKey, Values], set[Cell]]:
     """Apply the review rows of every cell ever open; see `judge`.
 
-    The cells reached only grow, so the loop ends. Returns the merged values,
-    the verified cells and the placeholder rows never applied.
+    The cells reached only grow, so the loop ends. Returns the merged values
+    and the verified cells.
 
     Raises:
         ValueError: If an added row names an unknown zone, or answers no cell
@@ -634,8 +631,7 @@ def _apply_review(
             break
         values, verified = apply(accepted, rows, gazetteer=gazetteer)
         applied = len(rows)
-    unapplied = [r for r, cells in answers if not cells & reached]
-    if added := [r for r in unapplied if not r["reason"]]:
+    if added := [r for r, cells in answers if not r["reason"] and not cells & reached]:
         raise ValueError(
             "; ".join(
                 f"{describe(RowKey(r['section'], r['province'], r['zone']))} "
@@ -643,7 +639,7 @@ def _apply_review(
                 for r in added
             )
         )
-    return values, verified, tuple(unapplied)
+    return values, verified
 
 
 def _open(
