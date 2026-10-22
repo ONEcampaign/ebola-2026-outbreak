@@ -166,3 +166,14 @@ def test_build_manifest_reuses_unchanged_media(fake_api: FakeApi) -> None:
     fake_api.items = [_item(710, "2026-10-20")]
     dlm.build_manifest(dlm.build_manifest(None))
     assert fake_api.downloads == [(710, False)]
+
+
+def test_download_creates_missing_sitrep_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sitrep_dir = tmp_path / "data" / "raw" / "sitreps"
+    monkeypatch.setattr(dlm, "SITREP_DIR", sitrep_dir)
+    monkeypatch.setattr(dlm, "get", lambda url: type("R", (), {"content": b"%PDF"})())
+    path = dlm.download(_item(710, "2026-10-20"))
+    assert path == sitrep_dir / "710.pdf"
+    assert path.read_bytes() == b"%PDF"
