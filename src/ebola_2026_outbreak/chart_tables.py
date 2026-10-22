@@ -11,7 +11,7 @@ Outputs, in data/output/, with display column names for charting tools:
     - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
       confirmed deaths and case fatality rate (percent) from WHO's Total row,
       and the number of DRC provinces with confirmed cases from the latest
-      sitrep, each with the date its source reports.
+      sitrep, each with the date its source reports in prose ("18 October").
 """
 
 import json
@@ -73,7 +73,7 @@ WEST_AFRICA, DRC = "West Africa 2014-16 outbreak", "DRC 2026 outbreak"
 
 
 class HeadlineFigure(TypedDict):
-    """One headline number and the date its source reports."""
+    """One headline number and the date its source reports, e.g. "18 October"."""
 
     value: int | float
     update_date: str
@@ -174,6 +174,11 @@ def latest_date(dates: pl.Series) -> date:
     return latest
 
 
+def prose_date(day: date) -> str:
+    """Format a date as day and month name without the year, e.g. "18 October"."""
+    return f"{day.day} {day:%B}"
+
+
 def headline_figures(
     *,
     summary: pl.DataFrame,
@@ -204,7 +209,7 @@ def headline_figures(
     if missing:
         raise ValueError(f"WHO {TOTAL_LABEL} row has no value for {missing}")
 
-    who_date, sitrep_date = who_as_of.isoformat(), sitrep_as_of.isoformat()
+    who_date, sitrep_date = prose_date(who_as_of), prose_date(sitrep_as_of)
     return {
         "total_confirmed_cases": {"value": row[CASES], "update_date": who_date},
         "total_deaths": {"value": row[DEATHS], "update_date": who_date},
