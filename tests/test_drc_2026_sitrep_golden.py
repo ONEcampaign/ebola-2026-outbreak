@@ -1,0 +1,125 @@
+"""Offline golden-set test of the sitrep extraction pipeline.
+
+For each of the 13 golden reports, the recorded Gemini and Mistral responses
+in `fixtures/sitrep_golden/recorded/` are normalised, reconciled with the
+text-layer rows of the report's word dump, and sum-checked, with text-layer
+arbitration on and off. No accepted value may differ from the truth, and the
+share of cells held for review must stay under a ceiling, so a rise in flags
+fails here with its count instead of landing on reviewers.
+
+Record the fixtures with `drc_2026_sitrep_golden.py record`.
+"""
+
+from functools import cache
+from pathlib import Path
+
+import pytest
+
+from ebola_2026_outbreak.drc_2026_sitrep_golden import (
+    NO_TRUTH_ROW,
+    WORDS_DIR,
+    Report,
+    WrongCell,
+    compare,
+    evaluate,
+    flagged_cells,
+    load_reports,
+    load_truth,
+    read_recorded,
+    truth_cells,
+    write_recorded,
+)
+from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    ModelResult,
+    Reconciled,
+    RowKey,
+    load_gazetteer,
+)
+from ebola_2026_outbreak.drc_2026_sitrep_textlayer import read_rows
+
+GAZETTEER = load_gazetteer()
+REPORTS = load_reports()
+TRUTH = load_truth()
+
+# Share of truth cells held for review, across the 13 reports. Observed with
+# the recorded fixtures: 22 of 7,197 (0.31%) with arbitration, 189 of 7,197
+# (2.6%) without. The ceilings add a margin of about a fifth.
+FLAG_RATE_CEILING = {True: 0.004, False: 0.032}
+
+
+@cache
+def outcome(report: Report, *, arbitration: bool) -> Reconciled:
+    gemini = read_recorded("gemini", report)
+    mistral = read_recorded("mistral", report)
+    return evaluate(
+        gemini.extraction_raw,
+        mistral.extraction_raw,
+        read_rows(WORDS_DIR / report.words, GAZETTEER),
+        gazetteer=GAZETTEER,
+        arbitration=arbitration,
+    )
+
+
+@pytest.mark.parametrize("arbitration", [True, False], ids=["arbitration", "strict"])
+@pytest.mark.parametrize("report", REPORTS, ids=lambda r: f"SitRep_{r.sitrep_no}")
+def test_no_accepted_value_is_wrong(report: Report, arbitration: bool) -> None:
+    accepted = outcome(report, arbitration=arbitration).accepted
+    assert compare(accepted, TRUTH[report.sitrep_no]) == []
+
+
+@pytest.mark.parametrize("arbitration", [True, False], ids=["arbitration", "strict"])
+def test_flag_rate_under_ceiling(arbitration: bool) -> None:
+    flagged = sum(
+        flagged_cells(outcome(r, arbitration=arbitration).flags) for r in REPORTS
+    )
+    total = sum(truth_cells(TRUTH[r.sitrep_no]) for r in REPORTS)
+    assert flagged / total <= FLAG_RATE_CEILING[arbitration], (
+        f"{flagged} of {total} cells flagged ({flagged / total:.1%})"
+    )
+
+
+def test_every_report_has_truth_and_its_word_dump() -> None:
+    assert len(REPORTS) == 13
+    for report in REPORTS:
+        assert (WORDS_DIR / report.words).exists()
+        assert {k.section for k in TRUTH[report.sitrep_no]} == {
+            "kpis",
+            "provinces",
+            "zone_subtotals",
+            "zone_total",
+            "zones",
+        }
+
+
+def test_compare_lists_each_wrong_cell() -> None:
+    zone = RowKey("zones", "Ituri", "Adja")
+    kpis = RowKey("kpis", "", "")
+    truth = {
+        zone: {"cum_confirmed": 11, "new_confirmed": None, "cte_deaths": 0},
+        kpis: {"cfr_pct": 47.6},
+    }
+    other = RowKey("zones", "Ituri", "Bunia")
+    accepted = {
+        zone: {"cum_confirmed": 11, "new_confirmed": 0, "cte_deaths": None},
+        kpis: {"cfr_pct": 47.6},
+        other: {"cum_deaths": 3},
+    }
+    assert compare(accepted, truth) == [
+        WrongCell(zone, "new_confirmed", 0, None),
+        WrongCell(zone, "cte_deaths", None, 0),
+        WrongCell(other, "cum_deaths", 3, NO_TRUTH_ROW),
+    ]
+
+
+def test_oversized_record_drops_page_markdown(tmp_path: Path) -> None:
+    result = ModelResult(
+        extraction_raw={"sitrep_no": 157},
+        model_id_requested="mistral-ocr-4-1",
+        model_id_returned="mistral-ocr-4-1",
+        usage={"pages_processed": 13},
+        requested_at="2026-10-22T00:00:00+00:00",
+        response={"model": "mistral-ocr-4-1", "pages": ["x" * 200_000]},
+    )
+    write_recorded("mistral", REPORTS[0], result, root=tmp_path)
+    kept = read_recorded("mistral", REPORTS[0], root=tmp_path)
+    assert kept == result._replace(response={"model": "mistral-ocr-4-1"})
