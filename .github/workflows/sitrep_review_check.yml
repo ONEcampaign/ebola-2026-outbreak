@@ -1,7 +1,8 @@
 name: Sitrep review check
 
 # Runs on every pull request so main can require it. A pull request that
-# changes no review file and no gazetteer row passes at once.
+# changes no review file and no gazetteer row passes at once, as does one
+# whose base branch has no gazetteer and so no zone pipeline to judge it.
 on:
   pull_request:
     branches: [main]
@@ -26,7 +27,10 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff --quiet "origin/$BASE_REF...HEAD" -- data/review data/reference/drc_2026_health_zones.csv; then
+          if ! git cat-file -e "origin/$BASE_REF:data/reference/drc_2026_health_zones.csv"; then
+            echo "review=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$BASE_REF has no zone pipeline to check against"
+          elif git diff --quiet "origin/$BASE_REF...HEAD" -- data/review data/reference/drc_2026_health_zones.csv; then
             echo "review=false" >> "$GITHUB_OUTPUT"
             echo "No review file or gazetteer change"
           else
