@@ -27,7 +27,7 @@ jobs:
         run: uv python install '3.13'
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --all-groups
 
       - name: Run ruff check
         run: uv run ruff check .
@@ -38,4 +38,5 @@ jobs:
       - name: Run ty
         run: uv run ty check 'src/ebola_2026_outbreak'
 
-
+      - name: Run tests
+        run: uv run pytest

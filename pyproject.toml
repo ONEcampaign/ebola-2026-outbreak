@@ -9,7 +9,14 @@ authors = [
 
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "bblocks-data-importers>=0.5.0",
+    "beautifulsoup4>=4.15.0",
+    "fastexcel>=0.21.0",
+    "httpx>=0.28.1",
+    "pdfplumber>=0.11.10",
+    "polars>=2.0.0",
+]
 
 
 [build-system]
@@ -18,10 +25,14 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-
     "ty>=0.0.59",
     "ruff>=0.15.0",
     "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+]
+ocr = [
+    "onnxruntime>=1.31.0",
+    "rapidocr>=3.10.0",
 ]
 
 [tool.ruff]
@@ -101,6 +112,3 @@ replace-imports-with-any = [
 # patterns common in exploratory code. Demoted to ignore.
 possibly-missing-attribute = "ignore"
 possibly-unresolved-reference = "ignore"
-
-
-

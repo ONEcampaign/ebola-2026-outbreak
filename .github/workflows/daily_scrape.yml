@@ -1,0 +1,72 @@
+name: Daily DRC 2026 scrape
+
+on:
+  schedule:
+    # WHO updates its table daily; DRC sitreps land the morning after the report date.
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+
+      - name: Set up Python 3.13
+        run: uv python install '3.13'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Scrape WHO table
+        run: uv run python src/ebola_2026_outbreak/drc_2026_who.py
+
+      # WHO shows only the latest figures, so commit the capture before the
+      # sitrep steps can fail and discard it.
+      - name: Commit WHO table
+        run: |
+          git add data/processed/drc_2026_who_by_country.csv
+          if git diff --cached --quiet; then
+            echo "No WHO changes"
+            exit 0
+          fi
+          git commit -m "data: WHO Bundibugyo table $(date -u +%Y-%m-%d)"
+          git push
+
+      # The manifest records media already seen, so only new sitreps download.
+      - name: Download new sitreps
+        run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_download.py
+
+      - name: Parse new sitreps
+        run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_parse.py
+
+      - name: Build national series
+        run: uv run python src/ebola_2026_outbreak/drc_2026_final.py
+
+      - name: Build chart tables
+        run: uv run python src/ebola_2026_outbreak/chart_tables.py
+
+      - name: Commit sitrep data
+        run: |
+          git add data/processed/drc_2026_*.csv data/output/*.csv
+          if git diff --cached --quiet; then
+            echo "No data changes"
+            exit 0
+          fi
+          git commit -m "data: DRC 2026 sitreps $(date -u +%Y-%m-%d)"
+          git push

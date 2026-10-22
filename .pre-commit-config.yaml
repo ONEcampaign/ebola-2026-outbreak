@@ -85,12 +85,14 @@ repos:
     rev: v2.4.3
     hooks:
       - id: codespell
-        args: [--write-changes]
+        # "ND" (non disponible) marks missing values in DRC sitreps.
+        args: [--write-changes, --ignore-words-list=nd]
         exclude: |
           (?x)^(
             .*\.lock|
             .*\.parquet|
-            .*\.feather
+            .*\.feather|
+            tests/fixtures/.*
           )$
 
   # ---------------------------------------------------------------------------
