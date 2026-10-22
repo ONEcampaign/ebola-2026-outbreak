@@ -12,7 +12,7 @@ permissions:
   contents: write
   issues: write
 
-# Shares the daily scrape's group so the two never push at the same time.
+# Shares the daily scrape's group so the two cannot push at the same time.
 concurrency:
   group: daily-scrape
   cancel-in-progress: false
@@ -37,8 +37,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # A pure function of the committed cache, reviews and gazetteer: no API
-      # keys and no PDFs. It closes an issue once all its reports are released.
+      # A pure function of the committed cache, reviews and gazetteer. It needs
+      # no API keys and no PDFs, and closes an issue once all its reports are
+      # released.
       - name: Release zone data
         env:
           GH_TOKEN: ${{ github.token }}

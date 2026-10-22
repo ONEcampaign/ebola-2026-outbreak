@@ -2,7 +2,7 @@ name: Weekly sitrep golden check
 
 on:
   schedule:
-    # Mondays: re-extract the 13 golden sitreps live and compare with the truth.
+    # Mondays, re-extract the 13 golden sitreps live and compare with the truth.
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
@@ -29,8 +29,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      # Exit 1: an accepted value is wrong, a model id changed, or a model
-      # call failed. Exit 2: a golden PDF's URL died or its file changed.
+      # Exit 1 means an accepted value is wrong, a model id changed, or a model
+      # call failed. Exit 2 means a golden PDF's URL died or its file changed.
       - name: Run golden check
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -45,4 +45,4 @@ jobs:
         run: |
           gh issue create \
             --title "Sitrep golden check failed $(date -u +%Y-%m-%d)" \
-            --body "@mharoruiz @jm-rivera The weekly golden check failed: an accepted value differs from the truth, a returned model id changed, a model call failed, or a golden PDF's URL died or its file changed. The run log names each failure: $RUN_URL"
+            --body "@mharoruiz @jm-rivera The weekly golden check failed. An accepted value differs from the truth, a returned model id changed, a model call failed, or a golden PDF's URL died or its file changed. The run log names each failure: $RUN_URL"

@@ -9,8 +9,8 @@ on:
 permissions:
   contents: write
 
-# Outside the daily-scrape group, so a queued sitrep run can never cancel a
-# capture: WHO shows only the latest figures, so a lost day cannot be recovered.
+# Outside the daily-scrape group, so a queued sitrep run cannot cancel a
+# capture. WHO shows only the latest figures, so a lost day cannot be recovered.
 concurrency:
   group: who-scrape
   cancel-in-progress: false

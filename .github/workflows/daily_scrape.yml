@@ -44,7 +44,7 @@ jobs:
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_download.py
 
       # The only step with the model API keys. It caches each new sitrep's
-      # answers; an API error leaves the upload pending for the next run.
+      # answers. An API error leaves the upload pending for the next run.
       - name: Extract zone data
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -66,7 +66,7 @@ jobs:
 
       # Release needs no keys. It opens an issue for any report held for review.
       # A failure here must not stop the province steps, so the job fails at the
-      # end instead.
+      # end.
       - name: Release zone data
         id: release
         continue-on-error: true
@@ -84,7 +84,7 @@ jobs:
             exit 0
           fi
           git commit -m "data: DRC 2026 sitrep zone data $(date -u +%Y-%m-%d)"
-          # On a conflict, drop the local commit: release output is a pure
+          # On a conflict, drop the local commit. Release output is a pure
           # function of committed state, so the next run rebuilds it.
           git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
           git push
@@ -110,7 +110,7 @@ jobs:
           git push
 
       # continue-on-error hides a zone failure from the job result. This step
-      # runs only when every earlier step did not hard-fail, and restores it.
+      # runs only when no earlier step hard-failed, and restores the failure.
       - name: Fail on zone release error
         if: steps.release.outcome == 'failure' || steps.commit_zone.outcome == 'failure'
         run: |

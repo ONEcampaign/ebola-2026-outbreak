@@ -56,7 +56,7 @@ scrape at 12:30 and 18:00 UTC (`extract`, then `release`) and writes:
   confirmed cases and deaths, new cases, community, CTE and total deaths in the
   last 24 hours). The `level` column is `zone`, `province` (the table's
   province subtotals) or `national` (its Total row), so sum one level only.
-  A blank `value` is a cell the sitrep leaves empty, which is not the same as 0.
+  A blank `value` is a cell the sitrep leaves empty, and 0 is a printed zero.
 - `drc_2026_sitrep_headline.csv`: the six headline indicators (cumulative cases
   and deaths, case fatality rate, people in isolation, recoveries, contacts
   followed up).
@@ -70,8 +70,8 @@ opens one issue that tags the reviewers. To review a held report:
 
 1. Open its file in `data/review/drc_2026/`. Each row is a cell to check, with
    the PDF page to open in `pdf_url`.
-1. Type the printed value in `reviewed_value`: a number, or `blank` for an
-   empty cell. Type `absent` where a flagged zone name is a misreading and the
+1. Type the printed value in `reviewed_value`, either a number or `blank` for
+   an empty cell. Type `absent` where a flagged zone name is a misreading and the
    table has no such row. If a zone name is unknown, add it or its spelling to
    `aliases` in `data/reference/drc_2026_health_zones.csv`.
 1. Open a pull request that says `Refs #N` for the issue. The review check runs
