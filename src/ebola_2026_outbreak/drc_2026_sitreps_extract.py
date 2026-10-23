@@ -66,6 +66,7 @@ calls nothing.
 """
 
 import argparse
+import functools
 import logging
 import os
 import subprocess
@@ -134,6 +135,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
 )
 from ebola_2026_outbreak.drc_2026_sitrep_textlayer import (
     dump_words,
+    printed_labels,
     read_rows,
     row_matches,
 )
@@ -558,7 +560,9 @@ def judge(
 
     Release, the review pull request check and the golden scorer all decide
     a report here. The answers are normalised, and the text-layer rows read
-    from the cached words, with `gazetteer`.
+    from the cached words, with `gazetteer`. The cached words also tell an
+    unknown zone name the page prints from one model's misread, which
+    `reconcile` drops.
 
     Review rows apply to a fixed point. The rows whose cell is open apply,
     the open cells are worked out again, and the rows of newly opened cells
@@ -587,6 +591,7 @@ def judge(
         normalise(records.mistral.extraction_raw, gazetteer),
         text_rows,
         match=MATCH,
+        printed_labels=functools.partial(printed_labels, records.words),
         arbitration=arbitration,
     )
     values, verified = reconciled.accepted, set()

@@ -53,13 +53,23 @@ def _raw_157() -> dict[str, Any]:
     return mistral.parse_annotation(json.loads(MISTRAL_157.read_text()))
 
 
-def _cache(sha: str, raw: dict[str, Any], words: Path) -> None:
-    """Cache one report as both models read it, with its word dump."""
+def _cache(
+    sha: str,
+    raw: dict[str, Any],
+    words: Path,
+    *,
+    mistral_raw: dict[str, Any] | None = None,
+) -> None:
+    """Cache one report as both models read it, or as Mistral reads it
+    differently, with its word dump."""
     write_model_result(
         sha, "gemini", _result(raw, gemini.GEMINI_MODEL), root=ex.CACHE_DIR
     )
     write_model_result(
-        sha, "mistral", _result(raw, mistral.MISTRAL_OCR_MODEL), root=ex.CACHE_DIR
+        sha,
+        "mistral",
+        _result(mistral_raw or raw, mistral.MISTRAL_OCR_MODEL),
+        root=ex.CACHE_DIR,
     )
     write_words(sha, words, root=ex.CACHE_DIR)
 
@@ -81,13 +91,18 @@ def _line(top: int, label: str, cells: tuple[str | None, ...]) -> list[str]:
 
 
 def _words_96(
-    *, zone: str | None = ZONE.zone, subtotal: bool = True, name: str = "words"
+    *,
+    zone: str | None = ZONE.zone,
+    subtotal: bool = True,
+    zero_zone: str | None = None,
+    name: str = "words",
 ) -> Path:
     """A word dump printing the rows of the SitRep 96 Gemini fixture.
 
     Page 2 holds the province table, new cases first, and page 3 the zone
     table: the Tshopo subtotal row (left out when `subtotal` is False), a
-    zone row labelled `zone` (left out when None), and the Total row.
+    zone row labelled `zone` (left out when None), a row of zeros labelled
+    `zero_zone` (when given), and the Total row.
     """
     province_row = ("1", "12", "6", "50,0 %", "1/23")
     province = [
@@ -100,6 +115,8 @@ def _words_96(
         zones += _line(130, "Tshopo", ZONE_ROW_96)
     if zone is not None:
         zones += _line(150, zone, ZONE_ROW_96)
+    if zero_zone is not None:
+        zones += _line(160, zero_zone, ("0", "0", None, "0", "0", None, "0"))
     zones += _line(170, "Total", ZONE_ROW_96)
     path = ex.CACHE_DIR.parent / f"{name}.json"
     path.write_text(json.dumps({"pages": {"2": province, "3": zones}}))
@@ -424,6 +441,58 @@ def test_alias_and_values_in_one_review_release(
     assert (row["status"], row["flagged_cells"]) == ("released", verified)
     by_zone = pl.read_csv(ex.BY_ZONE_PATH, schema=ex.BY_ZONE_SCHEMA)
     assert by_zone.filter(level="zone")["zone"].unique().to_list() == [ZONE.zone]
+
+
+# A misreading of Lubunga, a Tshopo zone.
+MISSPELT_ZERO = "Lubinga"
+
+
+@pytest.mark.parametrize(
+    ("both_misread", "printed", "zero_zone", "status"),
+    [
+        # Gemini's row matches the page; Mistral's misread is dropped.
+        (False, ZONE.zone, False, "released"),
+        (True, ZONE.zone, False, "held"),
+        # The page prints the name, so it may be a zone new to the gazetteer.
+        (False, MISSPELT, False, "held"),
+        # Mistral misreads Lubunga, a row of zeros Gemini left out, so the
+        # misread is its only copy and no sum would miss it.
+        (False, ZONE.zone, True, "held"),
+    ],
+    ids=["one-model-unprinted", "both-models", "one-model-printed", "only-copy"],
+)
+def test_unknown_zone_name_of_one_model_is_dropped_unless_printed(
+    issues: list[tuple[str, Any]],
+    both_misread: bool,
+    printed: str,
+    zero_zone: bool,
+    status: str,
+) -> None:
+    misread = _raw_96()
+    if zero_zone:
+        zeros = dict.fromkeys(misread["zones"][0], 0)
+        misread["zones"].append(
+            {**zeros, "province": "Tshopo", "zone": MISSPELT_ZERO, "cfr_pct": None}
+        )
+    else:
+        misread["zones"][0]["zone"] = MISSPELT
+    _manifest((1, "t1"))
+    _ledger((1, "t1", SHA_A))
+    gemini_raw = misread if both_misread else _raw_96()
+    words = _words_96(zone=printed, zero_zone="Lubunga" if zero_zone else None)
+    _cache(SHA_A, gemini_raw, words, mistral_raw=misread)
+
+    ex.run("release", now=NOW)
+
+    assert _status()[1]["status"] == status
+    path = ex.REVIEW_DIR / f"{DAY}_{SHA_A[:8]}.csv"
+    unknown = {
+        r["zone"]
+        for r in (review.read_review(path) if path.exists() else [])
+        if r["reason"] == "unknown_name"
+    }
+    expected = MISSPELT_ZERO if zero_zone else MISSPELT
+    assert unknown == (set() if status == "released" else {expected})
 
 
 def test_review_of_replaced_upload_is_superseded(

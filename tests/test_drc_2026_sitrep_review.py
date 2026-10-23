@@ -530,6 +530,7 @@ def make_repo(
         normalise(raw(mistral), gazetteer),
         text_layer(),
         match=match,
+        printed_labels=lambda names: set(),
     )
     sum_flags, _ = check_sums(reconciled.accepted, set())
     path = review.review_path(DATE, SHA, root=repo / REVIEW_DIR.relative_to(ROOT))

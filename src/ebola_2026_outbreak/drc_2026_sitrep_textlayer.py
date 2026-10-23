@@ -58,6 +58,9 @@ adjacent blank cell all fail. A space may split a number only at a thousands
 boundary or before "%". A CFR matches a printing with 0 to 2 decimals within
 0.05 of the value.
 
+`printed_labels` says which of some names a page prints as a row label, so a
+model's unknown zone name can be told from a misread.
+
 `dump_words` writes the words of a PDF's table pages as a JSON fixture, which
 `read_rows` reads as it reads the PDF.
 """
@@ -660,6 +663,27 @@ def read_rows(source: Path, gazetteer: Gazetteer) -> dict[RowKey, TextRow]:
         else:
             out[key] = TextRow(key, None, False, None, None)
     return out
+
+
+def printed_labels(source: Path, names: Set[str]) -> set[str]:
+    """The names the text layer prints as a row label.
+
+    A label is matched as `read_rows` matches one, so it may wrap or split
+    into several words; running text counts too.
+
+    Args:
+        source: The sitrep PDF, or a `dump_words` JSON fixture of it.
+        names: Name keys, from `name_key`.
+
+    Returns:
+        The keys in `names` that some run of words on a page joins to.
+    """
+    words = _load_words(source)
+    printed: set[str] = set()
+    for page in sorted({w.page for w in words}):
+        alpha = [w for w in words if w.page == page and w.is_alpha]
+        printed.update("".join(w.key for w in label) for label in _labels(alpha, names))
+    return printed
 
 
 # Matching

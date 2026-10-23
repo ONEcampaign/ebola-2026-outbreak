@@ -42,8 +42,8 @@ REPORTS = load_reports()
 TRUTH = load_truth()
 
 # Share of truth cells held for review, across the 13 reports. Observed with
-# the recorded fixtures: 22 of 7,197 (0.31%) with arbitration, 189 of 7,197
-# (2.6%) without. The ceilings add a margin of about a fifth.
+# the recorded fixtures: 15 of 7,197 (0.21%) with arbitration, 182 of 7,197
+# (2.5%) without. The ceilings sit above both, at 0.4% and 3.2%.
 FLAG_RATE_CEILING = {True: 0.004, False: 0.032}
 
 

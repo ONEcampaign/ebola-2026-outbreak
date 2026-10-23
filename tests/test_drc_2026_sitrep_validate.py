@@ -1,6 +1,6 @@
 """Tests for reconciling two extractions and checking a sitrep's sums."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Set
 from typing import Any
 
 import pytest
@@ -109,6 +109,11 @@ def match(text: TextRow, values: Values, section: Section) -> bool:
     return text.printed == printed(values, section)
 
 
+def no_labels(names: Set[str]) -> set[str]:
+    """A text layer that prints none of the names asked about."""
+    return set()
+
+
 def text_layer(rows: dict[RowKey, Values]) -> dict[RowKey, TextRow]:
     return {
         key: TextRow(key, printed(values, key.section), True, 2, None)
@@ -128,7 +133,14 @@ def run(
     **kwargs: Any,
 ):
     text_rows = text_layer(report()) if text_rows is None else text_rows
-    return reconcile(model(gemini), model(mistral), text_rows, match=match, **kwargs)
+    return reconcile(
+        model(gemini),
+        model(mistral),
+        text_rows,
+        match=match,
+        printed_labels=no_labels,
+        **kwargs,
+    )
 
 
 def reasons(flags: Iterable[Flag]) -> dict[tuple[RowKey, str | None], str]:
@@ -234,7 +246,9 @@ def test_name_flags_hold_the_row_once_per_cell() -> None:
     gemini = model(truth, [Flag(A, f, "wrong_province") for f in ALL])
     mistral = model(truth, [Flag(A, f, "unknown_name") for f in ALL])
 
-    result = reconcile(gemini, mistral, text_layer(truth), match=match)
+    result = reconcile(
+        gemini, mistral, text_layer(truth), match=match, printed_labels=no_labels
+    )
 
     assert result.accepted[A] == {}
     assert result.flags == [Flag(A, f, "wrong_province", 2) for f in ALL]
@@ -244,7 +258,9 @@ def test_held_row_skips_the_sums_that_need_it() -> None:
     truth = report()
     gemini = model(truth, [Flag(A, f, "unknown_name") for f in ALL])
 
-    result = reconcile(gemini, model(truth), text_layer(truth), match=match)
+    result = reconcile(
+        gemini, model(truth), text_layer(truth), match=match, printed_labels=no_labels
+    )
 
     assert check_sums(result.accepted, set()) == ([], [])
 
@@ -304,7 +320,13 @@ def test_percentages_agree_only_when_exact(
         }
         return normalise(raw, {})
 
-    result = reconcile(normalised(gemini_cfr), normalised(mistral_cfr), {}, match=match)
+    result = reconcile(
+        normalised(gemini_cfr),
+        normalised(mistral_cfr),
+        {},
+        match=match,
+        printed_labels=no_labels,
+    )
 
     assert ("cfr_pct" in result.accepted[KPIS]) is agree
     assert reasons(result.flags) == (

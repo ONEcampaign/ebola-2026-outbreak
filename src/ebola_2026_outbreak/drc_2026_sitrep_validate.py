@@ -13,6 +13,20 @@ and the text cannot settle has the fields the models dispute flagged
 `text_mismatch`. The headline indicators have no text-layer row, so each is
 accepted only when both models give the same value.
 
+A zone row that one model alone names, under a name the gazetteer lacks and
+the text layer does not print (`printed_labels`), is a misread of a zone the
+other model read correctly ("Mili-Murhesa" for "Miti-Murhesa"). It is
+dropped with a log line instead of holding the report, provided its province
+is canonical and every zone row the text layer locates there came back from
+a model under its canonical name. A name both models give, or one the page
+prints, is still flagged `unknown_name`, so a zone new to the gazetteer
+reaches a reviewer. A located zone neither model returned may have the
+misread as its only copy, so the misread is held, which covers a zone
+printing nothing but zeros and blanks that no sum check would catch. A
+dropped row standing for a zone the text layer did not locate leaves its
+province's zones short of the subtotal row, and the first sum check below
+flags the subtotal unless that zone too prints only zeros and blanks.
+
 Model agreement is exact, percentages included: 48.3 and 48.30000001
 disagree. Only the matcher compares a printed CFR within 0.05. The matcher
 compares each field with the cell printed in its own column, so a value
@@ -44,7 +58,8 @@ see. A failed check whose operands a reviewer has all verified is a
 publisher discrepancy, released as printed and recorded.
 """
 
-from collections.abc import Callable, Iterable
+import logging
+from collections.abc import Callable, Iterable, Set
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     COUNT_FIELDS,
@@ -60,14 +75,19 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Section,
     TextRow,
     Values,
+    name_key,
 )
 from ebola_2026_outbreak.drc_2026_sitreps_parse import PROVINCES
+
+logger = logging.getLogger(__name__)
 
 # Largest gap between a printed CFR and the CFR its counts give.
 CFR_TOLERANCE = 0.05
 
 # Whether a model's values reproduce a row's printed cells.
 type Matcher = Callable[[TextRow, Values, Section], bool]
+# The name keys, of those given, the text layer prints as a row label.
+type Labels = Callable[[Set[str]], Set[str]]
 # One value of the report: (row, field).
 type Cell = tuple[RowKey, str]
 
@@ -86,6 +106,7 @@ def reconcile(
     text_rows: dict[RowKey, TextRow],
     *,
     match: Matcher,
+    printed_labels: Labels,
     arbitration: bool = True,
 ) -> Reconciled:
     """Accept the values two models agree on and the text layer confirms.
@@ -100,19 +121,27 @@ def reconcile(
         text_rows: Printed text-layer rows by key; a missing key is a row
             the text layer did not locate.
         match: Whether a model's values reproduce a printed row.
+        printed_labels: Which unknown zone names the text layer prints, to
+            tell a new zone from one model's misread.
         arbitration: Accept the one model whose row matches the text when
             the models disagree.
 
     Returns:
         The accepted values and one flag per held value, in row key order.
         Name flags from either model's `normalise` carry through, with the
-        row's page added.
+        row's page added. A misread zone row (see the module docstring) is
+        left out of both.
     """
-    gemini_rows = gemini.extraction.rows
-    mistral_rows = mistral.extraction.rows
+    misread = _misreads(gemini, mistral, text_rows, printed_labels)
+    for key in sorted(misread):
+        logger.info("Dropping %s: one model's misread zone name", key)
+    gemini_rows = {k: v for k, v in gemini.extraction.rows.items() if k not in misread}
+    mistral_rows = {
+        k: v for k, v in mistral.extraction.rows.items() if k not in misread
+    }
     name_reasons: dict[Cell, FlagReason] = {}
     for flag in [*gemini.name_flags, *mistral.name_flags]:
-        if flag.field is not None:
+        if flag.field is not None and flag.key not in misread:
             name_reasons.setdefault((flag.key, flag.field), flag.reason)
     in_doubt = {key for key, _ in name_reasons}
 
@@ -142,6 +171,38 @@ def reconcile(
             Flag(key, field, reason, page) for field, reason in reasons.items()
         )
     return Reconciled(accepted, flags)
+
+
+def _misreads(
+    gemini: Normalised,
+    mistral: Normalised,
+    text_rows: dict[RowKey, TextRow],
+    printed_labels: Labels,
+) -> set[RowKey]:
+    """Zone rows flagged `unknown_name` whose name only one model gives and
+    the text layer does not print, in a province whose located zone rows the
+    models all returned."""
+    gemini_names, mistral_names = (
+        {name_key(k.zone) for k in m.extraction.rows if k.section == "zones"}
+        for m in (gemini, mistral)
+    )
+    returned = gemini.extraction.rows.keys() | mistral.extraction.rows.keys()
+    unreturned = {
+        key.province
+        for key, text in text_rows.items()
+        if key.section == "zones" and text.located and key not in returned
+    }
+    unknown = {
+        f.key: name_key(f.key.zone)
+        for f in [*gemini.name_flags, *mistral.name_flags]
+        if f.reason == "unknown_name"
+        and f.key.section == "zones"
+        and f.key.zone
+        and f.key.province in _PROVINCES - unreturned
+    }
+    candidates = {n for n in unknown.values() if n in gemini_names ^ mistral_names}
+    printed = printed_labels(candidates) if candidates else set()
+    return {k for k, n in unknown.items() if n in candidates - printed}
 
 
 def _reconcile_row(
