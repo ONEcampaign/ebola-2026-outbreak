@@ -1,0 +1,34 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "{\"sitrep_no\": 96, \"report_date\": \"2026-08-19\", \"kpis\": {\"cum_confirmed\": 12, \"cum_deaths\": 6, \"cfr_pct\": 50.0, \"in_isolation\": 3, \"cum_recovered\": 4, \"contact_followup_pct\": 87.5}, \"provinces\": [{\"province\": \"Tshopo\", \"new_confirmed\": 1, \"cum_confirmed\": 12, \"cum_deaths\": 6, \"cfr_pct\": 50.0, \"zs_affected\": 1, \"zs_total\": 23}], \"zone_subtotals\": [{\"province\": \"Tshopo\", \"cum_confirmed\": 12, \"cum_deaths\": 6, \"cfr_pct\": 50.0, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}], \"zone_total\": {\"cum_confirmed\": 12, \"cum_deaths\": 6, \"cfr_pct\": 50.0, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}, \"zones\": [{\"province\": \"Tshopo\", \"zone\": \"Makiso-Kisangani\", \"cum_confirmed\": 12, \"cum_deaths\": 6, \"cfr_pct\": 50.0, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}]}"
+          }
+        ]
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 4211,
+    "candidatesTokenCount": 612,
+    "totalTokenCount": 5104,
+    "thoughtsTokenCount": 281,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 563
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 3648
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.8-flash",
+  "responseId": "x3Q4aZ2kKsWvmLAPq8ej-AQ"
+}

@@ -28,7 +28,8 @@ Files are prefixed by outbreak so historical and current data stay apart:
   - `drc_2026_who_by_country.csv`: the WHO country table from the
     [alert-and-response page](https://www.who.int/emergencies/alert-and-response).
     WHO shows only the latest figures, so each run of
-    `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history.
+    `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history;
+    the `who_scrape.yml` workflow runs it daily at 12:00 UTC.
     `drc_2026_who_wayback.py` backfills it from Wayback Machine captures.
     Until early September WHO published the table as an image;
     `drc_2026_who_ocr.py` reads those images from the cached captures (run
@@ -43,6 +44,48 @@ Files are prefixed by outbreak so historical and current data stay apart:
     `drc_2026_cumulative_confirmed_cases.csv`: national totals summed across
     provinces, in the same shape and with the same final indicator label as
     the West Africa files. Built by `drc_2026_final.py`.
+
+### Zone-level sitreps
+
+From SitRep 96 (report date 19 August 2026), the sitrep's health-zone table is
+read by two models, Gemini and Mistral OCR, and checked against the PDF's text
+layer and the table's own sums. `drc_2026_sitreps_extract.py` runs in the daily
+scrape at 12:30 and 18:00 UTC (`extract`, then `release`) and writes:
+
+- `drc_2026_sitrep_by_zone.csv`: one row per date, zone and indicator (cumulative
+  confirmed cases and deaths, new cases, community, CTE and total deaths in the
+  last 24 hours). The `level` column is `zone`, `province` (the table's
+  province subtotals) or `national` (its Total row), so sum one level only.
+  A blank `value` is a cell the sitrep leaves empty, and 0 is a printed zero.
+- `drc_2026_sitrep_headline.csv`: the six headline indicators (cumulative cases
+  and deaths, case fatality rate, people in isolation, recoveries, contacts
+  followed up).
+- `drc_2026_sitrep_extraction_status.csv`: one row per uploaded PDF, with its
+  status (`released`, `held`, `pending` or `superseded`) and the number of cells
+  flagged.
+
+A report is released when every value is accepted or typed by a person. A
+table row is accepted when each field matches the PDF text layer, whether both
+models agree on it or only one model matches. A headline figure is accepted
+when both models agree. Otherwise the report is held, and the run opens one
+issue that tags the reviewers. To review a held report:
+
+1. Open its file in `data/review/drc_2026/`. Each row is a cell to check, with
+   the PDF page to open in `pdf_url`.
+1. Type the printed value in `reviewed_value`, either a number or `blank` for
+   an empty cell. Type `absent` where a flagged zone name is a misreading and the
+   table has no such row. If a zone name is unknown, add it or its spelling to
+   `aliases` in `data/reference/drc_2026_health_zones.csv`.
+1. Open a pull request that says `Refs #N` for the issue. The review check runs
+   `drc_2026_sitreps_extract.py check` and passes when the report would be
+   released. The check runs the base branch's code against the pull request's
+   data. Merging runs the release, and the issue closes once all its reports
+   are out.
+
+The extraction needs two repository secrets, `GEMINI_API_KEY` and
+`MISTRAL_API_KEY`. Only the extract step and the weekly golden check read them.
+Raw model answers are cached in `data/interim/drc_2026_sitrep_extractions/`, so
+`release` needs no keys and no PDFs.
 
 ### Chart tables
 

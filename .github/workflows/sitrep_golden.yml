@@ -1,0 +1,48 @@
+name: Weekly sitrep golden check
+
+on:
+  schedule:
+    # Mondays, re-extract the 13 golden sitreps live and compare with the truth.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sitrep-golden
+  cancel-in-progress: false
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+
+      - name: Set up Python 3.13
+        run: uv python install '3.13'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Exit 1 means an accepted value is wrong, a model id changed, or a model
+      # call failed. Exit 2 means a golden PDF's URL died or its file changed.
+      - name: Run golden check
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: uv run python src/ebola_2026_outbreak/drc_2026_sitrep_golden.py run
+
+      - name: Open an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create \
+            --title "Sitrep golden check failed $(date -u +%Y-%m-%d)" \
+            --body "@mharoruiz @jm-rivera The weekly golden check failed. An accepted value differs from the truth, a returned model id changed, a model call failed, or a golden PDF's URL died or its file changed. The run log names each failure: $RUN_URL"

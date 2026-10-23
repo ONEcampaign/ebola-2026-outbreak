@@ -223,6 +223,7 @@ def download(item: MediaItem, *, refresh: bool = False) -> Path:
     """
     path = SITREP_DIR / f"{item['id']}.pdf"
     if refresh or not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(get(item["source_url"]).content)
     return path
 
@@ -336,7 +337,6 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
 
 def main() -> None:
     """Refresh the sitrep manifest and download any new PDFs."""
-    SITREP_DIR.mkdir(parents=True, exist_ok=True)
     previous = (
         pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA)
         if MANIFEST_PATH.exists()
