@@ -225,7 +225,8 @@ def test_unplaced_values_hold_the_row(
 # splits header words into glyph runs ("N" "o" "uv" "eaux"). 123 and 128
 # print "—" in Sud-Ubangi's "ZS actuellement", which is no field, so the row
 # is placed. 152: "ZS actuellement" cells print on two lines around their
-# row's label.
+# row's label. 142: the Total row's "57 ZS dans 6 provinces actives" prints
+# "provinces" on the label's line, a column gap away from "Total".
 #
 # Two other uploads hold one row each for what the PDF prints: SitRep 116's
 # Buta CFR is "1", and SitRep 137's Ituri "ZS actuellement" is "25.36".
@@ -240,6 +241,7 @@ PROVINCE_TABLES = FIXTURES / "province_tables"
         ("123", (87, 7345, 3545, 62), set()),
         ("125", None, {"Sud-Ubangi"}),
         ("128", (58, 7672, 3699, 63), set()),
+        ("142", (102, 8544, 4114, 64), set()),
         ("152", (68, 9212, 4441, 65), set()),
     ],
 )

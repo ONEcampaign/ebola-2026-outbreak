@@ -11,7 +11,9 @@ Method, on the pdfplumber words of the PDF and their x extents:
 - A row label is a run of words whose name keys join to a known name: a
   canonical province, a gazetteer zone or alias, or "Total". A label may wrap
   onto the next line ("Makiso-" / "Kisangani"). It is a row label only when
-  no other alphabetic word shares its line, which rules out narrative text.
+  no other alphabetic word shares its phrase, the words joined to it on its
+  line by gaps of at most `CELL_GAP`, which rules out narrative text and
+  keeps a row whose last cell prints words.
 - A value word belongs to the row whose label is the nearest alphabetic word
   above or below it, since rows print values a few points off the label's
   line and some cells on two lines around it. A value word about as near to
@@ -268,11 +270,25 @@ def _labels(alpha: list[Word], keys: Set[str]) -> Iterator[list[Word]]:
         i = end
 
 
+def _in_running_text(label: list[Word], words: list[Word], alpha: list[Word]) -> bool:
+    """Whether an alphabetic word outside `label` shares the phrase of one of
+    its words; `words` run left to right."""
+    for w in label:
+        lo, hi = _phrase(w, words)
+        if any(
+            o not in label and abs(o.top - w.top) <= TOL and lo <= o.x0 <= hi
+            for o in alpha
+        ):
+            return True
+    return False
+
+
 def _find_rows(words: list[Word], keys: Set[str]) -> list[Row]:
     """Every table row labelled with a name in `keys`, in reading order.
 
-    A label sharing its line with another alphabetic word is running text
-    ("Au total, 26 décès"). Each value word belongs to the row whose label
+    A label whose phrase holds another alphabetic word is running text ("Au
+    total, 26 décès"); a table cell printing words ("57 ZS dans 6 provinces
+    actives") sits a column gap away from its row's label. Each value word belongs to the row whose label
     is the nearest alphabetic word above or below it, since a row may print
     a value a few points off its label's line, or a cell on two lines
     straddling it. A value word whose distance to another line is within
@@ -284,14 +300,11 @@ def _find_rows(words: list[Word], keys: Set[str]) -> list[Row]:
     for page in sorted({w.page for w in words}):
         page_words = [w for w in words if w.page == page]
         alpha = [w for w in page_words if w.is_alpha]
+        by_x = sorted(page_words, key=lambda w: w.x0)
         labels = [
             label
             for label in _labels(alpha, keys)
-            if not any(
-                o not in label and abs(o.top - w.top) <= TOL
-                for w in label
-                for o in alpha
-            )
+            if not _in_running_text(label, by_x, alpha)
         ]
         owner = {w: i for i, label in enumerate(labels) for w in label}
         bands: list[list[Word]] = [[] for _ in labels]
@@ -384,10 +397,11 @@ def _one(words: Iterable[Word]) -> Word | None:
     return found[0] if len(found) == 1 else None
 
 
-def _phrase(word: Word, header: list[Word]) -> tuple[float, float]:
-    """x extent of the phrase holding `word` on its header line: the words
-    joined to it by gaps of at most `CELL_GAP` ("Total décès confirmés")."""
-    line = [w for w in header if abs(w.top - word.top) <= TOL]
+def _phrase(word: Word, words: list[Word]) -> tuple[float, float]:
+    """x extent of the phrase holding `word` on its line of `words`, which run
+    left to right: the words joined to it by gaps of at most `CELL_GAP`
+    ("Total décès confirmés")."""
+    line = [w for w in words if abs(w.top - word.top) <= TOL]
     lo = hi = line.index(word)
     while lo > 0 and line[lo].x0 - line[lo - 1].x1 <= CELL_GAP:
         lo -= 1
