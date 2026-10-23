@@ -1,0 +1,2309 @@
+{
+  "extraction_raw": {
+    "sitrep_no": 129,
+    "report_date": "2026-09-20",
+    "kpis": {
+      "cum_confirmed": 7733,
+      "cum_deaths": 3732,
+      "cfr_pct": 48.3,
+      "in_isolation": 821,
+      "cum_recovered": 1902,
+      "contact_followup_pct": 81.4
+    },
+    "provinces": [
+      {
+        "province": "Ituri",
+        "new_confirmed": 34,
+        "cum_confirmed": 5947,
+        "cum_deaths": 2722,
+        "cfr_pct": 45.8,
+        "zs_affected": 28,
+        "zs_total": 36
+      },
+      {
+        "province": "Nord-Kivu",
+        "new_confirmed": 23,
+        "cum_confirmed": 1425,
+        "cum_deaths": 862,
+        "cfr_pct": 60.5,
+        "zs_affected": 16,
+        "zs_total": 34
+      },
+      {
+        "province": "Haut-Uélé",
+        "new_confirmed": 4,
+        "cum_confirmed": 311,
+        "cum_deaths": 128,
+        "cfr_pct": 41.2,
+        "zs_affected": 7,
+        "zs_total": 13
+      },
+      {
+        "province": "Tshopo",
+        "new_confirmed": 0,
+        "cum_confirmed": 39,
+        "cum_deaths": 14,
+        "cfr_pct": 35.9,
+        "zs_affected": 7,
+        "zs_total": 23
+      },
+      {
+        "province": "Sud-Kivu",
+        "new_confirmed": 0,
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "zs_affected": 1,
+        "zs_total": 34
+      },
+      {
+        "province": "Bas-Uélé",
+        "new_confirmed": 0,
+        "cum_confirmed": 7,
+        "cum_deaths": 4,
+        "cfr_pct": 57.1,
+        "zs_affected": 3,
+        "zs_total": 11
+      }
+    ],
+    "zone_subtotals": [
+      {
+        "province": "Ituri",
+        "cum_confirmed": 5947,
+        "cum_deaths": 2722,
+        "cfr_pct": 45.8,
+        "new_confirmed": 34,
+        "community_deaths": 11,
+        "cte_deaths": 8,
+        "total_deaths_day": 19
+      },
+      {
+        "province": "Nord-Kivu",
+        "cum_confirmed": 1425,
+        "cum_deaths": 862,
+        "cfr_pct": 60.5,
+        "new_confirmed": 23,
+        "community_deaths": 10,
+        "cte_deaths": 2,
+        "total_deaths_day": 12
+      },
+      {
+        "province": "Haut-Uélé",
+        "cum_confirmed": 311,
+        "cum_deaths": 128,
+        "cfr_pct": 41.2,
+        "new_confirmed": 4,
+        "community_deaths": 1,
+        "cte_deaths": 1,
+        "total_deaths_day": 2
+      },
+      {
+        "province": "Tshopo",
+        "cum_confirmed": 39,
+        "cum_deaths": 14,
+        "cfr_pct": 35.9,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Sud-Kivu",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas-Uélé",
+        "cum_confirmed": 7,
+        "cum_deaths": 4,
+        "cfr_pct": 57.1,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      }
+    ],
+    "zone_total": {
+      "cum_confirmed": 7733,
+      "cum_deaths": 3732,
+      "cfr_pct": 48.3,
+      "new_confirmed": 61,
+      "community_deaths": 22,
+      "cte_deaths": 11,
+      "total_deaths_day": 33
+    },
+    "zones": [
+      {
+        "province": "Ituri",
+        "zone": "Adja",
+        "cum_confirmed": 11,
+        "cum_deaths": 1,
+        "cfr_pct": 9.1,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Aru",
+        "cum_confirmed": 8,
+        "cum_deaths": 6,
+        "cfr_pct": 75,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Ariwara",
+        "cum_confirmed": 8,
+        "cum_deaths": 2,
+        "cfr_pct": 25,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Aungba",
+        "cum_confirmed": 12,
+        "cum_deaths": 5,
+        "cfr_pct": 41.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Bambu",
+        "cum_confirmed": 196,
+        "cum_deaths": 40,
+        "cfr_pct": 20.4,
+        "new_confirmed": 3,
+        "community_deaths": 0,
+        "cte_deaths": 1,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Ituri",
+        "zone": "Boga",
+        "cum_confirmed": 2,
+        "cum_deaths": 2,
+        "cfr_pct": 100,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Bunia",
+        "cum_confirmed": 1662,
+        "cum_deaths": 520,
+        "cfr_pct": 31.3,
+        "new_confirmed": 8,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Ituri",
+        "zone": "Damas",
+        "cum_confirmed": 40,
+        "cum_deaths": 9,
+        "cfr_pct": 22.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Drodro",
+        "cum_confirmed": 15,
+        "cum_deaths": 7,
+        "cfr_pct": 46.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Fataki",
+        "cum_confirmed": 81,
+        "cum_deaths": 30,
+        "cfr_pct": 37,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Gethy",
+        "cum_confirmed": 7,
+        "cum_deaths": 3,
+        "cfr_pct": 42.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Kambala",
+        "cum_confirmed": 2,
+        "cum_deaths": 0,
+        "cfr_pct": 0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Kilo",
+        "cum_confirmed": 34,
+        "cum_deaths": 12,
+        "cfr_pct": 35.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Komanda",
+        "cum_confirmed": 147,
+        "cum_deaths": 90,
+        "cfr_pct": 61.2,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 1,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Ituri",
+        "zone": "Lita",
+        "cum_confirmed": 275,
+        "cum_deaths": 138,
+        "cfr_pct": 50.2,
+        "new_confirmed": 2,
+        "community_deaths": 2,
+        "cte_deaths": 1,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Ituri",
+        "zone": "Logo",
+        "cum_confirmed": 13,
+        "cum_deaths": 5,
+        "cfr_pct": 38.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Lolwa",
+        "cum_confirmed": 31,
+        "cum_deaths": 8,
+        "cfr_pct": 25.8,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mahagi",
+        "cum_confirmed": 4,
+        "cum_deaths": 1,
+        "cfr_pct": 25,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mambasa",
+        "cum_confirmed": 21,
+        "cum_deaths": 9,
+        "cfr_pct": 42.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mandima",
+        "cum_confirmed": 59,
+        "cum_deaths": 33,
+        "cfr_pct": 55.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mangala",
+        "cum_confirmed": 337,
+        "cum_deaths": 146,
+        "cfr_pct": 43.3,
+        "new_confirmed": 4,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mongbwalu",
+        "cum_confirmed": 689,
+        "cum_deaths": 321,
+        "cfr_pct": 46.6,
+        "new_confirmed": 3,
+        "community_deaths": 0,
+        "cte_deaths": 2,
+        "total_deaths_day": 2
+      },
+      {
+        "province": "Ituri",
+        "zone": "Nia-Nia",
+        "cum_confirmed": 269,
+        "cum_deaths": 145,
+        "cfr_pct": 53.9,
+        "new_confirmed": 3,
+        "community_deaths": 3,
+        "cte_deaths": 1,
+        "total_deaths_day": 4
+      },
+      {
+        "province": "Ituri",
+        "zone": "Nizi",
+        "cum_confirmed": 756,
+        "cum_deaths": 276,
+        "cfr_pct": 36.5,
+        "new_confirmed": 2,
+        "community_deaths": 0,
+        "cte_deaths": 2,
+        "total_deaths_day": 2
+      },
+      {
+        "province": "Ituri",
+        "zone": "Nyankunde",
+        "cum_confirmed": 127,
+        "cum_deaths": 36,
+        "cfr_pct": 28.3,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Rimba",
+        "cum_confirmed": 12,
+        "cum_deaths": 4,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Rwampara",
+        "cum_confirmed": 1054,
+        "cum_deaths": 355,
+        "cfr_pct": 33.7,
+        "new_confirmed": 8,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Ituri",
+        "zone": "Tchomia",
+        "cum_confirmed": 75,
+        "cum_deaths": 25,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "A ventiler",
+        "cum_confirmed": null,
+        "cum_deaths": 493,
+        "cfr_pct": null,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Beni",
+        "cum_confirmed": 281,
+        "cum_deaths": 197,
+        "cfr_pct": 70.1,
+        "new_confirmed": 6,
+        "community_deaths": 4,
+        "cte_deaths": 2,
+        "total_deaths_day": 6
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Biena",
+        "cum_confirmed": 18,
+        "cum_deaths": 7,
+        "cfr_pct": 38.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Butembo",
+        "cum_confirmed": 252,
+        "cum_deaths": 161,
+        "cfr_pct": 63.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Goma",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Kalunguta",
+        "cum_confirmed": 47,
+        "cum_deaths": 15,
+        "cfr_pct": 31.9,
+        "new_confirmed": 4,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Katwa",
+        "cum_confirmed": 544,
+        "cum_deaths": 344,
+        "cfr_pct": 63.2,
+        "new_confirmed": 2,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Kayna",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Kyondo",
+        "cum_confirmed": 32,
+        "cum_deaths": 20,
+        "cfr_pct": 62.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Lubero",
+        "cum_confirmed": 20,
+        "cum_deaths": 10,
+        "cfr_pct": 50,
+        "new_confirmed": 4,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Mabalako",
+        "cum_confirmed": 24,
+        "cum_deaths": 11,
+        "cfr_pct": 45.8,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Manguredjipa",
+        "cum_confirmed": 11,
+        "cum_deaths": 4,
+        "cfr_pct": 36.4,
+        "new_confirmed": 1,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Masereka",
+        "cum_confirmed": 25,
+        "cum_deaths": 9,
+        "cfr_pct": 36,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Musienene",
+        "cum_confirmed": 121,
+        "cum_deaths": 65,
+        "cfr_pct": 53.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Mutwanga",
+        "cum_confirmed": 9,
+        "cum_deaths": 2,
+        "cfr_pct": 22.2,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Oicha",
+        "cum_confirmed": 14,
+        "cum_deaths": 11,
+        "cfr_pct": 78.6,
+        "new_confirmed": 1,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Vuhovi",
+        "cum_confirmed": 25,
+        "cum_deaths": 6,
+        "cfr_pct": 24,
+        "new_confirmed": 3,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Boma Mangbetu",
+        "cum_confirmed": 36,
+        "cum_deaths": 15,
+        "cfr_pct": 41.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Dungu",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Gombari",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Isiro",
+        "cum_confirmed": 99,
+        "cum_deaths": 43,
+        "cfr_pct": 43.4,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": 1,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Pawa",
+        "cum_confirmed": 68,
+        "cum_deaths": 32,
+        "cfr_pct": 47.1,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Rungu",
+        "cum_confirmed": 2,
+        "cum_deaths": 1,
+        "cfr_pct": 50,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Wamba",
+        "cum_confirmed": 102,
+        "cum_deaths": 35,
+        "cfr_pct": 34.3,
+        "new_confirmed": 3,
+        "community_deaths": 1,
+        "cte_deaths": 0,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Bafwasende",
+        "cum_confirmed": 7,
+        "cum_deaths": 1,
+        "cfr_pct": 14.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Kabondo",
+        "cum_confirmed": 5,
+        "cum_deaths": 1,
+        "cfr_pct": 20,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Lubunga",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Makiso-Kisangani",
+        "cum_confirmed": 20,
+        "cum_deaths": 9,
+        "cfr_pct": 45,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Mangobo",
+        "cum_confirmed": 4,
+        "cum_deaths": 2,
+        "cfr_pct": 50,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Tshopo",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Wanie-Rukula",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Sud-Kivu",
+        "zone": "Miti-Murhesa",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas-Uélé",
+        "zone": "Buta",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas-Uélé",
+        "zone": "Viadana",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas-Uélé",
+        "zone": "Ganga",
+        "cum_confirmed": 3,
+        "cum_deaths": 2,
+        "cfr_pct": 66.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Sud-Ubangi",
+        "zone": "Bulu",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      }
+    ]
+  },
+  "model_id_requested": "mistral-ocr-4-1",
+  "model_id_returned": "mistral-ocr-4-1",
+  "usage": {
+    "pages_processed": 12,
+    "doc_size_bytes": 751904
+  },
+  "requested_at": "2026-10-23T08:00:02+00:00",
+  "response": {
+    "pages": [
+      {
+        "index": 0,
+        "markdown": "![img-0.jpeg](img-0.jpeg)\n\n# TASK FORCE PRÉSIDENTIELLE EBOLA 17\nMinistère de la Santé Publique, Hygiène et Prévoyance Sociale\nSystème de gestion de l'incident MVE17\n\n![img-1.jpeg](img-1.jpeg)\n\n## Rapport de Situation de la 17e Épidémie de la maladie à Virus EBOLA /RDC\n\nSitRep N°129/MVE-BDBV/20/09/2026\n\n📅 Date de rapportage : 20 septembre 2026 📅 Date de publication : 21 septembre 2026\n\n### FAITS SAILLANTS (dernières 24h)\n\nAu cours des dernières 24 heures, une évolution favorable est observée avec une baisse de 16,4 % des nouveaux cas confirmés par rapport à la veille (61 contre 73), sans nouvelle zone de santé touchée. Le niveau reste toutefois légèrement supérieur à celui du 13 septembre (61 contre 58 ; +5,2 %). La transmission demeure fortement concentrée en Ituri et au Nord-Kivu, qui totalisent 57/61 cas (93,4 %). Par ailleurs, 33 décès ont été enregistrés, dont 22 communautaires et 11 intra-CTE, faisant de la réduction des décès communautaires une priorité de la riposte.\n\n[tbl-0.md](tbl-0.md)\n\n📍 Provinces touchées et Zones de santé touchées\n\n### Résumé des points clés au cours des dernières 24 heures\n\n**5 Provinces touchées**\nHaut-Uélé, Ituri, Nord-Kivu, Sud-Kivu, Tshopo et Bas-Uélé\n\n**55 Zones de santé touchées sur 117 (47%)**\n\nAu terme de la journée du 20 septembre 2026, des signaux favorables sont observés, avec une baisse des nouveaux cas confirmés de 73 à 61, soit -16,4 % par rapport à la veille. Par ailleurs, aucune nouvelle zone de santé n'a été touchée au cours des dernières 24 heures, traduisant une stabilisation de l'extension géographique à consolider. Comparativement au 13 septembre 2026, où 58 nouveaux cas avaient été rapportés, le niveau actuel reste relativement proche (61 contre 58 ; +5,2 %).\n\nAu total, 61 nouveaux cas confirmés ont été rapportés, répartis entre l'Ituri (34), le Nord-Kivu (23) et le Haut-Uélé (4). L'Ituri et le Nord-Kivu concentrent à eux seuls 57/61 cas (93,4 %) du jour, confirmant que l'intensification des interventions doit rester prioritairement ciblée sur ces deux principaux foyers. L'Ituri demeure l'épicentre, avec 76,9 % des cas cumulés et 55,7 % des nouveaux cas du jour.\n\nSept ZS ont désormais franchi le seuil de 42 jours sans nouveau cas confirmé : Ituri (Adja, Kambala, Mahagi) ; Sud-Kivu (Miti-Murhesa) ; Tshopo (Wanierukula, Lubunga, Tshopo).\n\nIl y a plus de 10 jours que 19 ZS n'ont pas enregistré des nouveaux cas confirmés : Ituri (Boga, Aru, Aungba, Ariwara, Bambu, Drodro, Fataki, Ghety, Kilo, Lolwa, Logo, Mambasa, Nia-Nia, Rimba) ; Haut-Uélé (Boma-Mangbetu et Gombari) ; Tshopo (Makiso-Kisangani, Mangobo et Kabongo).\n\nVingt-trois (23) patients ont été déclarés guéris au cours des dernières 24 heures, dont 10 en Ituri, 10 au Nord-Kivu et 3 au Haut-Uélé, après l'obtention de deux résultats négatifs à la MVE.\n\nLa mortalité demeure cependant un point majeur de vigilance. Au total, 33 décès ont été enregistrés, dont 22 décès communautaires et 11 décès intra-CTE (8 en Ituri, 2 au Nord-Kivu et 1 au Haut-Uélé). Les décès communautaires représentent ainsi 66,7 % des décès du jour, soulignant la nécessité de poursuivre les efforts de détection précoce, de référencement rapide et d'accès précoce aux soins.\n\nDepuis le début de l'épidémie, la RDC totalise 7 733 cas confirmés et 3 732 décès, soit une létalité globale de 48,3 %.\n\nSur le plan géographique, aucune nouvelle ZS n'a été touchée au cours des dernières 24 heures. Depuis le début de l'épidémie, 63/167 ZS (37,7 %) dans 7 provinces ont rapporté au moins un cas. Toutefois, selon la classification opérationnelle basée sur la transmission récente, 55 ZS réparties dans 5 provinces demeurent actives.\n\n1",
+        "images": [
+          {
+            "id": "img-0.jpeg",
+            "top_left_x": 31,
+            "top_left_y": 34,
+            "bottom_right_x": 114,
+            "bottom_right_y": 113,
+            "image_base64": null,
+            "image_annotation": null
+          },
+          {
+            "id": "img-1.jpeg",
+            "top_left_x": 673,
+            "top_left_y": 26,
+            "bottom_right_x": 764,
+            "bottom_right_y": 116,
+            "image_base64": null,
+            "image_annotation": null
+          }
+        ],
+        "tables": [
+          {
+            "id": "tbl-0.md",
+            "content": "|  **CUMUL DES CAS** **7 733** | **CUMUL DES DÉCÈS CONFIRMÉS** **3 732** | **LETALITE** **48,3%** | **PATIENTS EN ISOLEMENT/CTE** **821** | **CUMUL DES GUÉRIS** **1 902** | **TAUX DE SUIVI DES CONTACTS** (Du Jour) **81,4%**  |\n| --- | --- | --- | --- | --- | --- |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          }
+        ],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 31,
+            "top_left_y": 34,
+            "bottom_right_x": 114,
+            "bottom_right_y": 113,
+            "content": "![img-0.jpeg](img-0.jpeg)",
+            "confidence_scores": null,
+            "type": "image",
+            "image_id": "img-0.jpeg"
+          },
+          {
+            "top_left_x": 138,
+            "top_left_y": 39,
+            "bottom_right_x": 649,
+            "bottom_right_y": 106,
+            "content": "# TASK FORCE PRÉSIDENTIELLE EBOLA 17\nMinistère de la Santé Publique, Hygiène et Prévoyance Sociale\nSystème de gestion de l'incident MVE17",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 673,
+            "top_left_y": 26,
+            "bottom_right_x": 764,
+            "bottom_right_y": 116,
+            "content": "![img-1.jpeg](img-1.jpeg)",
+            "confidence_scores": null,
+            "type": "image",
+            "image_id": "img-1.jpeg"
+          },
+          {
+            "top_left_x": 140,
+            "top_left_y": 140,
+            "bottom_right_x": 649,
+            "bottom_right_y": 158,
+            "content": "## Rapport de Situation de la 17e Épidémie de la maladie à Virus EBOLA /RDC",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 272,
+            "top_left_y": 160,
+            "bottom_right_x": 518,
+            "bottom_right_y": 177,
+            "content": "SitRep N°129/MVE-BDBV/20/09/2026",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 142,
+            "top_left_y": 174,
+            "bottom_right_x": 695,
+            "bottom_right_y": 193,
+            "content": "📅 Date de rapportage : 20 septembre 2026 📅 Date de publication : 21 septembre 2026",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 152,
+            "top_left_y": 201,
+            "bottom_right_x": 333,
+            "bottom_right_y": 216,
+            "content": "### FAITS SAILLANTS (dernières 24h)",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 152,
+            "top_left_y": 216,
+            "bottom_right_x": 698,
+            "bottom_right_y": 279,
+            "content": "Au cours des dernières 24 heures, une évolution favorable est observée avec une baisse de 16,4 % des nouveaux cas confirmés par rapport à la veille (61 contre 73), sans nouvelle zone de santé touchée. Le niveau reste toutefois légèrement supérieur à celui du 13 septembre (61 contre 58 ; +5,2 %). La transmission demeure fortement concentrée en Ituri et au Nord-Kivu, qui totalisent 57/61 cas (93,4 %). Par ailleurs, 33 décès ont été enregistrés, dont 22 communautaires et 11 intra-CTE, faisant de la réduction des décès communautaires une priorité de la riposte.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 76,
+            "top_left_y": 289,
+            "bottom_right_x": 709,
+            "bottom_right_y": 355,
+            "content": "|  **CUMUL DES CAS** **7 733** | **CUMUL DES DÉCÈS CONFIRMÉS** **3 732** | **LETALITE** **48,3%** | **PATIENTS EN ISOLEMENT/CTE** **821** | **CUMUL DES GUÉRIS** **1 902** | **TAUX DE SUIVI DES CONTACTS** (Du Jour) **81,4%**  |\n| --- | --- | --- | --- | --- | --- |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-0.md"
+          },
+          {
+            "top_left_x": 227,
+            "top_left_y": 358,
+            "bottom_right_x": 529,
+            "bottom_right_y": 377,
+            "content": "📍 Provinces touchées et Zones de santé touchées",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 260,
+            "top_left_y": 402,
+            "bottom_right_x": 667,
+            "bottom_right_y": 420,
+            "content": "### Résumé des points clés au cours des dernières 24 heures",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 433,
+            "bottom_right_x": 214,
+            "bottom_right_y": 476,
+            "content": "**5 Provinces touchées**\nHaut-Uélé, Ituri, Nord-Kivu, Sud-Kivu, Tshopo et Bas-Uélé",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 97,
+            "top_left_y": 538,
+            "bottom_right_x": 202,
+            "bottom_right_y": 593,
+            "content": "**55 Zones de santé touchées sur 117 (47%)**",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 432,
+            "bottom_right_x": 698,
+            "bottom_right_y": 531,
+            "content": "Au terme de la journée du 20 septembre 2026, des signaux favorables sont observés, avec une baisse des nouveaux cas confirmés de 73 à 61, soit -16,4 % par rapport à la veille. Par ailleurs, aucune nouvelle zone de santé n'a été touchée au cours des dernières 24 heures, traduisant une stabilisation de l'extension géographique à consolider. Comparativement au 13 septembre 2026, où 58 nouveaux cas avaient été rapportés, le niveau actuel reste relativement proche (61 contre 58 ; +5,2 %).",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 534,
+            "bottom_right_x": 698,
+            "bottom_right_y": 606,
+            "content": "Au total, 61 nouveaux cas confirmés ont été rapportés, répartis entre l'Ituri (34), le Nord-Kivu (23) et le Haut-Uélé (4). L'Ituri et le Nord-Kivu concentrent à eux seuls 57/61 cas (93,4 %) du jour, confirmant que l'intensification des interventions doit rester prioritairement ciblée sur ces deux principaux foyers. L'Ituri demeure l'épicentre, avec 76,9 % des cas cumulés et 55,7 % des nouveaux cas du jour.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 609,
+            "bottom_right_x": 698,
+            "bottom_right_y": 652,
+            "content": "Sept ZS ont désormais franchi le seuil de 42 jours sans nouveau cas confirmé : Ituri (Adja, Kambala, Mahagi) ; Sud-Kivu (Miti-Murhesa) ; Tshopo (Wanierukula, Lubunga, Tshopo).",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 655,
+            "bottom_right_x": 698,
+            "bottom_right_y": 713,
+            "content": "Il y a plus de 10 jours que 19 ZS n'ont pas enregistré des nouveaux cas confirmés : Ituri (Boga, Aru, Aungba, Ariwara, Bambu, Drodro, Fataki, Ghety, Kilo, Lolwa, Logo, Mambasa, Nia-Nia, Rimba) ; Haut-Uélé (Boma-Mangbetu et Gombari) ; Tshopo (Makiso-Kisangani, Mangobo et Kabongo).",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 715,
+            "bottom_right_x": 698,
+            "bottom_right_y": 759,
+            "content": "Vingt-trois (23) patients ont été déclarés guéris au cours des dernières 24 heures, dont 10 en Ituri, 10 au Nord-Kivu et 3 au Haut-Uélé, après l'obtention de deux résultats négatifs à la MVE.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 761,
+            "bottom_right_x": 698,
+            "bottom_right_y": 834,
+            "content": "La mortalité demeure cependant un point majeur de vigilance. Au total, 33 décès ont été enregistrés, dont 22 décès communautaires et 11 décès intra-CTE (8 en Ituri, 2 au Nord-Kivu et 1 au Haut-Uélé). Les décès communautaires représentent ainsi 66,7 % des décès du jour, soulignant la nécessité de poursuivre les efforts de détection précoce, de référencement rapide et d'accès précoce aux soins.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 836,
+            "bottom_right_x": 698,
+            "bottom_right_y": 866,
+            "content": "Depuis le début de l'épidémie, la RDC totalise 7 733 cas confirmés et 3 732 décès, soit une létalité globale de 48,3 %.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 223,
+            "top_left_y": 868,
+            "bottom_right_x": 698,
+            "bottom_right_y": 925,
+            "content": "Sur le plan géographique, aucune nouvelle ZS n'a été touchée au cours des dernières 24 heures. Depuis le début de l'épidémie, 63/167 ZS (37,7 %) dans 7 provinces ont rapporté au moins un cas. Toutefois, selon la classification opérationnelle basée sur la transmission récente, 55 ZS réparties dans 5 provinces demeurent actives.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 693,
+            "top_left_y": 960,
+            "bottom_right_x": 706,
+            "bottom_right_y": 974,
+            "content": "1",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "markdown": "**TABLEAU 1. RÉPARTITION DES CAS ET DÉCÈS CONFIRMÉS PAR PROVINCE ET SITUATION DES ZONES DE SANTÉ AU 20 SEPTEMBRE 2026**\n\n[tbl-1.md](tbl-1.md)\n\n* ZS actuellement affectées : ZS ayant rapporté au moins un cas confirmé au cours des 42 derniers jours.\n\n** Sud-Ubangi : le cas confirmé de Bulu est considéré comme importé, sans transmission locale secondaire documentée à ce stade ; il n'est donc pas inclus dans le décompte des ZS actuellement affectées.\n\nLa transmission reste concentrée en Ituri et au Nord-Kivu, qui regroupent 57/61 (93,4 %) des nouveaux cas. L'Ituri demeure l'épicentre avec 76,9 % des cas cumulés, tandis que le Nord-Kivu conserve une létalité élevée (60,5 %). Un signal favorable est observé avec aucun nouveau cas dans quatre provinces et aucune nouvelle ZS touchée au cours des dernières 24 heures. Sur les 63 ZS historiquement touchées, 55 réparties dans 5 provinces demeurent actuellement affectées, tandis que 7 ZS ont atteint au moins 42 jours sans nouveau cas confirmé. Il y a plus de 10 jours que 27 ZS n'ont pas enregistré des nouveaux cas.\n\n**Tableau 2. Répartition des cas et décès confirmés par province et zone au 20 septembre 2026**\n\n[tbl-2.md](tbl-2.md)\n\n2",
+        "images": [],
+        "tables": [
+          {
+            "id": "tbl-1.md",
+            "content": "|  Province | Nouveaux cas confirmés (24 h) | Cas confirmés cumulés | Décès confirmés cumulés | Létalité | ZS historiquement touchées | ZS actuellement affectées*  |\n| --- | --- | --- | --- | --- | --- | --- |\n|  Ituri | 34 | 5 947 | 2 722 | 45,8 % | 28/36 | 25/36  |\n|  Nord-Kivu | 23 | 1 425 | 862 | 60,5 % | 16/34 | 15/34  |\n|  Haut-Uélé | 4 | 311 | 128 | 41,2 % | 7/13 | 7/13  |\n|  Tshopo | 0 | 39 | 14 | 35,9 % | 7/23 | 5/23  |\n|  Sud-Kivu | 0 | 3 | 1 | 33,3 % | 1/34 | 0/34  |\n|  Bas-Uélé | 0 | 7 | 4 | 57,1 % | 3/11 | 3/11  |\n|  Sud-Ubangi** | 0 | 1 | 1 | 100,0 % | 1/16 | —  |\n|  **Total** | **61** | **7 733** | **3 732** | **48,3 %** | **63/167 (37,7 %)** | **55 ZS dans 5 provinces**  |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          },
+          {
+            "id": "tbl-2.md",
+            "content": "|  Province / Zone de santé | Nombre cumulatif |   |   | Situation du jour (24h)  |   |   |   |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n|   |  Cas (n) | Décès (n) | Létalité | Nouv. Cas | Décès communautaires (Swab+) | Décès confirmés intra-CTE | Total décès confirmés  |\n|  **Ituri** | **5947** | **2722** | **45,8%** | **34** | **11** | **8** | **19**  |\n|  Adja | 11 | 1 | 9,1% |  |  |  | 0  |\n|  Aru | 8 | 6 | 75,0% |  |  |  | 0  |\n|  Ariwara | 8 | 2 | 25,0% |  |  |  | 0  |\n|  Aungba | 12 | 5 | 41,7% |  |  |  | 0  |\n|  Bambu | 196 | 40 | 20,4% | 3 | 0 | 1 | 1  |\n|  Boga | 2 | 2 | 100,0% |  |  |  | 0  |\n|  Bunia | 1662 | 520 | 31,3% | 8 | 3 |  | 3  |\n|  Damas | 40 | 9 | 22,5% |  |  |  | 0  |\n|  Drodro | 15 | 7 | 46,7% |  |  |  | 0  |\n|  Fataki | 81 | 30 | 37,0% |  |  |  | 0  |\n|  Gethy | 7 | 3 | 42,9% |  |  |  | 0  |\n|  Kambala | 2 | 0 | 0,0% |  |  |  | 0  |\n|  Kilo | 34 | 12 | 35,3% |  |  |  | 0  |\n|  Komanda | 147 | 90 | 61,2% | 0 | 0 | 1 | 1  |\n|  Lita | 275 | 138 | 50,2% | 2 | 2 | 1 | 3  |\n|  Logo | 13 | 5 | 38,5% |  |  |  | 0  |\n|  Lolwa | 31 | 8 | 25,8% |  |  |  | 0  |\n|  Mahagi | 4 | 1 | 25,0% |  |  |  | 0  |\n|  Mambasa | 21 | 9 | 42,9% |  |  |  | 0  |\n|  Mandima | 59 | 33 | 55,9% |  |  |  | 0  |\n|  Mangala | 337 | 146 | 43,3% | 4 | 0 | 0 | 0  |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          }
+        ],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 154,
+            "top_left_y": 52,
+            "bottom_right_x": 635,
+            "bottom_right_y": 86,
+            "content": "**TABLEAU 1. RÉPARTITION DES CAS ET DÉCÈS CONFIRMÉS PAR PROVINCE ET SITUATION DES ZONES DE SANTÉ AU 20 SEPTEMBRE 2026**",
+            "confidence_scores": null,
+            "type": "caption"
+          },
+          {
+            "top_left_x": 82,
+            "top_left_y": 96,
+            "bottom_right_x": 701,
+            "bottom_right_y": 311,
+            "content": "|  Province | Nouveaux cas confirmés (24 h) | Cas confirmés cumulés | Décès confirmés cumulés | Létalité | ZS historiquement touchées | ZS actuellement affectées*  |\n| --- | --- | --- | --- | --- | --- | --- |\n|  Ituri | 34 | 5 947 | 2 722 | 45,8 % | 28/36 | 25/36  |\n|  Nord-Kivu | 23 | 1 425 | 862 | 60,5 % | 16/34 | 15/34  |\n|  Haut-Uélé | 4 | 311 | 128 | 41,2 % | 7/13 | 7/13  |\n|  Tshopo | 0 | 39 | 14 | 35,9 % | 7/23 | 5/23  |\n|  Sud-Kivu | 0 | 3 | 1 | 33,3 % | 1/34 | 0/34  |\n|  Bas-Uélé | 0 | 7 | 4 | 57,1 % | 3/11 | 3/11  |\n|  Sud-Ubangi** | 0 | 1 | 1 | 100,0 % | 1/16 | —  |\n|  **Total** | **61** | **7 733** | **3 732** | **48,3 %** | **63/167 (37,7 %)** | **55 ZS dans 5 provinces**  |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-2.md"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 311,
+            "bottom_right_x": 577,
+            "bottom_right_y": 327,
+            "content": "* ZS actuellement affectées : ZS ayant rapporté au moins un cas confirmé au cours des 42 derniers jours.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 323,
+            "bottom_right_x": 699,
+            "bottom_right_y": 349,
+            "content": "** Sud-Ubangi : le cas confirmé de Bulu est considéré comme importé, sans transmission locale secondaire documentée à ce stade ; il n'est donc pas inclus dans le décompte des ZS actuellement affectées.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 347,
+            "bottom_right_x": 701,
+            "bottom_right_y": 429,
+            "content": "La transmission reste concentrée en Ituri et au Nord-Kivu, qui regroupent 57/61 (93,4 %) des nouveaux cas. L'Ituri demeure l'épicentre avec 76,9 % des cas cumulés, tandis que le Nord-Kivu conserve une létalité élevée (60,5 %). Un signal favorable est observé avec aucun nouveau cas dans quatre provinces et aucune nouvelle ZS touchée au cours des dernières 24 heures. Sur les 63 ZS historiquement touchées, 55 réparties dans 5 provinces demeurent actuellement affectées, tandis que 7 ZS ont atteint au moins 42 jours sans nouveau cas confirmé. Il y a plus de 10 jours que 27 ZS n'ont pas enregistré des nouveaux cas.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 145,
+            "top_left_y": 447,
+            "bottom_right_x": 644,
+            "bottom_right_y": 465,
+            "content": "**Tableau 2. Répartition des cas et décès confirmés par province et zone au 20 septembre 2026**",
+            "confidence_scores": null,
+            "type": "caption"
+          },
+          {
+            "top_left_x": 86,
+            "top_left_y": 471,
+            "bottom_right_x": 696,
+            "bottom_right_y": 940,
+            "content": "|  Province / Zone de santé | Nombre cumulatif |   |   | Situation du jour (24h)  |   |   |   |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n|   |  Cas (n) | Décès (n) | Létalité | Nouv. Cas | Décès communautaires (Swab+) | Décès confirmés intra-CTE | Total décès confirmés  |\n|  **Ituri** | **5947** | **2722** | **45,8%** | **34** | **11** | **8** | **19**  |\n|  Adja | 11 | 1 | 9,1% |  |  |  | 0  |\n|  Aru | 8 | 6 | 75,0% |  |  |  | 0  |\n|  Ariwara | 8 | 2 | 25,0% |  |  |  | 0  |\n|  Aungba | 12 | 5 | 41,7% |  |  |  | 0  |\n|  Bambu | 196 | 40 | 20,4% | 3 | 0 | 1 | 1  |\n|  Boga | 2 | 2 | 100,0% |  |  |  | 0  |\n|  Bunia | 1662 | 520 | 31,3% | 8 | 3 |  | 3  |\n|  Damas | 40 | 9 | 22,5% |  |  |  | 0  |\n|  Drodro | 15 | 7 | 46,7% |  |  |  | 0  |\n|  Fataki | 81 | 30 | 37,0% |  |  |  | 0  |\n|  Gethy | 7 | 3 | 42,9% |  |  |  | 0  |\n|  Kambala | 2 | 0 | 0,0% |  |  |  | 0  |\n|  Kilo | 34 | 12 | 35,3% |  |  |  | 0  |\n|  Komanda | 147 | 90 | 61,2% | 0 | 0 | 1 | 1  |\n|  Lita | 275 | 138 | 50,2% | 2 | 2 | 1 | 3  |\n|  Logo | 13 | 5 | 38,5% |  |  |  | 0  |\n|  Lolwa | 31 | 8 | 25,8% |  |  |  | 0  |\n|  Mahagi | 4 | 1 | 25,0% |  |  |  | 0  |\n|  Mambasa | 21 | 9 | 42,9% |  |  |  | 0  |\n|  Mandima | 59 | 33 | 55,9% |  |  |  | 0  |\n|  Mangala | 337 | 146 | 43,3% | 4 | 0 | 0 | 0  |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-2.md"
+          },
+          {
+            "top_left_x": 690,
+            "top_left_y": 957,
+            "bottom_right_x": 708,
+            "bottom_right_y": 974,
+            "content": "2",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "markdown": "[tbl-3.md](tbl-3.md)\n\n3",
+        "images": [],
+        "tables": [
+          {
+            "id": "tbl-3.md",
+            "content": "|  Mongbwalu | 689 | 321 | 46,6% | 3 | 0 | 2 | 2  |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n|  Nia-Nia | 269 | 145 | 53,9% | 3 | 3 | 1 | 4  |\n|  Nizi | 756 | 276 | 36,5% | 2 | 0 | 2 | 2  |\n|  Nyankunde | 127 | 36 | 28,3% | 1 | 0 |  | 0  |\n|  Rimba | 12 | 4 | 33,3% |  |  |  | 0  |\n|  Rwampara | 1054 | 355 | 33,7% | 8 | 3 |  | 3  |\n|  Tchomia | 75 | 25 | 33,3% |  |  |  | 0  |\n|  A ventiler* | NA | 493 | NA |  |  |  | 0  |\n|  **Nord-Kivu** | **1425** | **862** | **60,5%** | **23** | **10** | **2** | **12**  |\n|  Beni | 281 | 197 | 70,1% | 6 | 4 | 2 | 6  |\n|  Biena | 18 | 7 | 38,9% |  |  |  | 0  |\n|  Butembo | 252 | 161 | 63,9% |  |  |  | 0  |\n|  Goma | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Kalunguta | 47 | 15 | 31,9% | 4 | 0 |  | 0  |\n|  Katwa | 544 | 344 | 63,2% | 2 | 1 |  | 1  |\n|  Kayna | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Kyondo | 32 | 20 | 62,5% |  |  |  | 0  |\n|  Lubero | 20 | 10 | 50,0% | 4 | 3 |  | 3  |\n|  Mabalako | 24 | 11 | 45,8% |  |  |  | 0  |\n|  Manguredjipa | 11 | 4 | 36,4% | 1 | 1 |  | 1  |\n|  Masereka | 25 | 9 | 36,0% | 1 | 0 |  | 0  |\n|  Musienene | 121 | 65 | 53,7% |  |  |  | 0  |\n|  Mutwanga | 9 | 2 | 22,2% | 1 | 0 |  | 0  |\n|  Oicha | 14 | 11 | 78,6% | 1 | 1 |  | 1  |\n|  Vuhovi | 25 | 6 | 24,0% | 3 | 0 |  | 0  |\n|  **Haut-Uélé** | **311** | **128** | **41,2%** | **4** | **1** | **1** | **2**  |\n|  Boma Mangbetu | 36 | 15 | 41,7% |  |  |  | 0  |\n|  Dungu | 1 | 1 | 100,0% |  |  |  | 0  |\n|  Gombari | 3 | 1 | 33,3% |  |  |  | 0  |\n|  Isiro | 99 | 43 | 43,4% | 1 | 0 | 1 | 1  |\n|  Pawa | 68 | 32 | 47,1% |  |  |  | 0  |\n|  Rungu | 2 | 1 | 50,0% |  |  |  | 0  |\n|  Wamba | 102 | 35 | 34,3% | 3 | 1 | 0 | 1  |\n|  **Tshopo** | **39** | **14** | **35,9%** | **0** | **0** | **0** | **0**  |\n|  Bafwasende | 7 | 1 | 14,3% |  |  |  | 0  |\n|  Kabondo | 5 | 1 | 20,0% |  |  |  | 0  |\n|  Lubunga | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Makiso-Kisangani | 20 | 9 | 45,0% |  |  |  | 0  |\n|  Mangobo | 4 | 2 | 50,0% |  |  |  | 0  |\n|  Tshopo | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Wanie-Rukula | 1 | 1 | 100,0% |  |  |  | 0  |\n|  **Sud-Kivu** | **3** | **1** | **33,3%** | **0** | **0** | **0** | **0**  |\n|  Miti-Murhesa | 3 | 1 | 33,3% |  |  |  | 0  |\n|  **Bas Uélé** | **7** | **4** | **57,1%** | **0** | **0** | **0** | **0**  |\n|  Buta | 1 | 1 | 100,0% |  |  |  | 0  |\n|  Viadana | 3 | 1 | 33,3% |  |  |  | 0  |\n|  Ganga | 3 | 2 | 66,7% |  |  |  | 0  |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          }
+        ],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 86,
+            "top_left_y": 51,
+            "bottom_right_x": 701,
+            "bottom_right_y": 944,
+            "content": "|  Mongbwalu | 689 | 321 | 46,6% | 3 | 0 | 2 | 2  |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n|  Nia-Nia | 269 | 145 | 53,9% | 3 | 3 | 1 | 4  |\n|  Nizi | 756 | 276 | 36,5% | 2 | 0 | 2 | 2  |\n|  Nyankunde | 127 | 36 | 28,3% | 1 | 0 |  | 0  |\n|  Rimba | 12 | 4 | 33,3% |  |  |  | 0  |\n|  Rwampara | 1054 | 355 | 33,7% | 8 | 3 |  | 3  |\n|  Tchomia | 75 | 25 | 33,3% |  |  |  | 0  |\n|  A ventiler* | NA | 493 | NA |  |  |  | 0  |\n|  **Nord-Kivu** | **1425** | **862** | **60,5%** | **23** | **10** | **2** | **12**  |\n|  Beni | 281 | 197 | 70,1% | 6 | 4 | 2 | 6  |\n|  Biena | 18 | 7 | 38,9% |  |  |  | 0  |\n|  Butembo | 252 | 161 | 63,9% |  |  |  | 0  |\n|  Goma | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Kalunguta | 47 | 15 | 31,9% | 4 | 0 |  | 0  |\n|  Katwa | 544 | 344 | 63,2% | 2 | 1 |  | 1  |\n|  Kayna | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Kyondo | 32 | 20 | 62,5% |  |  |  | 0  |\n|  Lubero | 20 | 10 | 50,0% | 4 | 3 |  | 3  |\n|  Mabalako | 24 | 11 | 45,8% |  |  |  | 0  |\n|  Manguredjipa | 11 | 4 | 36,4% | 1 | 1 |  | 1  |\n|  Masereka | 25 | 9 | 36,0% | 1 | 0 |  | 0  |\n|  Musienene | 121 | 65 | 53,7% |  |  |  | 0  |\n|  Mutwanga | 9 | 2 | 22,2% | 1 | 0 |  | 0  |\n|  Oicha | 14 | 11 | 78,6% | 1 | 1 |  | 1  |\n|  Vuhovi | 25 | 6 | 24,0% | 3 | 0 |  | 0  |\n|  **Haut-Uélé** | **311** | **128** | **41,2%** | **4** | **1** | **1** | **2**  |\n|  Boma Mangbetu | 36 | 15 | 41,7% |  |  |  | 0  |\n|  Dungu | 1 | 1 | 100,0% |  |  |  | 0  |\n|  Gombari | 3 | 1 | 33,3% |  |  |  | 0  |\n|  Isiro | 99 | 43 | 43,4% | 1 | 0 | 1 | 1  |\n|  Pawa | 68 | 32 | 47,1% |  |  |  | 0  |\n|  Rungu | 2 | 1 | 50,0% |  |  |  | 0  |\n|  Wamba | 102 | 35 | 34,3% | 3 | 1 | 0 | 1  |\n|  **Tshopo** | **39** | **14** | **35,9%** | **0** | **0** | **0** | **0**  |\n|  Bafwasende | 7 | 1 | 14,3% |  |  |  | 0  |\n|  Kabondo | 5 | 1 | 20,0% |  |  |  | 0  |\n|  Lubunga | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Makiso-Kisangani | 20 | 9 | 45,0% |  |  |  | 0  |\n|  Mangobo | 4 | 2 | 50,0% |  |  |  | 0  |\n|  Tshopo | 1 | 0 | 0,0% |  |  |  | 0  |\n|  Wanie-Rukula | 1 | 1 | 100,0% |  |  |  | 0  |\n|  **Sud-Kivu** | **3** | **1** | **33,3%** | **0** | **0** | **0** | **0**  |\n|  Miti-Murhesa | 3 | 1 | 33,3% |  |  |  | 0  |\n|  **Bas Uélé** | **7** | **4** | **57,1%** | **0** | **0** | **0** | **0**  |\n|  Buta | 1 | 1 | 100,0% |  |  |  | 0  |\n|  Viadana | 3 | 1 | 33,3% |  |  |  | 0  |\n|  Ganga | 3 | 2 | 66,7% |  |  |  | 0  |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-3.md"
+          },
+          {
+            "top_left_x": 693,
+            "top_left_y": 957,
+            "bottom_right_x": 709,
+            "bottom_right_y": 975,
+            "content": "3",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "markdown": "[tbl-4.md](tbl-4.md)\n\n*Il s'agit des décès confirmés survenus dans les différents CTE de la province qui sont en cours de ventilation pour être classifiés par zone de santé.\n\nNA : Non Applicable.\n\nLa transmission demeure fortement concentrée en Ituri et au Nord-Kivu, qui totalisent 57/61 (93,4 %) des nouveaux cas et 31/33 (93,9 %) des décès du jour. L'Ituri reste l'épicentre avec 55,7 % des nouveaux cas et 76,9 % des cas cumulés, tandis que le Nord-Kivu conserve une létalité élevée (60,5 %). Les principaux foyers du jour sont Bunia et Rwampara en Ituri, ainsi que Beni, Kalunguta et Lubero au Nord-Kivu. Un signal favorable est toutefois observé avec l'absence de nouveau cas dans quatre provinces : Tshopo, Sud-Kivu, Bas-Uélé et Sud-Ubangi. La persistance de 22 décès communautaires sur 33 décès du jour (66,7 %) demeure un point majeur de vigilance et justifie le renforcement de la détection précoce, du référencement rapide, de la prise en charge et des interventions ciblées dans les foyers actifs.\n\nTableau 3. Situation des alertes notifiées par province pour la journée du 20 septembre 2026\n\n[tbl-5.md](tbl-5.md)\n\nLa surveillance affiche une bonne performance de vérification des alertes, avec environ 1 746/1 764 (99,0 %) alertes classifiées, et d'investigation, avec 313/318 (98,4 %) suspects validés investigués. L'Ituri et le Nord-Kivu concentrent 1 649/1 764 (93,5 %) des alertes et 305/318 (95,9 %) des suspects validés, confirmant que l'essentiel de la charge de surveillance demeure dans ces deux principaux foyers. Parmi les suspects investigués, 127/313 (40,6 %) ont été transférés vers les CT/CTE. Le principal point de vigilance demeure l'absence de données du Haut-Uélé et du Sud-Ubangi.\n\nFigure 1. Évolution de cas par date de début des symptômes au cours des 21 derniers jours\n\n![img-2.jpeg](img-2.jpeg)\n\nFigure 2. Distribution spatiale des cas confirmés (24h et cumule) par zone de santé.\n\n![img-3.jpeg](img-3.jpeg)",
+        "images": [
+          {
+            "id": "img-2.jpeg",
+            "top_left_x": 37,
+            "top_left_y": 724,
+            "bottom_right_x": 374,
+            "bottom_right_y": 927,
+            "image_base64": null,
+            "image_annotation": null
+          },
+          {
+            "id": "img-3.jpeg",
+            "top_left_x": 407,
+            "top_left_y": 721,
+            "bottom_right_x": 755,
+            "bottom_right_y": 968,
+            "image_base64": null,
+            "image_annotation": null
+          }
+        ],
+        "tables": [
+          {
+            "id": "tbl-4.md",
+            "content": "|  Sud Ubangi | 1 | 1 | 100,0% | 0 | 0 | 0 | 0  |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n|  Bulu | 1 | 1 | 100,0% |  |  |  | 0  |\n|  **Total** | **7733** | **3732** | **48,3%** | **61** | **22** | **11** | **33**  |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          },
+          {
+            "id": "tbl-5.md",
+            "content": "|  DPS | Alertes Reçues |   | Total alertes | Alertes vérifiées et validées (cas suspect) |   | Alertes vérifiées et invalidées (non-cas suspect) |   | Nombre de suspects investigués | Nombre de suspects investigués et transférés au CTE/CT (du jour)  |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n|   |  Vivants | Décédés |   | Vivants | Décédés | Vivants | Décédés  |   |   |\n|  Haut-Uélé | ND | ND | NA | ND | ND | ND | ND | ND | ND  |\n|  Bas-Uélé | 65 | 3 | 68 | 4 | 2 | 61 | 1 | 6 | 0  |\n|  Ituri | 751 | 77 | 828 | 110 | 77 | 631 | 0 | 182 | 82  |\n|  Nord-Kivu | 775 | 46 | 821 | 72 | 46 | 695 | 0 | 118 | 45  |\n|  Sud Ubangi | ND | ND | NA | ND | ND | ND | ND | ND | ND  |\n|  Tshopo | 47 | 0 | 47 | 7 | 0 | 40 | 0 | 7 | 0  |\n|  **Total Général** | **1 638** | **126** | **1 764** | **193** | **125** | **1 427** | **1** | **313** | **127**  |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          }
+        ],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 87,
+            "top_left_y": 52,
+            "bottom_right_x": 701,
+            "bottom_right_y": 111,
+            "content": "|  Sud Ubangi | 1 | 1 | 100,0% | 0 | 0 | 0 | 0  |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n|  Bulu | 1 | 1 | 100,0% |  |  |  | 0  |\n|  **Total** | **7733** | **3732** | **48,3%** | **61** | **22** | **11** | **33**  |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-4.md"
+          },
+          {
+            "top_left_x": 97,
+            "top_left_y": 110,
+            "bottom_right_x": 698,
+            "bottom_right_y": 122,
+            "content": "*Il s'agit des décès confirmés survenus dans les différents CTE de la province qui sont en cours de ventilation pour être classifiés par zone de santé.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 97,
+            "top_left_y": 125,
+            "bottom_right_x": 186,
+            "bottom_right_y": 137,
+            "content": "NA : Non Applicable.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 140,
+            "bottom_right_x": 701,
+            "bottom_right_y": 275,
+            "content": "La transmission demeure fortement concentrée en Ituri et au Nord-Kivu, qui totalisent 57/61 (93,4 %) des nouveaux cas et 31/33 (93,9 %) des décès du jour. L'Ituri reste l'épicentre avec 55,7 % des nouveaux cas et 76,9 % des cas cumulés, tandis que le Nord-Kivu conserve une létalité élevée (60,5 %). Les principaux foyers du jour sont Bunia et Rwampara en Ituri, ainsi que Beni, Kalunguta et Lubero au Nord-Kivu. Un signal favorable est toutefois observé avec l'absence de nouveau cas dans quatre provinces : Tshopo, Sud-Kivu, Bas-Uélé et Sud-Ubangi. La persistance de 22 décès communautaires sur 33 décès du jour (66,7 %) demeure un point majeur de vigilance et justifie le renforcement de la détection précoce, du référencement rapide, de la prise en charge et des interventions ciblées dans les foyers actifs.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 132,
+            "top_left_y": 296,
+            "bottom_right_x": 648,
+            "bottom_right_y": 315,
+            "content": "Tableau 3. Situation des alertes notifiées par province pour la journée du 20 septembre 2026",
+            "confidence_scores": null,
+            "type": "caption"
+          },
+          {
+            "top_left_x": 33,
+            "top_left_y": 315,
+            "bottom_right_x": 742,
+            "bottom_right_y": 565,
+            "content": "|  DPS | Alertes Reçues |   | Total alertes | Alertes vérifiées et validées (cas suspect) |   | Alertes vérifiées et invalidées (non-cas suspect) |   | Nombre de suspects investigués | Nombre de suspects investigués et transférés au CTE/CT (du jour)  |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n|   |  Vivants | Décédés |   | Vivants | Décédés | Vivants | Décédés  |   |   |\n|  Haut-Uélé | ND | ND | NA | ND | ND | ND | ND | ND | ND  |\n|  Bas-Uélé | 65 | 3 | 68 | 4 | 2 | 61 | 1 | 6 | 0  |\n|  Ituri | 751 | 77 | 828 | 110 | 77 | 631 | 0 | 182 | 82  |\n|  Nord-Kivu | 775 | 46 | 821 | 72 | 46 | 695 | 0 | 118 | 45  |\n|  Sud Ubangi | ND | ND | NA | ND | ND | ND | ND | ND | ND  |\n|  Tshopo | 47 | 0 | 47 | 7 | 0 | 40 | 0 | 7 | 0  |\n|  **Total Général** | **1 638** | **126** | **1 764** | **193** | **125** | **1 427** | **1** | **313** | **127**  |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-5.md"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 565,
+            "bottom_right_x": 701,
+            "bottom_right_y": 656,
+            "content": "La surveillance affiche une bonne performance de vérification des alertes, avec environ 1 746/1 764 (99,0 %) alertes classifiées, et d'investigation, avec 313/318 (98,4 %) suspects validés investigués. L'Ituri et le Nord-Kivu concentrent 1 649/1 764 (93,5 %) des alertes et 305/318 (95,9 %) des suspects validés, confirmant que l'essentiel de la charge de surveillance demeure dans ces deux principaux foyers. Parmi les suspects investigués, 127/313 (40,6 %) ont été transférés vers les CT/CTE. Le principal point de vigilance demeure l'absence de données du Haut-Uélé et du Sud-Ubangi.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 45,
+            "top_left_y": 678,
+            "bottom_right_x": 387,
+            "bottom_right_y": 712,
+            "content": "Figure 1. Évolution de cas par date de début des symptômes au cours des 21 derniers jours",
+            "confidence_scores": null,
+            "type": "caption"
+          },
+          {
+            "top_left_x": 37,
+            "top_left_y": 724,
+            "bottom_right_x": 374,
+            "bottom_right_y": 927,
+            "content": "![img-2.jpeg](img-2.jpeg)",
+            "confidence_scores": null,
+            "type": "image",
+            "image_id": "img-2.jpeg"
+          },
+          {
+            "top_left_x": 407,
+            "top_left_y": 678,
+            "bottom_right_x": 755,
+            "bottom_right_y": 712,
+            "content": "Figure 2. Distribution spatiale des cas confirmés (24h et cumule) par zone de santé.",
+            "confidence_scores": null,
+            "type": "caption"
+          },
+          {
+            "top_left_x": 407,
+            "top_left_y": 721,
+            "bottom_right_x": 755,
+            "bottom_right_y": 968,
+            "content": "![img-3.jpeg](img-3.jpeg)",
+            "confidence_scores": null,
+            "type": "image",
+            "image_id": "img-3.jpeg"
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "markdown": "# 1. COORDINATION\n\n# 1.1. Principales Actions\n\n- Poursuite de la coordination stratégique et opérationnelle de la riposte, avec suivi quotidien de la situation épidémiologique, des performances des piliers et des principaux gaps nécessitant une action corrective.\n- Renforcement de la coordination avec les DPS des provinces affectées et les partenaires techniques et financiers, en vue d'un meilleur alignement des interventions sur les besoins prioritaires de la riposte.\n- Poursuite du suivi de la qualité et de la cohérence des données, notamment la gestion des alertes, l'investigation des suspects et la consolidation des données provinciales et nationales pour la prise de décision.\n- Suivi de la situation dans les principaux foyers actifs, particulièrement en Ituri, au Nord-Kivu et au Haut-Uélé, ainsi que maintien de la vigilance dans les provinces en accalmie et autour des événements considérés comme importés.\n- Poursuite du plaidoyer et de la mobilisation des partenaires pour la couverture des gaps opérationnels prioritaires identifiés par les différents piliers.\n\n# 1.2. Défi majeur\n\nRenforcer la gouvernance opérationnelle de la riposte en assurant un suivi systématique de l'exécution des décisions et recommandations, une meilleure coordination des interventions des piliers et partenaires, ainsi qu'une allocation des ressources fondée sur les gaps et les priorités épidémiologiques, afin de transformer rapidement les orientations de la Coordination en résultats mesurables dans les foyers actifs.\n\n# 2. ACTIONS DE RIPOSTE PAR PILIER\n\n# 2.1. Surveillance épidémiologique\n\n# 2.1.1. Principales Actions\n\nAu terme de la journée du 20 septembre, 1 764 alertes ont été rapportées ; 1 746 (99,0 %) ont été vérifiées. Ainsi, 318 alertes ont été validées comme cas suspects, 318 (98,4 %) ont fait l'objet d'une investigation, et 127 ont été transférés vers les CT/CTE (Tableau 3).\n\nAu cours des dernières 24 heures, 27 281 contacts ont été vus parmi 33 520 en cours de suivi, soit une proportion de suivi de 81,4 %, supérieure à celle de la veille (79,9%). Cette proportion était de 100,0 % (42/42) au Sud Ubangi, 91,5 % (193/211) au Bas-Uélé, 83,9 % (271/323) à la Tshopo, 83,3 % (11 057/13 280) au Nord-Kivu, 79,9 % (15 718/19 664) en Ituri.\n\n# 2.1.2. Défi majeur\n\nConsolider la bonne performance de vérification et d'investigation des alertes, tout en améliorant rapidement le suivi des contacts, qui reste en dessous du seuil attendu de 85 %, malgré une progression de 79,9 % à 81,4 % au cours des dernières 24 heures. Une attention prioritaire est requise en Ituri (79,9 % ; 15 718/19 664), qui concentre la majorité des contacts non vus, ainsi qu'au Nord-Kivu (83,3 % ; 11 057/13 280) et à la Tshopo (83,9 % ; 271/323). Il convient également d'assurer la complétude du rapportage des alertes dans toutes les provinces, notamment au Haut-Uélé où les données n'étaient pas disponibles, et de renforcer la recherche active, le suivi quotidien des contacts et le référencement rapide des suspects dans les foyers de transmission active.\n\n# 2.2. Point sur les activités de points de contrôle et points d'entrées (PoE/PoC)\n\n# 2.2.1. Principales actions\n\nTrois (3) alertes vivantes ont été notifiées aux PoE/PoC au cours des dernières 24 heures, dont deux (2) en Ituri, aux PoC de Dele (ZS de Rwampara) et de Foner Mambasa (ZS de Mambasa), et une (1) au Nord-Kivu, au PoC de Mukulia (ZS de Beni). Les trois alertes ont été validées et investiguées dans les 24 heures (100 % ; 3/3) et deux ont été transférées au CT/CTE (66,7 % ; 2/3), le suspect de Foner Mambasa ayant refusé son transfert.\n\n5",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 90,
+            "top_left_y": 54,
+            "bottom_right_x": 230,
+            "bottom_right_y": 70,
+            "content": "# 1. COORDINATION",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 85,
+            "bottom_right_x": 249,
+            "bottom_right_y": 101,
+            "content": "# 1.1. Principales Actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 101,
+            "bottom_right_x": 702,
+            "bottom_right_y": 325,
+            "content": "- Poursuite de la coordination stratégique et opérationnelle de la riposte, avec suivi quotidien de la situation épidémiologique, des performances des piliers et des principaux gaps nécessitant une action corrective.\n- Renforcement de la coordination avec les DPS des provinces affectées et les partenaires techniques et financiers, en vue d'un meilleur alignement des interventions sur les besoins prioritaires de la riposte.\n- Poursuite du suivi de la qualité et de la cohérence des données, notamment la gestion des alertes, l'investigation des suspects et la consolidation des données provinciales et nationales pour la prise de décision.\n- Suivi de la situation dans les principaux foyers actifs, particulièrement en Ituri, au Nord-Kivu et au Haut-Uélé, ainsi que maintien de la vigilance dans les provinces en accalmie et autour des événements considérés comme importés.\n- Poursuite du plaidoyer et de la mobilisation des partenaires pour la couverture des gaps opérationnels prioritaires identifiés par les différents piliers.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 323,
+            "bottom_right_x": 193,
+            "bottom_right_y": 339,
+            "content": "# 1.2. Défi majeur",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 339,
+            "bottom_right_x": 702,
+            "bottom_right_y": 418,
+            "content": "Renforcer la gouvernance opérationnelle de la riposte en assurant un suivi systématique de l'exécution des décisions et recommandations, une meilleure coordination des interventions des piliers et partenaires, ainsi qu'une allocation des ressources fondée sur les gaps et les priorités épidémiologiques, afin de transformer rapidement les orientations de la Coordination en résultats mesurables dans les foyers actifs.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 432,
+            "bottom_right_x": 344,
+            "bottom_right_y": 449,
+            "content": "# 2. ACTIONS DE RIPOSTE PAR PILIER",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 464,
+            "bottom_right_x": 314,
+            "bottom_right_y": 481,
+            "content": "# 2.1. Surveillance épidémiologique",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 495,
+            "bottom_right_x": 268,
+            "bottom_right_y": 512,
+            "content": "# 2.1.1. Principales Actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 512,
+            "bottom_right_x": 702,
+            "bottom_right_y": 559,
+            "content": "Au terme de la journée du 20 septembre, 1 764 alertes ont été rapportées ; 1 746 (99,0 %) ont été vérifiées. Ainsi, 318 alertes ont été validées comme cas suspects, 318 (98,4 %) ont fait l'objet d'une investigation, et 127 ont été transférés vers les CT/CTE (Tableau 3).",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 558,
+            "bottom_right_x": 702,
+            "bottom_right_y": 622,
+            "content": "Au cours des dernières 24 heures, 27 281 contacts ont été vus parmi 33 520 en cours de suivi, soit une proportion de suivi de 81,4 %, supérieure à celle de la veille (79,9%). Cette proportion était de 100,0 % (42/42) au Sud Ubangi, 91,5 % (193/211) au Bas-Uélé, 83,9 % (271/323) à la Tshopo, 83,3 % (11 057/13 280) au Nord-Kivu, 79,9 % (15 718/19 664) en Ituri.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 620,
+            "bottom_right_x": 217,
+            "bottom_right_y": 637,
+            "content": "# 2.1.2. Défi majeur",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 636,
+            "bottom_right_x": 702,
+            "bottom_right_y": 777,
+            "content": "Consolider la bonne performance de vérification et d'investigation des alertes, tout en améliorant rapidement le suivi des contacts, qui reste en dessous du seuil attendu de 85 %, malgré une progression de 79,9 % à 81,4 % au cours des dernières 24 heures. Une attention prioritaire est requise en Ituri (79,9 % ; 15 718/19 664), qui concentre la majorité des contacts non vus, ainsi qu'au Nord-Kivu (83,3 % ; 11 057/13 280) et à la Tshopo (83,9 % ; 271/323). Il convient également d'assurer la complétude du rapportage des alertes dans toutes les provinces, notamment au Haut-Uélé où les données n'étaient pas disponibles, et de renforcer la recherche active, le suivi quotidien des contacts et le référencement rapide des suspects dans les foyers de transmission active.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 791,
+            "bottom_right_x": 618,
+            "bottom_right_y": 808,
+            "content": "# 2.2. Point sur les activités de points de contrôle et points d'entrées (PoE/PoC)",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 823,
+            "bottom_right_x": 265,
+            "bottom_right_y": 840,
+            "content": "# 2.2.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 839,
+            "bottom_right_x": 702,
+            "bottom_right_y": 918,
+            "content": "Trois (3) alertes vivantes ont été notifiées aux PoE/PoC au cours des dernières 24 heures, dont deux (2) en Ituri, aux PoC de Dele (ZS de Rwampara) et de Foner Mambasa (ZS de Mambasa), et une (1) au Nord-Kivu, au PoC de Mukulia (ZS de Beni). Les trois alertes ont été validées et investiguées dans les 24 heures (100 % ; 3/3) et deux ont été transférées au CT/CTE (66,7 % ; 2/3), le suspect de Foner Mambasa ayant refusé son transfert.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 694,
+            "top_left_y": 958,
+            "bottom_right_x": 709,
+            "bottom_right_y": 974,
+            "content": "5",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "markdown": "Tableau 4. Situation indicateurs clés des PoE/PoC par province, en date du 20 septembre 2026\n\n[tbl-6.md](tbl-6.md)\n\n### 2.2.2. Défis\n\nMaintenir la **détection et l'investigation systématiques des alertes aux PoE/PoC**, dont la performance atteint **100 % (3/3) au cours des dernières 24 heures**, tout en améliorant leur référencement effectif vers les structures de prise en charge. Une attention particulière doit être portée à la **gestion des refus de transfert**, comme observé au PoC de Foner Mambasa, afin de réduire le risque de poursuite des déplacements de cas suspects et de transmission le long des axes de mobilité. Il convient également de maintenir une surveillance renforcée aux PoE/PoC situés sur les principaux corridors reliant les foyers actifs aux zones en accalmie ou non affectées.\n\n### 2.3. Laboratoire\n\n#### 2.3.1. Principales actions\n\n- **Ituri : 34 nouveaux résultats positifs** (23 vivants et 11 décès) sur 116 nouveaux échantillons reçus et analysés (**positivité : 29,3 %**) ;\n- **Nord-Kivu : 23 nouveaux résultats positifs** (13 vivants et 10 décès) sur 229 échantillons analysés (**positivité de 10,0%**) ;\n- **Haut-Uélé : 4 nouveaux résultats positifs** (3 vivants et 1 décès) sur 13 échantillons reçus et analysés au laboratoire d'Isiro (**positivité : 30,8%**) ;\n- **Tshopo : 7 échantillons reçus et testés (vivants)** tous sont revenus négatifs ;\n- **Bas-Uélé : 30 échantillons reçus et analysés au laboratoire d'Isiro**, tous sont revenus négatifs.\n\n#### 2.3.2. Défi majeur\n\nMaintenir la disponibilité et la rapidité du diagnostic biologique tout en renforçant la surveillance dans les foyers présentant une **forte positivité**, particulièrement au **Haut-Uélé (30,8 % ; 4/13)** et en **Ituri (29,3 % ; 34/116)**, témoignant d'une circulation virale encore importante parmi les personnes prélevées. Au Nord-Kivu, la positivité demeure à **10,0 % (23/229)**. Il convient de garantir la disponibilité continue des intrants et consommables, la qualité des prélèvements, leur acheminement sécurisé et le rendu rapide des résultats, tout en maintenant une capacité\n\n6",
+        "images": [],
+        "tables": [
+          {
+            "id": "tbl-6.md",
+            "content": "|  Indicateurs | Ituri | Nord-Kivu | Tshopo | Haut-Uélé | Global  |\n| --- | --- | --- | --- | --- | --- |\n|  Complétude des rapports | 93,3% (56/60) | 100% (20/20) | 100% (18/18) | 85,7% (6/7) | 95,2% (100/105)  |\n|  % des PoE/PoC stratégiques fonctionnels | 100% | 100% | 100% | 100% | 100%  |\n|  Nombre de personnes passées aux PoE/PoC | 134 552 | 88 283 | 21 495 | 12 776 | 257 106  |\n|  % des voyageurs screenés | 96,6% | 98,1% | 99,3% | 99,2% | 97,5%  |\n|  % des voyageurs ayant lavé les mains | 96,6% | 98,1% | 99,4% | 99,0% | 97,5%  |\n|  % des voyageurs sensibilisés | 99,3% | 98,1% | 100,0% | 100,0% | 99,0%  |\n|  Nombre d'alertes notifiées | 2 | 1 | 0 | 0 | 3  |\n|  Nombre d'alertes vivantes validées (cas suspects) | 2 | 1 | 0 | 0 | 3  |\n|  Nombre de corps sans vie interceptés ce jour | 0 | 0 | 0 | 0 | 0  |\n|  % des cas suspects transférés au CTE/CT | 50,0% (1/2) | 100% (1/1) | NA | NA | 66,7% (2/3)  |\n|  % des corps sans vie swabés/sécurisés | NA | NA | NA | NA | NA  |\n|  % des cas suspects investigués dans 24 h | 100% (2/2) | 100% (1/1) | NA | NA | 100% (3/3)  |",
+            "format": "markdown",
+            "word_confidence_scores": null
+          }
+        ],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 126,
+            "top_left_y": 63,
+            "bottom_right_x": 663,
+            "bottom_right_y": 81,
+            "content": "Tableau 4. Situation indicateurs clés des PoE/PoC par province, en date du 20 septembre 2026",
+            "confidence_scores": null,
+            "type": "caption"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 81,
+            "bottom_right_x": 694,
+            "bottom_right_y": 470,
+            "content": "|  Indicateurs | Ituri | Nord-Kivu | Tshopo | Haut-Uélé | Global  |\n| --- | --- | --- | --- | --- | --- |\n|  Complétude des rapports | 93,3% (56/60) | 100% (20/20) | 100% (18/18) | 85,7% (6/7) | 95,2% (100/105)  |\n|  % des PoE/PoC stratégiques fonctionnels | 100% | 100% | 100% | 100% | 100%  |\n|  Nombre de personnes passées aux PoE/PoC | 134 552 | 88 283 | 21 495 | 12 776 | 257 106  |\n|  % des voyageurs screenés | 96,6% | 98,1% | 99,3% | 99,2% | 97,5%  |\n|  % des voyageurs ayant lavé les mains | 96,6% | 98,1% | 99,4% | 99,0% | 97,5%  |\n|  % des voyageurs sensibilisés | 99,3% | 98,1% | 100,0% | 100,0% | 99,0%  |\n|  Nombre d'alertes notifiées | 2 | 1 | 0 | 0 | 3  |\n|  Nombre d'alertes vivantes validées (cas suspects) | 2 | 1 | 0 | 0 | 3  |\n|  Nombre de corps sans vie interceptés ce jour | 0 | 0 | 0 | 0 | 0  |\n|  % des cas suspects transférés au CTE/CT | 50,0% (1/2) | 100% (1/1) | NA | NA | 66,7% (2/3)  |\n|  % des corps sans vie swabés/sécurisés | NA | NA | NA | NA | NA  |\n|  % des cas suspects investigués dans 24 h | 100% (2/2) | 100% (1/1) | NA | NA | 100% (3/3)  |",
+            "confidence_scores": null,
+            "type": "table",
+            "table_id": "tbl-6.md"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 480,
+            "bottom_right_x": 175,
+            "bottom_right_y": 497,
+            "content": "### 2.2.2. Défis",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 116,
+            "top_left_y": 496,
+            "bottom_right_x": 701,
+            "bottom_right_y": 623,
+            "content": "Maintenir la **détection et l'investigation systématiques des alertes aux PoE/PoC**, dont la performance atteint **100 % (3/3) au cours des dernières 24 heures**, tout en améliorant leur référencement effectif vers les structures de prise en charge. Une attention particulière doit être portée à la **gestion des refus de transfert**, comme observé au PoC de Foner Mambasa, afin de réduire le risque de poursuite des déplacements de cas suspects et de transmission le long des axes de mobilité. Il convient également de maintenir une surveillance renforcée aux PoE/PoC situés sur les principaux corridors reliant les foyers actifs aux zones en accalmie ou non affectées.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 636,
+            "bottom_right_x": 193,
+            "bottom_right_y": 653,
+            "content": "### 2.3. Laboratoire",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 667,
+            "bottom_right_x": 265,
+            "bottom_right_y": 684,
+            "content": "#### 2.3.1. Principales actions",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 114,
+            "top_left_y": 684,
+            "bottom_right_x": 701,
+            "bottom_right_y": 830,
+            "content": "- **Ituri : 34 nouveaux résultats positifs** (23 vivants et 11 décès) sur 116 nouveaux échantillons reçus et analysés (**positivité : 29,3 %**) ;\n- **Nord-Kivu : 23 nouveaux résultats positifs** (13 vivants et 10 décès) sur 229 échantillons analysés (**positivité de 10,0%**) ;\n- **Haut-Uélé : 4 nouveaux résultats positifs** (3 vivants et 1 décès) sur 13 échantillons reçus et analysés au laboratoire d'Isiro (**positivité : 30,8%**) ;\n- **Tshopo : 7 échantillons reçus et testés (vivants)** tous sont revenus négatifs ;\n- **Bas-Uélé : 30 échantillons reçus et analysés au laboratoire d'Isiro**, tous sont revenus négatifs.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 828,
+            "bottom_right_x": 217,
+            "bottom_right_y": 846,
+            "content": "#### 2.3.2. Défi majeur",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 116,
+            "top_left_y": 845,
+            "bottom_right_x": 701,
+            "bottom_right_y": 939,
+            "content": "Maintenir la disponibilité et la rapidité du diagnostic biologique tout en renforçant la surveillance dans les foyers présentant une **forte positivité**, particulièrement au **Haut-Uélé (30,8 % ; 4/13)** et en **Ituri (29,3 % ; 34/116)**, témoignant d'une circulation virale encore importante parmi les personnes prélevées. Au Nord-Kivu, la positivité demeure à **10,0 % (23/229)**. Il convient de garantir la disponibilité continue des intrants et consommables, la qualité des prélèvements, leur acheminement sécurisé et le rendu rapide des résultats, tout en maintenant une capacité",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 693,
+            "top_left_y": 957,
+            "bottom_right_x": 708,
+            "bottom_right_y": 974,
+            "content": "6",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "markdown": "diagnostique sensible dans les provinces n'ayant enregistré aucun résultat positif au cours des dernières 24 heures, notamment la Tshopo (0/7) et le Bas-Uélé (0/30).\n\n## 2.4. Prévention et Contrôle de l'Infection (PCI/EDS)\n\n### 2.4.1. Principales actions\n\n- En Ituri, 13 rings ont été ouverts sur 41 (31,7 %) et 52 ménages ont été décontaminés sur les 54 identifiés (96,3 %) ; 3 FOSA sur 3 ont été décontaminées et aucun ménage n'a été doté en kits d'hygiène. Quant aux EDS, 78 alertes ont été enregistrées (dont 6 reports de la veille), 61 EDS réalisés (78,2 %) et 52 corps swabés ; 13 corps n'ont pas pu être swabés ;\n- Au Nord-Kivu, 17 rings ont été ouverts sur 26 (65,4 %), 12 ménages décontaminés sur 28 (42,9 %) et 17 FOSA décontaminées sur 22 (77,3 %) ; 9 évaluations scorecard PCI ont été réalisées dans 9 ESS avec un score moyen de 27 % et l'évaluation du risque d'exposition du personnel a classé 6 agents sur 28 à risque élevé. Quant aux EDS, 50 alertes ont été reçues (plus 19 reports de la veille), 50 corps swabés et 47 EDS réalisés ;\n- À la Tshopo, clôture de la formation de 50 PPL de la ZS de Makiso-Kisangani ; décontamination de 4 ménages avec incinération des biens et de l'école maternelle La Borne ; 13 ESS suivies et accompagnées, avec 139 prestataires briefés sur les précautions standards. Quant aux EDS, aucune alerte n'a été reçue et 1 EDS a été réalisé (report de la veille au CTE) ;\n- Au Bas-Uélé, 4 prestataires et 3 hygiénistes ont été briefés dans 3 ESS de la ZS de Ganga, la fonctionnalité des 3 pré-triages de la ZS de Buta a été suivie et les intrants PCI et PECH ont été colisés pour la ZS de Ganga.\n\n### 2.4.2. Défis\n\nAméliorer la complétude et la rapidité des interventions PCI/EDS autour des cas et des décès, particulièrement dans les foyers actifs. Les principaux gaps concernent la faible ouverture des rings en Ituri (13/41 ; 31,7 %) et au Nord-Kivu (17/26 ; 65,4 %), ainsi que la faible décontamination des ménages au Nord-Kivu (12/28 ; 42,9 %). La situation reste également préoccupante dans les ESS du Nord-Kivu, où le score moyen PCI n'est que de 27 % et 6/28 agents évalués présentent un risque élevé d'exposition. Pour les EDS, il convient d'améliorer leur réalisation et le swabbing systématique des corps, notamment en Ituri où 61/78 EDS (78,2 %) ont été réalisés et 13 corps n'ont pas pu être prélevés. La priorité est donc de renforcer l'ouverture rapide des rings, la décontamination, la protection des prestataires et l'application effective des précautions standards, tout en sécurisant la réalisation des EDS et des prélèvements post-mortem.\n\n## 2.5. Prise en charge holistique\n\n### 2.5.1. Principales actions\n\n- En Ituri, 77 nouvelles admissions enregistrées au décours de la journée contre 73 sorties dont 10 guéries. Ainsi, 442 patients sont hospitalisés pour 1015 lits (taux d'occupation de 43,5 %) ; 393 patients sur 422 (93,1 %) ont bénéficié de repas chauds et les enfants sous LNPE/SLM ont été intégralement couverts au CTE (13/13), à la crèche (3/3) et dans la communauté (27/27) ;\n- Au Nord-Kivu, 63 nouvelles admissions enregistrées contre 123 sorties dont 10 guéries ; 316 patients sont hospitalisés dont 208 dans les structures normées avec une capacité d'accueil de 228 lits, soit un taux d'occupation global de 91,2 % ;\n- Au Haut-Uélé, une nouvelle admission a été enregistrée contre 10 sorties (3 guéries). Ainsi, 45 patients sont hospitalisés pour 138 lits, soit un taux d'occupation de 32,6 % ;\n- À la Tshopo, une nouvelle admission enregistrée sans aucune sortie. Douze (12) patients sont en isolement pour 31 lits, soit un taux d'occupation de 38,7 % ; 7 confirmés et 1 suspect ont bénéficié d'un repas chaud ainsi que 20 suspects et 42/42 (100 %) prestataires de première ligne ont bénéficié également des repas chauds ;\n- Au Bas-Uélé, une nouvelle admission a été enregistrée sans aucune sortie. Ainsi, 6 patients sont hospitalisés dans les ESS.\n\n7",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 118,
+            "top_left_y": 54,
+            "bottom_right_x": 701,
+            "bottom_right_y": 86,
+            "content": "diagnostique sensible dans les provinces n'ayant enregistré aucun résultat positif au cours des dernières 24 heures, notamment la Tshopo (0/7) et le Bas-Uélé (0/30).",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 100,
+            "bottom_right_x": 424,
+            "bottom_right_y": 117,
+            "content": "## 2.4. Prévention et Contrôle de l'Infection (PCI/EDS)",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 132,
+            "bottom_right_x": 265,
+            "bottom_right_y": 148,
+            "content": "### 2.4.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 148,
+            "bottom_right_x": 701,
+            "bottom_right_y": 415,
+            "content": "- En Ituri, 13 rings ont été ouverts sur 41 (31,7 %) et 52 ménages ont été décontaminés sur les 54 identifiés (96,3 %) ; 3 FOSA sur 3 ont été décontaminées et aucun ménage n'a été doté en kits d'hygiène. Quant aux EDS, 78 alertes ont été enregistrées (dont 6 reports de la veille), 61 EDS réalisés (78,2 %) et 52 corps swabés ; 13 corps n'ont pas pu être swabés ;\n- Au Nord-Kivu, 17 rings ont été ouverts sur 26 (65,4 %), 12 ménages décontaminés sur 28 (42,9 %) et 17 FOSA décontaminées sur 22 (77,3 %) ; 9 évaluations scorecard PCI ont été réalisées dans 9 ESS avec un score moyen de 27 % et l'évaluation du risque d'exposition du personnel a classé 6 agents sur 28 à risque élevé. Quant aux EDS, 50 alertes ont été reçues (plus 19 reports de la veille), 50 corps swabés et 47 EDS réalisés ;\n- À la Tshopo, clôture de la formation de 50 PPL de la ZS de Makiso-Kisangani ; décontamination de 4 ménages avec incinération des biens et de l'école maternelle La Borne ; 13 ESS suivies et accompagnées, avec 139 prestataires briefés sur les précautions standards. Quant aux EDS, aucune alerte n'a été reçue et 1 EDS a été réalisé (report de la veille au CTE) ;\n- Au Bas-Uélé, 4 prestataires et 3 hygiénistes ont été briefés dans 3 ESS de la ZS de Ganga, la fonctionnalité des 3 pré-triages de la ZS de Buta a été suivie et les intrants PCI et PECH ont été colisés pour la ZS de Ganga.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 413,
+            "bottom_right_x": 175,
+            "bottom_right_y": 429,
+            "content": "### 2.4.2. Défis",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 118,
+            "top_left_y": 429,
+            "bottom_right_x": 701,
+            "bottom_right_y": 602,
+            "content": "Améliorer la complétude et la rapidité des interventions PCI/EDS autour des cas et des décès, particulièrement dans les foyers actifs. Les principaux gaps concernent la faible ouverture des rings en Ituri (13/41 ; 31,7 %) et au Nord-Kivu (17/26 ; 65,4 %), ainsi que la faible décontamination des ménages au Nord-Kivu (12/28 ; 42,9 %). La situation reste également préoccupante dans les ESS du Nord-Kivu, où le score moyen PCI n'est que de 27 % et 6/28 agents évalués présentent un risque élevé d'exposition. Pour les EDS, il convient d'améliorer leur réalisation et le swabbing systématique des corps, notamment en Ituri où 61/78 EDS (78,2 %) ont été réalisés et 13 corps n'ont pas pu être prélevés. La priorité est donc de renforcer l'ouverture rapide des rings, la décontamination, la protection des prestataires et l'application effective des précautions standards, tout en sécurisant la réalisation des EDS et des prélèvements post-mortem.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 616,
+            "bottom_right_x": 294,
+            "bottom_right_y": 633,
+            "content": "## 2.5. Prise en charge holistique",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 89,
+            "top_left_y": 647,
+            "bottom_right_x": 265,
+            "bottom_right_y": 664,
+            "content": "### 2.5.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 664,
+            "bottom_right_x": 701,
+            "bottom_right_y": 914,
+            "content": "- En Ituri, 77 nouvelles admissions enregistrées au décours de la journée contre 73 sorties dont 10 guéries. Ainsi, 442 patients sont hospitalisés pour 1015 lits (taux d'occupation de 43,5 %) ; 393 patients sur 422 (93,1 %) ont bénéficié de repas chauds et les enfants sous LNPE/SLM ont été intégralement couverts au CTE (13/13), à la crèche (3/3) et dans la communauté (27/27) ;\n- Au Nord-Kivu, 63 nouvelles admissions enregistrées contre 123 sorties dont 10 guéries ; 316 patients sont hospitalisés dont 208 dans les structures normées avec une capacité d'accueil de 228 lits, soit un taux d'occupation global de 91,2 % ;\n- Au Haut-Uélé, une nouvelle admission a été enregistrée contre 10 sorties (3 guéries). Ainsi, 45 patients sont hospitalisés pour 138 lits, soit un taux d'occupation de 32,6 % ;\n- À la Tshopo, une nouvelle admission enregistrée sans aucune sortie. Douze (12) patients sont en isolement pour 31 lits, soit un taux d'occupation de 38,7 % ; 7 confirmés et 1 suspect ont bénéficié d'un repas chaud ainsi que 20 suspects et 42/42 (100 %) prestataires de première ligne ont bénéficié également des repas chauds ;\n- Au Bas-Uélé, une nouvelle admission a été enregistrée sans aucune sortie. Ainsi, 6 patients sont hospitalisés dans les ESS.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 694,
+            "top_left_y": 958,
+            "bottom_right_x": 708,
+            "bottom_right_y": 974,
+            "content": "7",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "markdown": "## 2.5.2. Défis\n\nGarantir une prise en charge précoce, continue et de qualité des patients, tout en maintenant des capacités d'hospitalisation suffisantes dans les foyers actifs. Une attention prioritaire demeure nécessaire au Nord-Kivu, où le taux d'occupation des structures normées atteint 91,2 % (208/228 lits), proche de la saturation, malgré un nombre de sorties supérieur aux nouvelles admissions (123 contre 63), constituant une évolution favorable à consolider. En Ituri, la capacité reste disponible (442/1 015 ; 43,5 %), mais les admissions demeurent légèrement supérieures aux sorties (77 contre 73) et la couverture alimentaire doit être complétée (393/422 ; 93,1 %). Il convient également de garantir la disponibilité continue des lits, médicaments, intrants, personnel qualifié, alimentation et soutien nutritionnel, tout en consolidant les capacités de prise en charge dans les provinces à plus faible activité, notamment le Haut-Uélé, la Tshopo et le Bas-Uélé.\n\n## 2.6. Vaccination\n\n### 2.6.1. Principales actions\n\n- En Ituri, 30 PPL (17 hommes et 13 femmes) ont été vaccinés dans la ZS de Bunia, sans aucune MAPI signalée ; les activités de recherche sur l'efficacité de l'ERVEBO contre la MVE-BDBV se poursuivent.\n- Au Bas-Uélé, 874 PPL ont été vaccinés à ce jour, dont 550 à Buta, 211 à Ganga, 71 à Poko et 42 à Viadana ; les équipements de la chaîne ultra-froide ont été réceptionnés à l'antenne PEV de Buta, 99,3 % des données individuelles sont encodées dans DHIS2 et les points focaux ont été briefés pour l'enquête d'acceptabilité de l'ERVEBO auprès des PPL.\n- À la Tshopo, 164 cas ont reçu le traitement expérimental, dont 25 confirmés (3 sous MBP134 et 22 sous Remdesivir : 10 guéris, 7 décédés, 1 évadé et 7 en cours de traitement), et 139 sont sous prophylaxie post-exposition (94 terminées, 11 interrompues et 34 en cours).\n\n### 2.6.2. Défis\n\nAccélérer et documenter la protection des prestataires de première ligne (PPL) exposés, tout en assurant l'accès rapide des personnes éligibles à la prophylaxie post-exposition (PEP) et le suivi complet des bénéficiaires. Malgré les progrès enregistrés au Bas-Uélé avec 874 PPL vaccinés et une complétude d'encodage de 99,3 % dans DHIS2, la vaccination doit être poursuivie dans les zones à risque et son niveau de couverture apprécié par rapport aux cibles de PPL identifiées. En Ituri, où 30 PPL ont été vaccinés à Bunia, il convient d'accélérer l'identification et la vaccination des PPL éligibles tout en maintenant la surveillance des MAPI. À la Tshopo, une attention particulière doit être portée au suivi des 139 bénéficiaires de la PEP, notamment à l'analyse et à la réduction des 11 interruptions, ainsi qu'au suivi des 34 prophylaxies encore en cours. La priorité demeure de garantir la disponibilité des vaccins, traitements expérimentaux et intrants, la traçabilité des bénéficiaires et la remontée régulière d'indicateurs permettant de mesurer la couverture effective des populations éligibles.\n\n## 2.7. Communication sur les risques et engagement communautaire (CREC)\n\n### 2.7.1. Principales actions\n\n- En Ituri, 56 433 visites à domicile ont touché 95 073 personnes et 1 197 causeries éducatives 28 117 personnes ; 54 sensibilisations de masse ont touché 3 285 personnes, 41 débats communautaires rassemblant 437 personnes et 9 plaidoyers avec 17 personnes ; 295 alertes communautaires ont été notifiées dont 48 décès, 114 feedbacks reçus dont 91 résolus (79,8 %) et 9 incidents communautaires dont 6 résolus (66,7 %), pour une complétude de 35,7 % (10/28 ZS) ; 47 leaders locaux ont effectué une visite guidée du CTE de Nia-Nia ;\n- Au Nord-Kivu, 9 500 visites à domicile ont touché 28 539 personnes, 69 causeries éducatives avec 2 627 personnes touchées et 15 séances de communication de masse ont permis d'atteindre 5 499 personnes ; 79 alertes de cas suspects et de décès ont été notifiées par les acteurs communautaires sur 450 attendues (17,6 %) ; 11 feedbacks sur 15 ont été résolus dans les 48 heures (73,3 %) ; 901 personnes sur 4 750 ont été engagées dans des actions communautaires (19,0 %) et 1 incident sur 6 a été résolu (16,7 %) ;\n\n8",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 90,
+            "top_left_y": 55,
+            "bottom_right_x": 175,
+            "bottom_right_y": 70,
+            "content": "## 2.5.2. Défis",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 114,
+            "top_left_y": 70,
+            "bottom_right_x": 702,
+            "bottom_right_y": 242,
+            "content": "Garantir une prise en charge précoce, continue et de qualité des patients, tout en maintenant des capacités d'hospitalisation suffisantes dans les foyers actifs. Une attention prioritaire demeure nécessaire au Nord-Kivu, où le taux d'occupation des structures normées atteint 91,2 % (208/228 lits), proche de la saturation, malgré un nombre de sorties supérieur aux nouvelles admissions (123 contre 63), constituant une évolution favorable à consolider. En Ituri, la capacité reste disponible (442/1 015 ; 43,5 %), mais les admissions demeurent légèrement supérieures aux sorties (77 contre 73) et la couverture alimentaire doit être complétée (393/422 ; 93,1 %). Il convient également de garantir la disponibilité continue des lits, médicaments, intrants, personnel qualifié, alimentation et soutien nutritionnel, tout en consolidant les capacités de prise en charge dans les provinces à plus faible activité, notamment le Haut-Uélé, la Tshopo et le Bas-Uélé.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 257,
+            "bottom_right_x": 200,
+            "bottom_right_y": 272,
+            "content": "## 2.6. Vaccination",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 289,
+            "bottom_right_x": 265,
+            "bottom_right_y": 304,
+            "content": "### 2.6.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 114,
+            "top_left_y": 304,
+            "bottom_right_x": 702,
+            "bottom_right_y": 463,
+            "content": "- En Ituri, 30 PPL (17 hommes et 13 femmes) ont été vaccinés dans la ZS de Bunia, sans aucune MAPI signalée ; les activités de recherche sur l'efficacité de l'ERVEBO contre la MVE-BDBV se poursuivent.\n- Au Bas-Uélé, 874 PPL ont été vaccinés à ce jour, dont 550 à Buta, 211 à Ganga, 71 à Poko et 42 à Viadana ; les équipements de la chaîne ultra-froide ont été réceptionnés à l'antenne PEV de Buta, 99,3 % des données individuelles sont encodées dans DHIS2 et les points focaux ont été briefés pour l'enquête d'acceptabilité de l'ERVEBO auprès des PPL.\n- À la Tshopo, 164 cas ont reçu le traitement expérimental, dont 25 confirmés (3 sous MBP134 et 22 sous Remdesivir : 10 guéris, 7 décédés, 1 évadé et 7 en cours de traitement), et 139 sont sous prophylaxie post-exposition (94 terminées, 11 interrompues et 34 en cours).",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 462,
+            "bottom_right_x": 175,
+            "bottom_right_y": 477,
+            "content": "### 2.6.2. Défis",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 114,
+            "top_left_y": 477,
+            "bottom_right_x": 702,
+            "bottom_right_y": 666,
+            "content": "Accélérer et documenter la protection des prestataires de première ligne (PPL) exposés, tout en assurant l'accès rapide des personnes éligibles à la prophylaxie post-exposition (PEP) et le suivi complet des bénéficiaires. Malgré les progrès enregistrés au Bas-Uélé avec 874 PPL vaccinés et une complétude d'encodage de 99,3 % dans DHIS2, la vaccination doit être poursuivie dans les zones à risque et son niveau de couverture apprécié par rapport aux cibles de PPL identifiées. En Ituri, où 30 PPL ont été vaccinés à Bunia, il convient d'accélérer l'identification et la vaccination des PPL éligibles tout en maintenant la surveillance des MAPI. À la Tshopo, une attention particulière doit être portée au suivi des 139 bénéficiaires de la PEP, notamment à l'analyse et à la réduction des 11 interruptions, ainsi qu'au suivi des 34 prophylaxies encore en cours. La priorité demeure de garantir la disponibilité des vaccins, traitements expérimentaux et intrants, la traçabilité des bénéficiaires et la remontée régulière d'indicateurs permettant de mesurer la couverture effective des populations éligibles.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 681,
+            "bottom_right_x": 584,
+            "bottom_right_y": 698,
+            "content": "## 2.7. Communication sur les risques et engagement communautaire (CREC)",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 712,
+            "bottom_right_x": 265,
+            "bottom_right_y": 728,
+            "content": "### 2.7.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 114,
+            "top_left_y": 728,
+            "bottom_right_x": 702,
+            "bottom_right_y": 932,
+            "content": "- En Ituri, 56 433 visites à domicile ont touché 95 073 personnes et 1 197 causeries éducatives 28 117 personnes ; 54 sensibilisations de masse ont touché 3 285 personnes, 41 débats communautaires rassemblant 437 personnes et 9 plaidoyers avec 17 personnes ; 295 alertes communautaires ont été notifiées dont 48 décès, 114 feedbacks reçus dont 91 résolus (79,8 %) et 9 incidents communautaires dont 6 résolus (66,7 %), pour une complétude de 35,7 % (10/28 ZS) ; 47 leaders locaux ont effectué une visite guidée du CTE de Nia-Nia ;\n- Au Nord-Kivu, 9 500 visites à domicile ont touché 28 539 personnes, 69 causeries éducatives avec 2 627 personnes touchées et 15 séances de communication de masse ont permis d'atteindre 5 499 personnes ; 79 alertes de cas suspects et de décès ont été notifiées par les acteurs communautaires sur 450 attendues (17,6 %) ; 11 feedbacks sur 15 ont été résolus dans les 48 heures (73,3 %) ; 901 personnes sur 4 750 ont été engagées dans des actions communautaires (19,0 %) et 1 incident sur 6 a été résolu (16,7 %) ;",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 694,
+            "top_left_y": 960,
+            "bottom_right_x": 708,
+            "bottom_right_y": 974,
+            "content": "8",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "markdown": "• À la Tshopo, 201 visites à domicile ont touché 1 126 personnes et 2 causeries éducatives ont été organisées au bénéfice de 92 personnes ; des sensibilisations ont été tenues dans 46 confessions religieuses auprès de 18 768 fidèles (7 882 hommes et 10 886 femmes) ; 4 émissions radiophoniques ont été animées ; 38 IT et 600 membres des CAC des ZS de Makiso-Kisangani et de Wanie-Rukula ont été formés et 2 feedbacks ainsi que 3 refus ont été résolus.\n\n# 2.7.2. Défis\n\nAméliorer la couverture, la remontée des alertes communautaires et la résolution rapide des feedbacks, refus et incidents, particulièrement dans les foyers actifs. En Ituri, malgré l'ampleur des activités communautaires, la complétude du rapportage demeure faible (10/28 ZS ; 35,7 %), tandis que 91/114 feedbacks (79,8 %) et 6/9 incidents (66,7 %) ont été résolus. Au Nord-Kivu, les performances restent particulièrement faibles pour la notification des alertes communautaires (79/450 ; 17,6 %), l'engagement communautaire (901/4 750 ; 19,0 %) et la résolution des incidents (1/6 ; 16,7 %). La priorité est donc de redynamiser les relais et structures communautaires dans les ZS actives, renforcer la détection et la notification précoces des alertes, améliorer la complétude du rapportage et assurer une gestion rapide des feedbacks, refus et incidents susceptibles de compromettre l'adhésion des communautés aux interventions de la riposte.\n\n# 2.8. Santé mentale et soutien psychosocial (SMSPS)\n\n# 2.8.1. Principales actions\n\n• En Ituri, 23 des 38 parmi les cas confirmés (60,5 %) de la veille et 90 des 160 cas confirmés en cours de suivi (56,3 %) ont bénéficié d'interventions SMSPS, ainsi que 31 des 77 nouveaux suspects (40,3 %) et 126 des 161 suspects en cours de suivi (78,3 %) ; 467 accompagnants et 44 PPL ont été soutenus, 14 des 19 guéris (73,7 %) suivis en communauté et 61 annonces de résultats faites dont 23 positives ; 10 des 28 ZS sont couvertes et 10 enfants sont suivis en crèche ;\n• Au Nord-Kivu, 10 personnes parmi les cas confirmés des dernières 48h et 68 cas confirmés en cours de suivi ont bénéficié d'interventions SMSPS, ainsi que 217 nouveaux suspects et 276 suspects en cours de suivi ; 97 annonces de résultats dont 20 positifs, 61 ménages accompagnés et 35 PPL soutenus, 9 guéris suivis en communauté et 4 des 7 ZS ayant notifié sont couvertes (57,1 %) ;\n• À la Tshopo, 2 cas confirmés, 2 nouveaux cas suspects et 11 cas en cours de suivi au CTE Météo (8 confirmés et 3 suspects) ont bénéficié d'un soutien psychologique ; 84 personnes ont été soutenues, dont 78 accompagnants et 6 PPL, et 1 résultat positif a été annoncé ;\n• Au Haut-Uélé, 4 nouveaux cas confirmés et 14 cas confirmés en cours de suivi ont bénéficié d'interventions SMSPS, ainsi que 3 nouveaux suspects et 11 suspects en cours de suivi ; 18 résultats ont été annoncés dont 4 positifs, 54 accompagnants et 44 PPL ont été soutenus, 5 enfants séparés ont été accompagnés en communauté et 3 EDS ont été appuyés.\n\n# 2.9. Logistique\n\n# 2.9.1. Principales actions\n\n• Appui à la mobilité des équipes de la riposte dans toutes les provinces touchées ; poursuite de la construction du CTE de l'HGR de Musienene au Nord-Kivu et du CTE de Bafwasende à la Tshopo et acheminement des intrants PCI et PEC vers les ZS de Ganga, de Poko et de Viadana au Bas-Uélé avec l'appui de l'OMS.\n\n# 2.9.2. Défis majeurs\n\nGarantir la disponibilité, le prépositionnement et l'acheminement continu des intrants, équipements et moyens de mobilité jusqu'au dernier kilomètre, particulièrement dans les foyers actifs et les zones difficiles d'accès. Il convient d'assurer la finalisation dans les délais et l'opérationnalisation des CTE en construction à Musienene et Bafwasende, tout en sécurisant la distribution effective des intrants PCI et PEC acheminés vers Ganga, Poko et Viadana. La priorité demeure également de maintenir des moyens de transport fonctionnels et suffisamment dotés en carburant afin d'éviter toute rupture logistique susceptible de retarder les\n\n9",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 115,
+            "top_left_y": 53,
+            "bottom_right_x": 701,
+            "bottom_right_y": 148,
+            "content": "• À la Tshopo, 201 visites à domicile ont touché 1 126 personnes et 2 causeries éducatives ont été organisées au bénéfice de 92 personnes ; des sensibilisations ont été tenues dans 46 confessions religieuses auprès de 18 768 fidèles (7 882 hommes et 10 886 femmes) ; 4 émissions radiophoniques ont été animées ; 38 IT et 600 membres des CAC des ZS de Makiso-Kisangani et de Wanie-Rukula ont été formés et 2 feedbacks ainsi que 3 refus ont été résolus.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 148,
+            "bottom_right_x": 175,
+            "bottom_right_y": 164,
+            "content": "# 2.7.2. Défis",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 164,
+            "bottom_right_x": 701,
+            "bottom_right_y": 336,
+            "content": "Améliorer la couverture, la remontée des alertes communautaires et la résolution rapide des feedbacks, refus et incidents, particulièrement dans les foyers actifs. En Ituri, malgré l'ampleur des activités communautaires, la complétude du rapportage demeure faible (10/28 ZS ; 35,7 %), tandis que 91/114 feedbacks (79,8 %) et 6/9 incidents (66,7 %) ont été résolus. Au Nord-Kivu, les performances restent particulièrement faibles pour la notification des alertes communautaires (79/450 ; 17,6 %), l'engagement communautaire (901/4 750 ; 19,0 %) et la résolution des incidents (1/6 ; 16,7 %). La priorité est donc de redynamiser les relais et structures communautaires dans les ZS actives, renforcer la détection et la notification précoces des alertes, améliorer la complétude du rapportage et assurer une gestion rapide des feedbacks, refus et incidents susceptibles de compromettre l'adhésion des communautés aux interventions de la riposte.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 346,
+            "bottom_right_x": 434,
+            "bottom_right_y": 364,
+            "content": "# 2.8. Santé mentale et soutien psychosocial (SMSPS)",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 374,
+            "bottom_right_x": 265,
+            "bottom_right_y": 390,
+            "content": "# 2.8.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 390,
+            "bottom_right_x": 701,
+            "bottom_right_y": 674,
+            "content": "• En Ituri, 23 des 38 parmi les cas confirmés (60,5 %) de la veille et 90 des 160 cas confirmés en cours de suivi (56,3 %) ont bénéficié d'interventions SMSPS, ainsi que 31 des 77 nouveaux suspects (40,3 %) et 126 des 161 suspects en cours de suivi (78,3 %) ; 467 accompagnants et 44 PPL ont été soutenus, 14 des 19 guéris (73,7 %) suivis en communauté et 61 annonces de résultats faites dont 23 positives ; 10 des 28 ZS sont couvertes et 10 enfants sont suivis en crèche ;\n• Au Nord-Kivu, 10 personnes parmi les cas confirmés des dernières 48h et 68 cas confirmés en cours de suivi ont bénéficié d'interventions SMSPS, ainsi que 217 nouveaux suspects et 276 suspects en cours de suivi ; 97 annonces de résultats dont 20 positifs, 61 ménages accompagnés et 35 PPL soutenus, 9 guéris suivis en communauté et 4 des 7 ZS ayant notifié sont couvertes (57,1 %) ;\n• À la Tshopo, 2 cas confirmés, 2 nouveaux cas suspects et 11 cas en cours de suivi au CTE Météo (8 confirmés et 3 suspects) ont bénéficié d'un soutien psychologique ; 84 personnes ont été soutenues, dont 78 accompagnants et 6 PPL, et 1 résultat positif a été annoncé ;\n• Au Haut-Uélé, 4 nouveaux cas confirmés et 14 cas confirmés en cours de suivi ont bénéficié d'interventions SMSPS, ainsi que 3 nouveaux suspects et 11 suspects en cours de suivi ; 18 résultats ont été annoncés dont 4 positifs, 54 accompagnants et 44 PPL ont été soutenus, 5 enfants séparés ont été accompagnés en communauté et 3 EDS ont été appuyés.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 683,
+            "bottom_right_x": 193,
+            "bottom_right_y": 700,
+            "content": "# 2.9. Logistique",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 711,
+            "bottom_right_x": 265,
+            "bottom_right_y": 727,
+            "content": "# 2.9.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 727,
+            "bottom_right_x": 701,
+            "bottom_right_y": 792,
+            "content": "• Appui à la mobilité des équipes de la riposte dans toutes les provinces touchées ; poursuite de la construction du CTE de l'HGR de Musienene au Nord-Kivu et du CTE de Bafwasende à la Tshopo et acheminement des intrants PCI et PEC vers les ZS de Ganga, de Poko et de Viadana au Bas-Uélé avec l'appui de l'OMS.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 805,
+            "bottom_right_x": 230,
+            "bottom_right_y": 821,
+            "content": "# 2.9.2. Défis majeurs",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 821,
+            "bottom_right_x": 701,
+            "bottom_right_y": 931,
+            "content": "Garantir la disponibilité, le prépositionnement et l'acheminement continu des intrants, équipements et moyens de mobilité jusqu'au dernier kilomètre, particulièrement dans les foyers actifs et les zones difficiles d'accès. Il convient d'assurer la finalisation dans les délais et l'opérationnalisation des CTE en construction à Musienene et Bafwasende, tout en sécurisant la distribution effective des intrants PCI et PEC acheminés vers Ganga, Poko et Viadana. La priorité demeure également de maintenir des moyens de transport fonctionnels et suffisamment dotés en carburant afin d'éviter toute rupture logistique susceptible de retarder les",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 694,
+            "top_left_y": 957,
+            "bottom_right_x": 708,
+            "bottom_right_y": 974,
+            "content": "9",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 9,
+        "markdown": "investigations, le transfert des patients, les interventions PCI/EDS et les autres activités essentielles de la riposte.\n\n## 2.10. PSEA (Prévention de l'Exploitation et Abus Sexuels)\n\n### 2.10.1. Principales actions\n\n- En Ituri, une formation sur la PSEA a été organisée à Bunia au profit de 12 chercheurs de l'INRB (9 hommes et 3 femmes) avec l'appui d'IMC, et 385 membres de l'ONG CEMADEF ont été sensibilisés avec l'appui de l'OMS ; l'affichage des messages et la distribution des dépliants PSEAH se poursuivent dans les ZS de Bunia, Aru, Mongbwalu, Mambasa et Fataki, et 12 organisations ont pris part, sous le lead de l'UNFPA, à la réunion du GT VBG sur l'harmonisation des interventions autour des CTE.\n\n### 2.10.2. Défis\n\nÉtendre et systématiser l'intégration de la PSEAH dans l'ensemble des zones et structures de la riposte, en veillant au briefing obligatoire des personnels et partenaires, à la diffusion des codes de conduite et à l'accessibilité de mécanismes sûrs et confidentiels de signalement. Malgré les activités de formation et de sensibilisation menées en Ituri, la priorité demeure d'élargir la couverture géographique, de renforcer la coordination PSEA/VBG autour des CTE et d'améliorer le suivi des indicateurs permettant de documenter la prévention, le signalement, le référencement et la prise en charge appropriée des éventuels cas d'EAS/HS.\n\n## 2.11. Gestion des bases des données\n\n### 2.11.1. Principales actions\n\n- Poursuite de la consolidation, du nettoyage et de la validation des bases de données de la riposte afin d'améliorer la qualité des informations utilisées pour le suivi de l'épidémie et la prise de décision ;\n- Poursuite de la confrontation des différentes sources de données (surveillance, laboratoire, CTE/CT et DHIS2) afin d'identifier et de corriger les discordances, doublons, données manquantes et erreurs de classification ;\n- Suivi de la complétude et de la promptitude de la saisie des données dans DHIS2, avec accompagnement des équipes provinciales et des zones de santé pour l'amélioration du rapportage ;\n- Poursuite de l'harmonisation des bases provinciales et nationale en vue de disposer progressivement d'une base unique, cohérente et validée ;\n- Renforcement de la coordination entre les gestionnaires des données des piliers, des DPS et des partenaires, notamment pour l'harmonisation des outils, des définitions, des circuits de transmission et des procédures de validation des données ;\n- Poursuite de l'identification et de la correction des écarts entre les données rapportées dans les différentes plateformes et celles utilisées dans les SitRep.\n\n### 2.11.2. Défis majeurs\n\nAccélérer la mise en place d'une gouvernance intégrée des données reposant sur une base nationale unique, complète et validée, dans un contexte marqué par la coexistence de plusieurs bases gérées par différents acteurs.\n\n11",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 117,
+            "top_left_y": 54,
+            "bottom_right_x": 701,
+            "bottom_right_y": 86,
+            "content": "investigations, le transfert des patients, les interventions PCI/EDS et les autres activités essentielles de la riposte.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 86,
+            "bottom_right_x": 466,
+            "bottom_right_y": 102,
+            "content": "## 2.10. PSEA (Prévention de l'Exploitation et Abus Sexuels)",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 113,
+            "bottom_right_x": 265,
+            "bottom_right_y": 129,
+            "content": "### 2.10.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 129,
+            "bottom_right_x": 701,
+            "bottom_right_y": 223,
+            "content": "- En Ituri, une formation sur la PSEA a été organisée à Bunia au profit de 12 chercheurs de l'INRB (9 hommes et 3 femmes) avec l'appui d'IMC, et 385 membres de l'ONG CEMADEF ont été sensibilisés avec l'appui de l'OMS ; l'affichage des messages et la distribution des dépliants PSEAH se poursuivent dans les ZS de Bunia, Aru, Mongbwalu, Mambasa et Fataki, et 12 organisations ont pris part, sous le lead de l'UNFPA, à la réunion du GT VBG sur l'harmonisation des interventions autour des CTE.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 223,
+            "bottom_right_x": 175,
+            "bottom_right_y": 239,
+            "content": "### 2.10.2. Défis",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 117,
+            "top_left_y": 238,
+            "bottom_right_x": 701,
+            "bottom_right_y": 348,
+            "content": "Étendre et systématiser l'intégration de la PSEAH dans l'ensemble des zones et structures de la riposte, en veillant au briefing obligatoire des personnels et partenaires, à la diffusion des codes de conduite et à l'accessibilité de mécanismes sûrs et confidentiels de signalement. Malgré les activités de formation et de sensibilisation menées en Ituri, la priorité demeure d'élargir la couverture géographique, de renforcer la coordination PSEA/VBG autour des CTE et d'améliorer le suivi des indicateurs permettant de documenter la prévention, le signalement, le référencement et la prise en charge appropriée des éventuels cas d'EAS/HS.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 358,
+            "bottom_right_x": 348,
+            "bottom_right_y": 375,
+            "content": "## 2.11. Gestion des bases des données",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 386,
+            "bottom_right_x": 265,
+            "bottom_right_y": 402,
+            "content": "### 2.11.1. Principales actions",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 115,
+            "top_left_y": 402,
+            "bottom_right_x": 701,
+            "bottom_right_y": 654,
+            "content": "- Poursuite de la consolidation, du nettoyage et de la validation des bases de données de la riposte afin d'améliorer la qualité des informations utilisées pour le suivi de l'épidémie et la prise de décision ;\n- Poursuite de la confrontation des différentes sources de données (surveillance, laboratoire, CTE/CT et DHIS2) afin d'identifier et de corriger les discordances, doublons, données manquantes et erreurs de classification ;\n- Suivi de la complétude et de la promptitude de la saisie des données dans DHIS2, avec accompagnement des équipes provinciales et des zones de santé pour l'amélioration du rapportage ;\n- Poursuite de l'harmonisation des bases provinciales et nationale en vue de disposer progressivement d'une base unique, cohérente et validée ;\n- Renforcement de la coordination entre les gestionnaires des données des piliers, des DPS et des partenaires, notamment pour l'harmonisation des outils, des définitions, des circuits de transmission et des procédures de validation des données ;\n- Poursuite de l'identification et de la correction des écarts entre les données rapportées dans les différentes plateformes et celles utilisées dans les SitRep.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 90,
+            "top_left_y": 654,
+            "bottom_right_x": 231,
+            "bottom_right_y": 670,
+            "content": "### 2.11.2. Défis majeurs",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 117,
+            "top_left_y": 670,
+            "bottom_right_x": 701,
+            "bottom_right_y": 717,
+            "content": "Accélérer la mise en place d'une gouvernance intégrée des données reposant sur une base nationale unique, complète et validée, dans un contexte marqué par la coexistence de plusieurs bases gérées par différents acteurs.",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 694,
+            "top_left_y": 958,
+            "bottom_right_x": 711,
+            "bottom_right_y": 974,
+            "content": "11",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 10,
+        "markdown": "# MESSAGES CLES\n\n- Une évolution favorable est observée en Ituri, avec une diminution de 26,1 % des nouveaux cas au cours des dernières 72 heures, passant de 46 à 34 cas. Toutefois, la transmission demeure active dans les principaux foyers, particulièrement en Ituri, au Nord-Kivu et au Haut-Uélé, justifiant le maintien d'interventions intensives et ciblées. La vigilance doit également être maintenue dans la Tshopo et le Bas-Uélé, malgré l'absence de nouveau cas rapporté au cours des dernières 24 heures.\n- Les performances de la surveillance restent globalement satisfaisantes, avec 313/318 cas suspects investigués (98,4 %). Le suivi des contacts s'est amélioré par rapport à la veille, passant de 79,9 % à 81,4 %, mais demeure inférieur au seuil attendu de 85 %, notamment en raison d'une baisse de la complétude dans plusieurs zones de santé.\n- La consolidation des acquis nécessite le renforcement ciblé des interventions prioritaires — surveillance, PCI/EDS, prise en charge, logistique et engagement communautaire — dans les foyers encore actifs. Une attention particulière doit être accordée au Nord-Kivu, notamment à la disponibilité des capacités de prise en charge, ainsi qu'au renforcement de la surveillance des axes de mobilité et de la surveillance transfrontalière avec le Soudan du Sud.\n- La préparation et la capacité de réponse doivent être maintenues et renforcées dans les provinces du corridor fluvial et les zones environnantes, afin d'assurer la détection précoce, l'investigation et la réponse rapide à toute éventuelle introduction de la MVE-B.\n\n# CHRONOLOGIE DES FAITS CLÉS\n\n- Du 24 avril au 15 mai 2026, l'épidémie est passée de la détection des premiers cas suspects à la confirmation biologique du virus Ebola Bundibugyo, conduisant à la déclaration officielle de la 17e épidémie de Maladie à Virus Ebola en République Démocratique du Congo.\n- Entre le 17 et le 18 mai 2026, les autorités nationales, avec l'appui des partenaires, ont renforcé la riposte par la déclaration de l'urgence de santé publique de portée nationale puis continentale, accompagnée de la mobilisation des fonds.\n\n1",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 225,
+            "top_left_y": 72,
+            "bottom_right_x": 326,
+            "bottom_right_y": 87,
+            "content": "# MESSAGES CLES",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 48,
+            "top_left_y": 98,
+            "bottom_right_x": 505,
+            "bottom_right_y": 406,
+            "content": "- Une évolution favorable est observée en Ituri, avec une diminution de 26,1 % des nouveaux cas au cours des dernières 72 heures, passant de 46 à 34 cas. Toutefois, la transmission demeure active dans les principaux foyers, particulièrement en Ituri, au Nord-Kivu et au Haut-Uélé, justifiant le maintien d'interventions intensives et ciblées. La vigilance doit également être maintenue dans la Tshopo et le Bas-Uélé, malgré l'absence de nouveau cas rapporté au cours des dernières 24 heures.\n- Les performances de la surveillance restent globalement satisfaisantes, avec 313/318 cas suspects investigués (98,4 %). Le suivi des contacts s'est amélioré par rapport à la veille, passant de 79,9 % à 81,4 %, mais demeure inférieur au seuil attendu de 85 %, notamment en raison d'une baisse de la complétude dans plusieurs zones de santé.\n- La consolidation des acquis nécessite le renforcement ciblé des interventions prioritaires — surveillance, PCI/EDS, prise en charge, logistique et engagement communautaire — dans les foyers encore actifs. Une attention particulière doit être accordée au Nord-Kivu, notamment à la disponibilité des capacités de prise en charge, ainsi qu'au renforcement de la surveillance des axes de mobilité et de la surveillance transfrontalière avec le Soudan du Sud.\n- La préparation et la capacité de réponse doivent être maintenues et renforcées dans les provinces du corridor fluvial et les zones environnantes, afin d'assurer la détection précoce, l'investigation et la réponse rapide à toute éventuelle introduction de la MVE-B.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 551,
+            "top_left_y": 69,
+            "bottom_right_x": 736,
+            "bottom_right_y": 86,
+            "content": "# CHRONOLOGIE DES FAITS CLÉS",
+            "confidence_scores": null,
+            "type": "title"
+          },
+          {
+            "top_left_x": 523,
+            "top_left_y": 101,
+            "bottom_right_x": 761,
+            "bottom_right_y": 302,
+            "content": "- Du 24 avril au 15 mai 2026, l'épidémie est passée de la détection des premiers cas suspects à la confirmation biologique du virus Ebola Bundibugyo, conduisant à la déclaration officielle de la 17e épidémie de Maladie à Virus Ebola en République Démocratique du Congo.\n- Entre le 17 et le 18 mai 2026, les autorités nationales, avec l'appui des partenaires, ont renforcé la riposte par la déclaration de l'urgence de santé publique de portée nationale puis continentale, accompagnée de la mobilisation des fonds.",
+            "confidence_scores": null,
+            "type": "list"
+          },
+          {
+            "top_left_x": 693,
+            "top_left_y": 957,
+            "bottom_right_x": 709,
+            "bottom_right_y": 974,
+            "content": "1",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      },
+      {
+        "index": 11,
+        "markdown": "TASK FORCE PRESIDENTIELLE EBOLA 17\nMinistère de la Santé Publique, Hygiène et Prévoyance Sociale\nSystème de gestion de l'incident MVE17\n\nProfesseur Dr AHUKA MUNDEKE Steve\nE-mail : steve.ahuka@unikin.ac.cd\n\nIncident Manager Adjoint\nProfesseur Dr Akilimali Zalagile Pierre\n\nChargé des opérations\nDr KOMBE NGWAMA John\n\nEquipe de rédaction\nProfesseur Dr MULANGU KATULUMBA Félix-Médard\nDr KATUSI BISELENGE Jules\nMadame MAYELE AFUA Marie\nDr DIUR MANANASHI Floryan\nMr KAMWINA KEBELA John\n\nContact :\nwww.insp.cd\ncontact@sgiebola17.org\n\nNuméro vert : 151. www.sante.gouv.cd\n\n1:",
+        "images": [],
+        "tables": [],
+        "hyperlinks": [
+          "mailto:contact%40sgiebola17.org"
+        ],
+        "header": null,
+        "footer": null,
+        "dimensions": {
+          "dpi": 93,
+          "height": 1023,
+          "width": 791
+        },
+        "confidence_scores": null,
+        "blocks": [
+          {
+            "top_left_x": 249,
+            "top_left_y": 142,
+            "bottom_right_x": 602,
+            "bottom_right_y": 189,
+            "content": "TASK FORCE PRESIDENTIELLE EBOLA 17\nMinistère de la Santé Publique, Hygiène et Prévoyance Sociale\nSystème de gestion de l'incident MVE17",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 285,
+            "top_left_y": 228,
+            "bottom_right_x": 537,
+            "bottom_right_y": 267,
+            "content": "Professeur Dr AHUKA MUNDEKE Steve\nE-mail : steve.ahuka@unikin.ac.cd",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 295,
+            "top_left_y": 279,
+            "bottom_right_x": 534,
+            "bottom_right_y": 315,
+            "content": "Incident Manager Adjoint\nProfesseur Dr Akilimali Zalagile Pierre",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 325,
+            "top_left_y": 334,
+            "bottom_right_x": 497,
+            "bottom_right_y": 374,
+            "content": "Chargé des opérations\nDr KOMBE NGWAMA John",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 243,
+            "top_left_y": 389,
+            "bottom_right_x": 579,
+            "bottom_right_y": 514,
+            "content": "Equipe de rédaction\nProfesseur Dr MULANGU KATULUMBA Félix-Médard\nDr KATUSI BISELENGE Jules\nMadame MAYELE AFUA Marie\nDr DIUR MANANASHI Floryan\nMr KAMWINA KEBELA John",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 318,
+            "top_left_y": 558,
+            "bottom_right_x": 472,
+            "bottom_right_y": 609,
+            "content": "Contact :\nwww.insp.cd\ncontact@sgiebola17.org",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 272,
+            "top_left_y": 625,
+            "bottom_right_x": 519,
+            "bottom_right_y": 643,
+            "content": "Numéro vert : 151. www.sante.gouv.cd",
+            "confidence_scores": null,
+            "type": "text"
+          },
+          {
+            "top_left_x": 693,
+            "top_left_y": 957,
+            "bottom_right_x": 711,
+            "bottom_right_y": 975,
+            "content": "1:",
+            "confidence_scores": null,
+            "type": "footer"
+          }
+        ]
+      }
+    ],
+    "model": "mistral-ocr-4-1",
+    "document_annotation": "{\"sitrep_no\": 129, \"report_date\": \"2026-09-20\", \"kpis\": {\"cum_confirmed\": 7733, \"cum_deaths\": 3732, \"cfr_pct\": 48.3, \"in_isolation\": 821, \"cum_recovered\": 1902, \"contact_followup_pct\": 81.4}, \"provinces\": [{\"province\": \"Ituri\", \"new_confirmed\": 34, \"cum_confirmed\": 5947, \"cum_deaths\": 2722, \"cfr_pct\": 45.8, \"zs_affected\": 28, \"zs_total\": 36}, {\"province\": \"Nord-Kivu\", \"new_confirmed\": 23, \"cum_confirmed\": 1425, \"cum_deaths\": 862, \"cfr_pct\": 60.5, \"zs_affected\": 16, \"zs_total\": 34}, {\"province\": \"Haut-Uélé\", \"new_confirmed\": 4, \"cum_confirmed\": 311, \"cum_deaths\": 128, \"cfr_pct\": 41.2, \"zs_affected\": 7, \"zs_total\": 13}, {\"province\": \"Tshopo\", \"new_confirmed\": 0, \"cum_confirmed\": 39, \"cum_deaths\": 14, \"cfr_pct\": 35.9, \"zs_affected\": 7, \"zs_total\": 23}, {\"province\": \"Sud-Kivu\", \"new_confirmed\": 0, \"cum_confirmed\": 3, \"cum_deaths\": 1, \"cfr_pct\": 33.3, \"zs_affected\": 1, \"zs_total\": 34}, {\"province\": \"Bas-Uélé\", \"new_confirmed\": 0, \"cum_confirmed\": 7, \"cum_deaths\": 4, \"cfr_pct\": 57.1, \"zs_affected\": 3, \"zs_total\": 11}], \"zone_subtotals\": [{\"province\": \"Ituri\", \"cum_confirmed\": 5947, \"cum_deaths\": 2722, \"cfr_pct\": 45.8, \"new_confirmed\": 34, \"community_deaths\": 11, \"cte_deaths\": 8, \"total_deaths_day\": 19}, {\"province\": \"Nord-Kivu\", \"cum_confirmed\": 1425, \"cum_deaths\": 862, \"cfr_pct\": 60.5, \"new_confirmed\": 23, \"community_deaths\": 10, \"cte_deaths\": 2, \"total_deaths_day\": 12}, {\"province\": \"Haut-Uélé\", \"cum_confirmed\": 311, \"cum_deaths\": 128, \"cfr_pct\": 41.2, \"new_confirmed\": 4, \"community_deaths\": 1, \"cte_deaths\": 1, \"total_deaths_day\": 2}, {\"province\": \"Tshopo\", \"cum_confirmed\": 39, \"cum_deaths\": 14, \"cfr_pct\": 35.9, \"new_confirmed\": 0, \"community_deaths\": 0, \"cte_deaths\": 0, \"total_deaths_day\": 0}, {\"province\": \"Sud-Kivu\", \"cum_confirmed\": 3, \"cum_deaths\": 1, \"cfr_pct\": 33.3, \"new_confirmed\": 0, \"community_deaths\": 0, \"cte_deaths\": 0, \"total_deaths_day\": 0}, {\"province\": \"Bas-Uélé\", \"cum_confirmed\": 7, \"cum_deaths\": 4, \"cfr_pct\": 57.1, \"new_confirmed\": 0, \"community_deaths\": 0, \"cte_deaths\": 0, \"total_deaths_day\": 0}], \"zone_total\": {\"cum_confirmed\": 7733, \"cum_deaths\": 3732, \"cfr_pct\": 48.3, \"new_confirmed\": 61, \"community_deaths\": 22, \"cte_deaths\": 11, \"total_deaths_day\": 33}, \"zones\": [{\"province\": \"Ituri\", \"zone\": \"Adja\", \"cum_confirmed\": 11, \"cum_deaths\": 1, \"cfr_pct\": 9.1, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Aru\", \"cum_confirmed\": 8, \"cum_deaths\": 6, \"cfr_pct\": 75, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Ariwara\", \"cum_confirmed\": 8, \"cum_deaths\": 2, \"cfr_pct\": 25, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Aungba\", \"cum_confirmed\": 12, \"cum_deaths\": 5, \"cfr_pct\": 41.7, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Bambu\", \"cum_confirmed\": 196, \"cum_deaths\": 40, \"cfr_pct\": 20.4, \"new_confirmed\": 3, \"community_deaths\": 0, \"cte_deaths\": 1, \"total_deaths_day\": 1}, {\"province\": \"Ituri\", \"zone\": \"Boga\", \"cum_confirmed\": 2, \"cum_deaths\": 2, \"cfr_pct\": 100, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Bunia\", \"cum_confirmed\": 1662, \"cum_deaths\": 520, \"cfr_pct\": 31.3, \"new_confirmed\": 8, \"community_deaths\": 3, \"cte_deaths\": null, \"total_deaths_day\": 3}, {\"province\": \"Ituri\", \"zone\": \"Damas\", \"cum_confirmed\": 40, \"cum_deaths\": 9, \"cfr_pct\": 22.5, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Drodro\", \"cum_confirmed\": 15, \"cum_deaths\": 7, \"cfr_pct\": 46.7, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Fataki\", \"cum_confirmed\": 81, \"cum_deaths\": 30, \"cfr_pct\": 37, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Gethy\", \"cum_confirmed\": 7, \"cum_deaths\": 3, \"cfr_pct\": 42.9, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Kambala\", \"cum_confirmed\": 2, \"cum_deaths\": 0, \"cfr_pct\": 0, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Kilo\", \"cum_confirmed\": 34, \"cum_deaths\": 12, \"cfr_pct\": 35.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Komanda\", \"cum_confirmed\": 147, \"cum_deaths\": 90, \"cfr_pct\": 61.2, \"new_confirmed\": 0, \"community_deaths\": 0, \"cte_deaths\": 1, \"total_deaths_day\": 1}, {\"province\": \"Ituri\", \"zone\": \"Lita\", \"cum_confirmed\": 275, \"cum_deaths\": 138, \"cfr_pct\": 50.2, \"new_confirmed\": 2, \"community_deaths\": 2, \"cte_deaths\": 1, \"total_deaths_day\": 3}, {\"province\": \"Ituri\", \"zone\": \"Logo\", \"cum_confirmed\": 13, \"cum_deaths\": 5, \"cfr_pct\": 38.5, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Lolwa\", \"cum_confirmed\": 31, \"cum_deaths\": 8, \"cfr_pct\": 25.8, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Mahagi\", \"cum_confirmed\": 4, \"cum_deaths\": 1, \"cfr_pct\": 25, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Mambasa\", \"cum_confirmed\": 21, \"cum_deaths\": 9, \"cfr_pct\": 42.9, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Mandima\", \"cum_confirmed\": 59, \"cum_deaths\": 33, \"cfr_pct\": 55.9, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Mangala\", \"cum_confirmed\": 337, \"cum_deaths\": 146, \"cfr_pct\": 43.3, \"new_confirmed\": 4, \"community_deaths\": 0, \"cte_deaths\": 0, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Mongbwalu\", \"cum_confirmed\": 689, \"cum_deaths\": 321, \"cfr_pct\": 46.6, \"new_confirmed\": 3, \"community_deaths\": 0, \"cte_deaths\": 2, \"total_deaths_day\": 2}, {\"province\": \"Ituri\", \"zone\": \"Nia-Nia\", \"cum_confirmed\": 269, \"cum_deaths\": 145, \"cfr_pct\": 53.9, \"new_confirmed\": 3, \"community_deaths\": 3, \"cte_deaths\": 1, \"total_deaths_day\": 4}, {\"province\": \"Ituri\", \"zone\": \"Nizi\", \"cum_confirmed\": 756, \"cum_deaths\": 276, \"cfr_pct\": 36.5, \"new_confirmed\": 2, \"community_deaths\": 0, \"cte_deaths\": 2, \"total_deaths_day\": 2}, {\"province\": \"Ituri\", \"zone\": \"Nyankunde\", \"cum_confirmed\": 127, \"cum_deaths\": 36, \"cfr_pct\": 28.3, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Rimba\", \"cum_confirmed\": 12, \"cum_deaths\": 4, \"cfr_pct\": 33.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"Rwampara\", \"cum_confirmed\": 1054, \"cum_deaths\": 355, \"cfr_pct\": 33.7, \"new_confirmed\": 8, \"community_deaths\": 3, \"cte_deaths\": null, \"total_deaths_day\": 3}, {\"province\": \"Ituri\", \"zone\": \"Tchomia\", \"cum_confirmed\": 75, \"cum_deaths\": 25, \"cfr_pct\": 33.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Ituri\", \"zone\": \"A ventiler\", \"cum_confirmed\": null, \"cum_deaths\": 493, \"cfr_pct\": null, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Beni\", \"cum_confirmed\": 281, \"cum_deaths\": 197, \"cfr_pct\": 70.1, \"new_confirmed\": 6, \"community_deaths\": 4, \"cte_deaths\": 2, \"total_deaths_day\": 6}, {\"province\": \"Nord-Kivu\", \"zone\": \"Biena\", \"cum_confirmed\": 18, \"cum_deaths\": 7, \"cfr_pct\": 38.9, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Butembo\", \"cum_confirmed\": 252, \"cum_deaths\": 161, \"cfr_pct\": 63.9, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Goma\", \"cum_confirmed\": 1, \"cum_deaths\": 0, \"cfr_pct\": 0, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Kalunguta\", \"cum_confirmed\": 47, \"cum_deaths\": 15, \"cfr_pct\": 31.9, \"new_confirmed\": 4, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Katwa\", \"cum_confirmed\": 544, \"cum_deaths\": 344, \"cfr_pct\": 63.2, \"new_confirmed\": 2, \"community_deaths\": 1, \"cte_deaths\": null, \"total_deaths_day\": 1}, {\"province\": \"Nord-Kivu\", \"zone\": \"Kayna\", \"cum_confirmed\": 1, \"cum_deaths\": 0, \"cfr_pct\": 0, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Kyondo\", \"cum_confirmed\": 32, \"cum_deaths\": 20, \"cfr_pct\": 62.5, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Lubero\", \"cum_confirmed\": 20, \"cum_deaths\": 10, \"cfr_pct\": 50, \"new_confirmed\": 4, \"community_deaths\": 3, \"cte_deaths\": null, \"total_deaths_day\": 3}, {\"province\": \"Nord-Kivu\", \"zone\": \"Mabalako\", \"cum_confirmed\": 24, \"cum_deaths\": 11, \"cfr_pct\": 45.8, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Manguredjipa\", \"cum_confirmed\": 11, \"cum_deaths\": 4, \"cfr_pct\": 36.4, \"new_confirmed\": 1, \"community_deaths\": 1, \"cte_deaths\": null, \"total_deaths_day\": 1}, {\"province\": \"Nord-Kivu\", \"zone\": \"Masereka\", \"cum_confirmed\": 25, \"cum_deaths\": 9, \"cfr_pct\": 36, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Musienene\", \"cum_confirmed\": 121, \"cum_deaths\": 65, \"cfr_pct\": 53.7, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Mutwanga\", \"cum_confirmed\": 9, \"cum_deaths\": 2, \"cfr_pct\": 22.2, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Nord-Kivu\", \"zone\": \"Oicha\", \"cum_confirmed\": 14, \"cum_deaths\": 11, \"cfr_pct\": 78.6, \"new_confirmed\": 1, \"community_deaths\": 1, \"cte_deaths\": null, \"total_deaths_day\": 1}, {\"province\": \"Nord-Kivu\", \"zone\": \"Vuhovi\", \"cum_confirmed\": 25, \"cum_deaths\": 6, \"cfr_pct\": 24, \"new_confirmed\": 3, \"community_deaths\": 0, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Haut-Uélé\", \"zone\": \"Boma Mangbetu\", \"cum_confirmed\": 36, \"cum_deaths\": 15, \"cfr_pct\": 41.7, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Haut-Uélé\", \"zone\": \"Dungu\", \"cum_confirmed\": 1, \"cum_deaths\": 1, \"cfr_pct\": 100, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Haut-Uélé\", \"zone\": \"Gombari\", \"cum_confirmed\": 3, \"cum_deaths\": 1, \"cfr_pct\": 33.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Haut-Uélé\", \"zone\": \"Isiro\", \"cum_confirmed\": 99, \"cum_deaths\": 43, \"cfr_pct\": 43.4, \"new_confirmed\": 1, \"community_deaths\": 0, \"cte_deaths\": 1, \"total_deaths_day\": 1}, {\"province\": \"Haut-Uélé\", \"zone\": \"Pawa\", \"cum_confirmed\": 68, \"cum_deaths\": 32, \"cfr_pct\": 47.1, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Haut-Uélé\", \"zone\": \"Rungu\", \"cum_confirmed\": 2, \"cum_deaths\": 1, \"cfr_pct\": 50, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Haut-Uélé\", \"zone\": \"Wamba\", \"cum_confirmed\": 102, \"cum_deaths\": 35, \"cfr_pct\": 34.3, \"new_confirmed\": 3, \"community_deaths\": 1, \"cte_deaths\": 0, \"total_deaths_day\": 1}, {\"province\": \"Tshopo\", \"zone\": \"Bafwasende\", \"cum_confirmed\": 7, \"cum_deaths\": 1, \"cfr_pct\": 14.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Tshopo\", \"zone\": \"Kabondo\", \"cum_confirmed\": 5, \"cum_deaths\": 1, \"cfr_pct\": 20, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Tshopo\", \"zone\": \"Lubunga\", \"cum_confirmed\": 1, \"cum_deaths\": 0, \"cfr_pct\": 0, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Tshopo\", \"zone\": \"Makiso-Kisangani\", \"cum_confirmed\": 20, \"cum_deaths\": 9, \"cfr_pct\": 45, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Tshopo\", \"zone\": \"Mangobo\", \"cum_confirmed\": 4, \"cum_deaths\": 2, \"cfr_pct\": 50, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Tshopo\", \"zone\": \"Tshopo\", \"cum_confirmed\": 1, \"cum_deaths\": 0, \"cfr_pct\": 0, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Tshopo\", \"zone\": \"Wanie-Rukula\", \"cum_confirmed\": 1, \"cum_deaths\": 1, \"cfr_pct\": 100, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Sud-Kivu\", \"zone\": \"Miti-Murhesa\", \"cum_confirmed\": 3, \"cum_deaths\": 1, \"cfr_pct\": 33.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Bas-Uélé\", \"zone\": \"Buta\", \"cum_confirmed\": 1, \"cum_deaths\": 1, \"cfr_pct\": 100, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Bas-Uélé\", \"zone\": \"Viadana\", \"cum_confirmed\": 3, \"cum_deaths\": 1, \"cfr_pct\": 33.3, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Bas-Uélé\", \"zone\": \"Ganga\", \"cum_confirmed\": 3, \"cum_deaths\": 2, \"cfr_pct\": 66.7, \"new_confirmed\": null, \"community_deaths\": null, \"cte_deaths\": null, \"total_deaths_day\": 0}, {\"province\": \"Sud-Ubangi\", \"zone\": \"Bulu\", \"cum_confirmed\": 1, \"cum_deaths\": 1, \"cfr_pct\": 100, \"new_confirmed\": 0, \"community_deaths\": 0, \"cte_deaths\": 0, \"total_deaths_day\": 0}]}",
+    "usage_info": {
+      "pages_processed": 12,
+      "doc_size_bytes": 751904
+    }
+  }
+}

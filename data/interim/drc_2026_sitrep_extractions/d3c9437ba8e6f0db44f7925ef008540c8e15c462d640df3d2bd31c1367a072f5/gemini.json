@@ -1,0 +1,870 @@
+{
+  "extraction_raw": {
+    "sitrep_no": 110,
+    "report_date": "2026-09-01",
+    "kpis": {
+      "cum_confirmed": 6250,
+      "cum_deaths": 3039,
+      "cfr_pct": 48.6,
+      "in_isolation": 869,
+      "cum_recovered": 1439,
+      "contact_followup_pct": 89.0
+    },
+    "provinces": [
+      {
+        "province": "Ituri",
+        "new_confirmed": 39,
+        "cum_confirmed": 5104,
+        "cum_deaths": 2324,
+        "cfr_pct": 45.5,
+        "zs_affected": 28,
+        "zs_total": 36
+      },
+      {
+        "province": "Nord-Kivu",
+        "new_confirmed": 20,
+        "cum_confirmed": 888,
+        "cum_deaths": 601,
+        "cfr_pct": 67.7,
+        "zs_affected": 15,
+        "zs_total": 34
+      },
+      {
+        "province": "Haut-Uélé",
+        "new_confirmed": 4,
+        "cum_confirmed": 231,
+        "cum_deaths": 101,
+        "cfr_pct": 43.7,
+        "zs_affected": 6,
+        "zs_total": 13
+      },
+      {
+        "province": "Tshopo",
+        "new_confirmed": 1,
+        "cum_confirmed": 20,
+        "cum_deaths": 9,
+        "cfr_pct": 45.0,
+        "zs_affected": 7,
+        "zs_total": 23
+      },
+      {
+        "province": "Sud-Kivu",
+        "new_confirmed": 0,
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "zs_affected": 1,
+        "zs_total": 34
+      },
+      {
+        "province": "Bas Uélé",
+        "new_confirmed": 0,
+        "cum_confirmed": 4,
+        "cum_deaths": 3,
+        "cfr_pct": 75.0,
+        "zs_affected": 3,
+        "zs_total": 11
+      }
+    ],
+    "zone_subtotals": [
+      {
+        "province": "Ituri",
+        "cum_confirmed": 5104,
+        "cum_deaths": 2324,
+        "cfr_pct": 45.5,
+        "new_confirmed": 39,
+        "community_deaths": 13,
+        "cte_deaths": 6,
+        "total_deaths_day": 19
+      },
+      {
+        "province": "Nord-Kivu",
+        "cum_confirmed": 888,
+        "cum_deaths": 601,
+        "cfr_pct": 67.7,
+        "new_confirmed": 20,
+        "community_deaths": 12,
+        "cte_deaths": 0,
+        "total_deaths_day": 12
+      },
+      {
+        "province": "Haut-Uélé",
+        "cum_confirmed": 231,
+        "cum_deaths": 101,
+        "cfr_pct": 43.7,
+        "new_confirmed": 4,
+        "community_deaths": 0,
+        "cte_deaths": 1,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Tshopo",
+        "cum_confirmed": 20,
+        "cum_deaths": 9,
+        "cfr_pct": 45.0,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Sud-Kivu",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas Uélé",
+        "cum_confirmed": 4,
+        "cum_deaths": 3,
+        "cfr_pct": 75.0,
+        "new_confirmed": 0,
+        "community_deaths": 0,
+        "cte_deaths": 0,
+        "total_deaths_day": 0
+      }
+    ],
+    "zone_total": {
+      "cum_confirmed": 6250,
+      "cum_deaths": 3039,
+      "cfr_pct": 48.6,
+      "new_confirmed": 64,
+      "community_deaths": 25,
+      "cte_deaths": 7,
+      "total_deaths_day": 32
+    },
+    "zones": [
+      {
+        "province": "Ituri",
+        "zone": "Adja",
+        "cum_confirmed": 11,
+        "cum_deaths": 1,
+        "cfr_pct": 9.1,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Aru",
+        "cum_confirmed": 8,
+        "cum_deaths": 6,
+        "cfr_pct": 75.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Ariwara",
+        "cum_confirmed": 8,
+        "cum_deaths": 2,
+        "cfr_pct": 25.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Aungba",
+        "cum_confirmed": 12,
+        "cum_deaths": 5,
+        "cfr_pct": 41.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Bambu",
+        "cum_confirmed": 165,
+        "cum_deaths": 36,
+        "cfr_pct": 21.8,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Boga",
+        "cum_confirmed": 2,
+        "cum_deaths": 2,
+        "cfr_pct": 100.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Bunia",
+        "cum_confirmed": 1413,
+        "cum_deaths": 442,
+        "cfr_pct": 31.3,
+        "new_confirmed": 6,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Ituri",
+        "zone": "Damas",
+        "cum_confirmed": 28,
+        "cum_deaths": 9,
+        "cfr_pct": 32.1,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Drodro",
+        "cum_confirmed": 14,
+        "cum_deaths": 7,
+        "cfr_pct": 50.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Fataki",
+        "cum_confirmed": 77,
+        "cum_deaths": 30,
+        "cfr_pct": 39.0,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Gethy",
+        "cum_confirmed": 6,
+        "cum_deaths": 2,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Kambala",
+        "cum_confirmed": 2,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Kilo",
+        "cum_confirmed": 32,
+        "cum_deaths": 12,
+        "cfr_pct": 37.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Komanda",
+        "cum_confirmed": 92,
+        "cum_deaths": 62,
+        "cfr_pct": 67.4,
+        "new_confirmed": 5,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Ituri",
+        "zone": "Lita",
+        "cum_confirmed": 224,
+        "cum_deaths": 121,
+        "cfr_pct": 54.0,
+        "new_confirmed": 4,
+        "community_deaths": 2,
+        "cte_deaths": null,
+        "total_deaths_day": 2
+      },
+      {
+        "province": "Ituri",
+        "zone": "Logo",
+        "cum_confirmed": 11,
+        "cum_deaths": 5,
+        "cfr_pct": 45.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Lolwa",
+        "cum_confirmed": 22,
+        "cum_deaths": 5,
+        "cfr_pct": 22.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mahagi",
+        "cum_confirmed": 4,
+        "cum_deaths": 1,
+        "cfr_pct": 25.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mambasa",
+        "cum_confirmed": 17,
+        "cum_deaths": 7,
+        "cfr_pct": 41.2,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mandima",
+        "cum_confirmed": 36,
+        "cum_deaths": 21,
+        "cfr_pct": 58.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mangala",
+        "cum_confirmed": 263,
+        "cum_deaths": 134,
+        "cfr_pct": 51.0,
+        "new_confirmed": 6,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Ituri",
+        "zone": "Mongbwalu",
+        "cum_confirmed": 615,
+        "cum_deaths": 287,
+        "cfr_pct": 46.7,
+        "new_confirmed": 3,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Ituri",
+        "zone": "Nia-Nia",
+        "cum_confirmed": 216,
+        "cum_deaths": 113,
+        "cfr_pct": 52.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Nizi",
+        "cum_confirmed": 670,
+        "cum_deaths": 264,
+        "cfr_pct": 39.4,
+        "new_confirmed": 6,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Ituri",
+        "zone": "Nyankunde",
+        "cum_confirmed": 124,
+        "cum_deaths": 35,
+        "cfr_pct": 28.2,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Rimba",
+        "cum_confirmed": 11,
+        "cum_deaths": 4,
+        "cfr_pct": 36.4,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "Rwampara",
+        "cum_confirmed": 964,
+        "cum_deaths": 341,
+        "cfr_pct": 35.4,
+        "new_confirmed": 7,
+        "community_deaths": 2,
+        "cte_deaths": null,
+        "total_deaths_day": 2
+      },
+      {
+        "province": "Ituri",
+        "zone": "Tchomia",
+        "cum_confirmed": 57,
+        "cum_deaths": 25,
+        "cfr_pct": 43.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Ituri",
+        "zone": "A ventiler",
+        "cum_confirmed": null,
+        "cum_deaths": 345,
+        "cfr_pct": null,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": 6,
+        "total_deaths_day": 6
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Beni",
+        "cum_confirmed": 146,
+        "cum_deaths": 105,
+        "cfr_pct": 71.9,
+        "new_confirmed": 5,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Biena",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Butembo",
+        "cum_confirmed": 180,
+        "cum_deaths": 134,
+        "cfr_pct": 74.4,
+        "new_confirmed": 6,
+        "community_deaths": 3,
+        "cte_deaths": null,
+        "total_deaths_day": 3
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Goma",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Kalunguta",
+        "cum_confirmed": 16,
+        "cum_deaths": 7,
+        "cfr_pct": 43.8,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Katwa",
+        "cum_confirmed": 408,
+        "cum_deaths": 270,
+        "cfr_pct": 66.2,
+        "new_confirmed": 4,
+        "community_deaths": 2,
+        "cte_deaths": null,
+        "total_deaths_day": 2
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Kyondo",
+        "cum_confirmed": 16,
+        "cum_deaths": 12,
+        "cfr_pct": 75.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Lubero",
+        "cum_confirmed": 3,
+        "cum_deaths": 3,
+        "cfr_pct": 100.0,
+        "new_confirmed": 1,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Mabalako",
+        "cum_confirmed": 6,
+        "cum_deaths": 5,
+        "cfr_pct": 83.3,
+        "new_confirmed": 1,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Manguredjipa",
+        "cum_confirmed": 2,
+        "cum_deaths": 1,
+        "cfr_pct": 50.0,
+        "new_confirmed": 1,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Masereka",
+        "cum_confirmed": 11,
+        "cum_deaths": 5,
+        "cfr_pct": 45.5,
+        "new_confirmed": 2,
+        "community_deaths": 1,
+        "cte_deaths": null,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Musienene",
+        "cum_confirmed": 83,
+        "cum_deaths": 47,
+        "cfr_pct": 56.6,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Mutwanga",
+        "cum_confirmed": 2,
+        "cum_deaths": 2,
+        "cfr_pct": 100.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Oicha",
+        "cum_confirmed": 7,
+        "cum_deaths": 6,
+        "cfr_pct": 85.7,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Nord-Kivu",
+        "zone": "Vuhovi",
+        "cum_confirmed": 6,
+        "cum_deaths": 3,
+        "cfr_pct": 50.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Boma Mangbetu",
+        "cum_confirmed": 27,
+        "cum_deaths": 14,
+        "cfr_pct": 51.9,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Gombari",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Isiro",
+        "cum_confirmed": 85,
+        "cum_deaths": 34,
+        "cfr_pct": 40.0,
+        "new_confirmed": 4,
+        "community_deaths": 0,
+        "cte_deaths": 1,
+        "total_deaths_day": 1
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Pawa",
+        "cum_confirmed": 37,
+        "cum_deaths": 22,
+        "cfr_pct": 59.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Rungu",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Haut-Uélé",
+        "zone": "Wamba",
+        "cum_confirmed": 78,
+        "cum_deaths": 30,
+        "cfr_pct": 38.5,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Bafwasende",
+        "cum_confirmed": 2,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Kabondo",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Lubunga",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Makiso-Kisangani",
+        "cum_confirmed": 9,
+        "cum_deaths": 5,
+        "cfr_pct": 55.6,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Mangobo",
+        "cum_confirmed": 3,
+        "cum_deaths": 2,
+        "cfr_pct": 66.7,
+        "new_confirmed": 1,
+        "community_deaths": 0,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Tshopo",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Tshopo",
+        "zone": "Wanie-Rukula",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Sud-Kivu",
+        "zone": "Miti-Murhesa",
+        "cum_confirmed": 3,
+        "cum_deaths": 1,
+        "cfr_pct": 33.3,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas Uélé",
+        "zone": "Buta",
+        "cum_confirmed": 1,
+        "cum_deaths": 1,
+        "cfr_pct": 100.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas Uélé",
+        "zone": "Viadana",
+        "cum_confirmed": 1,
+        "cum_deaths": 0,
+        "cfr_pct": 0.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      },
+      {
+        "province": "Bas Uélé",
+        "zone": "Ganga",
+        "cum_confirmed": 2,
+        "cum_deaths": 2,
+        "cfr_pct": 100.0,
+        "new_confirmed": null,
+        "community_deaths": null,
+        "cte_deaths": null,
+        "total_deaths_day": 0
+      }
+    ]
+  },
+  "model_id_requested": "gemini-3.8-flash",
+  "model_id_returned": "gemini-3.8-flash",
+  "usage": {
+    "promptTokenCount": 11613,
+    "candidatesTokenCount": 7317,
+    "totalTokenCount": 23191,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 593
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 11020
+      }
+    ],
+    "thoughtsTokenCount": 4261,
+    "serviceTier": "standard"
+  },
+  "requested_at": "2026-10-23T07:04:46+00:00",
+  "response": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "{\n  \"sitrep_no\": 110,\n  \"report_date\": \"2026-09-01\",\n  \"kpis\": {\n    \"cum_confirmed\": 6250,\n    \"cum_deaths\": 3039,\n    \"cfr_pct\": 48.6,\n    \"in_isolation\": 869,\n    \"cum_recovered\": 1439,\n    \"contact_followup_pct\": 89.0\n  },\n  \"provinces\": [\n    {\n      \"province\": \"Ituri\",\n      \"new_confirmed\": 39,\n      \"cum_confirmed\": 5104,\n      \"cum_deaths\": 2324,\n      \"cfr_pct\": 45.5,\n      \"zs_affected\": 28,\n      \"zs_total\": 36\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"new_confirmed\": 20,\n      \"cum_confirmed\": 888,\n      \"cum_deaths\": 601,\n      \"cfr_pct\": 67.7,\n      \"zs_affected\": 15,\n      \"zs_total\": 34\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"new_confirmed\": 4,\n      \"cum_confirmed\": 231,\n      \"cum_deaths\": 101,\n      \"cfr_pct\": 43.7,\n      \"zs_affected\": 6,\n      \"zs_total\": 13\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"new_confirmed\": 1,\n      \"cum_confirmed\": 20,\n      \"cum_deaths\": 9,\n      \"cfr_pct\": 45.0,\n      \"zs_affected\": 7,\n      \"zs_total\": 23\n    },\n    {\n      \"province\": \"Sud-Kivu\",\n      \"new_confirmed\": 0,\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 33.3,\n      \"zs_affected\": 1,\n      \"zs_total\": 34\n    },\n    {\n      \"province\": \"Bas Uélé\",\n      \"new_confirmed\": 0,\n      \"cum_confirmed\": 4,\n      \"cum_deaths\": 3,\n      \"cfr_pct\": 75.0,\n      \"zs_affected\": 3,\n      \"zs_total\": 11\n    }\n  ],\n  \"zone_subtotals\": [\n    {\n      \"province\": \"Ituri\",\n      \"cum_confirmed\": 5104,\n      \"cum_deaths\": 2324,\n      \"cfr_pct\": 45.5,\n      \"new_confirmed\": 39,\n      \"community_deaths\": 13,\n      \"cte_deaths\": 6,\n      \"total_deaths_day\": 19\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"cum_confirmed\": 888,\n      \"cum_deaths\": 601,\n      \"cfr_pct\": 67.7,\n      \"new_confirmed\": 20,\n      \"community_deaths\": 12,\n      \"cte_deaths\": 0,\n      \"total_deaths_day\": 12\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"cum_confirmed\": 231,\n      \"cum_deaths\": 101,\n      \"cfr_pct\": 43.7,\n      \"new_confirmed\": 4,\n      \"community_deaths\": 0,\n      \"cte_deaths\": 1,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"cum_confirmed\": 20,\n      \"cum_deaths\": 9,\n      \"cfr_pct\": 45.0,\n      \"new_confirmed\": 0,\n      \"community_deaths\": 0,\n      \"cte_deaths\": 0,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Sud-Kivu\",\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 33.3,\n      \"new_confirmed\": 0,\n      \"community_deaths\": 0,\n      \"cte_deaths\": 0,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Bas Uélé\",\n      \"cum_confirmed\": 4,\n      \"cum_deaths\": 3,\n      \"cfr_pct\": 75.0,\n      \"new_confirmed\": 0,\n      \"community_deaths\": 0,\n      \"cte_deaths\": 0,\n      \"total_deaths_day\": 0\n    }\n  ],\n  \"zone_total\": {\n    \"cum_confirmed\": 6250,\n    \"cum_deaths\": 3039,\n    \"cfr_pct\": 48.6,\n    \"new_confirmed\": 64,\n    \"community_deaths\": 25,\n    \"cte_deaths\": 7,\n    \"total_deaths_day\": 32\n  },\n  \"zones\": [\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Adja\",\n      \"cum_confirmed\": 11,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 9.1,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Aru\",\n      \"cum_confirmed\": 8,\n      \"cum_deaths\": 6,\n      \"cfr_pct\": 75.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Ariwara\",\n      \"cum_confirmed\": 8,\n      \"cum_deaths\": 2,\n      \"cfr_pct\": 25.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Aungba\",\n      \"cum_confirmed\": 12,\n      \"cum_deaths\": 5,\n      \"cfr_pct\": 41.7,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Bambu\",\n      \"cum_confirmed\": 165,\n      \"cum_deaths\": 36,\n      \"cfr_pct\": 21.8,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Boga\",\n      \"cum_confirmed\": 2,\n      \"cum_deaths\": 2,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Bunia\",\n      \"cum_confirmed\": 1413,\n      \"cum_deaths\": 442,\n      \"cfr_pct\": 31.3,\n      \"new_confirmed\": 6,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Damas\",\n      \"cum_confirmed\": 28,\n      \"cum_deaths\": 9,\n      \"cfr_pct\": 32.1,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Drodro\",\n      \"cum_confirmed\": 14,\n      \"cum_deaths\": 7,\n      \"cfr_pct\": 50.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Fataki\",\n      \"cum_confirmed\": 77,\n      \"cum_deaths\": 30,\n      \"cfr_pct\": 39.0,\n      \"new_confirmed\": 1,\n      \"community_deaths\": 0,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Gethy\",\n      \"cum_confirmed\": 6,\n      \"cum_deaths\": 2,\n      \"cfr_pct\": 33.3,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Kambala\",\n      \"cum_confirmed\": 2,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Kilo\",\n      \"cum_confirmed\": 32,\n      \"cum_deaths\": 12,\n      \"cfr_pct\": 37.5,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Komanda\",\n      \"cum_confirmed\": 92,\n      \"cum_deaths\": 62,\n      \"cfr_pct\": 67.4,\n      \"new_confirmed\": 5,\n      \"community_deaths\": 3,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 3\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Lita\",\n      \"cum_confirmed\": 224,\n      \"cum_deaths\": 121,\n      \"cfr_pct\": 54.0,\n      \"new_confirmed\": 4,\n      \"community_deaths\": 2,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 2\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Logo\",\n      \"cum_confirmed\": 11,\n      \"cum_deaths\": 5,\n      \"cfr_pct\": 45.5,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Lolwa\",\n      \"cum_confirmed\": 22,\n      \"cum_deaths\": 5,\n      \"cfr_pct\": 22.7,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Mahagi\",\n      \"cum_confirmed\": 4,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 25.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Mambasa\",\n      \"cum_confirmed\": 17,\n      \"cum_deaths\": 7,\n      \"cfr_pct\": 41.2,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Mandima\",\n      \"cum_confirmed\": 36,\n      \"cum_deaths\": 21,\n      \"cfr_pct\": 58.3,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Mangala\",\n      \"cum_confirmed\": 263,\n      \"cum_deaths\": 134,\n      \"cfr_pct\": 51.0,\n      \"new_confirmed\": 6,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Mongbwalu\",\n      \"cum_confirmed\": 615,\n      \"cum_deaths\": 287,\n      \"cfr_pct\": 46.7,\n      \"new_confirmed\": 3,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Nia-Nia\",\n      \"cum_confirmed\": 216,\n      \"cum_deaths\": 113,\n      \"cfr_pct\": 52.3,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Nizi\",\n      \"cum_confirmed\": 670,\n      \"cum_deaths\": 264,\n      \"cfr_pct\": 39.4,\n      \"new_confirmed\": 6,\n      \"community_deaths\": 3,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 3\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Nyankunde\",\n      \"cum_confirmed\": 124,\n      \"cum_deaths\": 35,\n      \"cfr_pct\": 28.2,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Rimba\",\n      \"cum_confirmed\": 11,\n      \"cum_deaths\": 4,\n      \"cfr_pct\": 36.4,\n      \"new_confirmed\": 1,\n      \"community_deaths\": 0,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Rwampara\",\n      \"cum_confirmed\": 964,\n      \"cum_deaths\": 341,\n      \"cfr_pct\": 35.4,\n      \"new_confirmed\": 7,\n      \"community_deaths\": 2,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 2\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"Tchomia\",\n      \"cum_confirmed\": 57,\n      \"cum_deaths\": 25,\n      \"cfr_pct\": 43.9,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Ituri\",\n      \"zone\": \"A ventiler\",\n      \"cum_confirmed\": null,\n      \"cum_deaths\": 345,\n      \"cfr_pct\": null,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": 6,\n      \"total_deaths_day\": 6\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Beni\",\n      \"cum_confirmed\": 146,\n      \"cum_deaths\": 105,\n      \"cfr_pct\": 71.9,\n      \"new_confirmed\": 5,\n      \"community_deaths\": 3,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 3\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Biena\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Butembo\",\n      \"cum_confirmed\": 180,\n      \"cum_deaths\": 134,\n      \"cfr_pct\": 74.4,\n      \"new_confirmed\": 6,\n      \"community_deaths\": 3,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 3\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Goma\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Kalunguta\",\n      \"cum_confirmed\": 16,\n      \"cum_deaths\": 7,\n      \"cfr_pct\": 43.8,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Katwa\",\n      \"cum_confirmed\": 408,\n      \"cum_deaths\": 270,\n      \"cfr_pct\": 66.2,\n      \"new_confirmed\": 4,\n      \"community_deaths\": 2,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 2\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Kyondo\",\n      \"cum_confirmed\": 16,\n      \"cum_deaths\": 12,\n      \"cfr_pct\": 75.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Lubero\",\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 3,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": 1,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Mabalako\",\n      \"cum_confirmed\": 6,\n      \"cum_deaths\": 5,\n      \"cfr_pct\": 83.3,\n      \"new_confirmed\": 1,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Manguredjipa\",\n      \"cum_confirmed\": 2,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 50.0,\n      \"new_confirmed\": 1,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Masereka\",\n      \"cum_confirmed\": 11,\n      \"cum_deaths\": 5,\n      \"cfr_pct\": 45.5,\n      \"new_confirmed\": 2,\n      \"community_deaths\": 1,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Musienene\",\n      \"cum_confirmed\": 83,\n      \"cum_deaths\": 47,\n      \"cfr_pct\": 56.6,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Mutwanga\",\n      \"cum_confirmed\": 2,\n      \"cum_deaths\": 2,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Oicha\",\n      \"cum_confirmed\": 7,\n      \"cum_deaths\": 6,\n      \"cfr_pct\": 85.7,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Nord-Kivu\",\n      \"zone\": \"Vuhovi\",\n      \"cum_confirmed\": 6,\n      \"cum_deaths\": 3,\n      \"cfr_pct\": 50.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"zone\": \"Boma Mangbetu\",\n      \"cum_confirmed\": 27,\n      \"cum_deaths\": 14,\n      \"cfr_pct\": 51.9,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"zone\": \"Gombari\",\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 33.3,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"zone\": \"Isiro\",\n      \"cum_confirmed\": 85,\n      \"cum_deaths\": 34,\n      \"cfr_pct\": 40.0,\n      \"new_confirmed\": 4,\n      \"community_deaths\": 0,\n      \"cte_deaths\": 1,\n      \"total_deaths_day\": 1\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"zone\": \"Pawa\",\n      \"cum_confirmed\": 37,\n      \"cum_deaths\": 22,\n      \"cfr_pct\": 59.5,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"zone\": \"Rungu\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Haut-Uélé\",\n      \"zone\": \"Wamba\",\n      \"cum_confirmed\": 78,\n      \"cum_deaths\": 30,\n      \"cfr_pct\": 38.5,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Bafwasende\",\n      \"cum_confirmed\": 2,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Kabondo\",\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 33.3,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Lubunga\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Makiso-Kisangani\",\n      \"cum_confirmed\": 9,\n      \"cum_deaths\": 5,\n      \"cfr_pct\": 55.6,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Mangobo\",\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 2,\n      \"cfr_pct\": 66.7,\n      \"new_confirmed\": 1,\n      \"community_deaths\": 0,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Tshopo\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Tshopo\",\n      \"zone\": \"Wanie-Rukula\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Sud-Kivu\",\n      \"zone\": \"Miti-Murhesa\",\n      \"cum_confirmed\": 3,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 33.3,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Bas Uélé\",\n      \"zone\": \"Buta\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 1,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Bas Uélé\",\n      \"zone\": \"Viadana\",\n      \"cum_confirmed\": 1,\n      \"cum_deaths\": 0,\n      \"cfr_pct\": 0.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    },\n    {\n      \"province\": \"Bas Uélé\",\n      \"zone\": \"Ganga\",\n      \"cum_confirmed\": 2,\n      \"cum_deaths\": 2,\n      \"cfr_pct\": 100.0,\n      \"new_confirmed\": null,\n      \"community_deaths\": null,\n      \"cte_deaths\": null,\n      \"total_deaths_day\": 0\n    }\n  ]\n}",
+              "thoughtSignature": "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"
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 11613,
+      "candidatesTokenCount": 7317,
+      "totalTokenCount": 23191,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 593
+        },
+        {
+          "modality": "IMAGE",
+          "tokenCount": 11020
+        }
+      ],
+      "thoughtsTokenCount": 4261,
+      "serviceTier": "standard"
+    },
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "DgfbavbEI-LUz7IPrtvuyAs"
+  }
+}
