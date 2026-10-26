@@ -29,7 +29,8 @@ Files are prefixed by outbreak so historical and current data stay apart:
     [alert-and-response page](https://www.who.int/emergencies/alert-and-response).
     WHO shows only the latest figures, so each run of
     `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history;
-    the `who_scrape.yml` workflow runs it daily at 12:00 UTC.
+    the `who_scrape.yml` workflow runs it every 8 hours
+    and rebuilds the chart tables.
     `drc_2026_who_wayback.py` backfills it from Wayback Machine captures.
     Until early September WHO published the table as an image;
     `drc_2026_who_ocr.py` reads those images from the cached captures (run
