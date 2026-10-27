@@ -2,8 +2,8 @@ name: WHO scrape
 
 on:
   schedule:
-    # WHO updates its table daily.
-    - cron: "0 12 * * *"
+    # WHO updates its table at no fixed time, so check every 8 hours.
+    - cron: "0 */8 * * *"
   workflow_dispatch:
 
 permissions:
@@ -47,4 +47,22 @@ jobs:
           fi
           git commit -m "data: WHO Bundibugyo table $(date -u +%Y-%m-%d)"
           git pull --rebase
+          git push
+
+      # The chart tables read the WHO table, so rebuild them here instead of
+      # waiting for the next daily scrape.
+      - name: Build chart tables
+        run: uv run python src/ebola_2026_outbreak/chart_tables.py
+
+      - name: Commit chart tables
+        run: |
+          git add data/output/*.csv data/output/*.json
+          if git diff --cached --quiet; then
+            echo "No chart table changes"
+            exit 0
+          fi
+          git commit -m "data: chart tables $(date -u +%Y-%m-%d)"
+          # On a conflict, drop the local commit. The tables are a pure
+          # function of committed state, so the next run rebuilds them.
+          git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
           git push
