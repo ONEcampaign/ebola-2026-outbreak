@@ -105,8 +105,11 @@ tables to `data/output/`, refreshed by the daily scrape:
 - `2026_outbreak_country_summary.csv`: latest WHO confirmed cases, deaths,
   case fatality rate and recoveries per country, with a Total row.
 - `2026_outbreak_drc_cases_by_province.csv`: latest sitrep confirmed cases for
-  each province with cases, keyed to the map OBJECTIDs in
-  `data/reference/drc_provinces_objectid.csv`.
+  every province, empty where the sitrep reports none, keyed to the map
+  OBJECTIDs in `data/reference/drc_provinces_objectid.csv`.
+- `2026_outbreak_drc_cases_by_zone.csv`: latest sitrep confirmed cases for
+  every health zone, empty where the sitrep reports none, keyed by `Code` to
+  `drc_health_zones_geometry.csv` (see below).
 - `outbreak_comparison_weekly.csv`: cumulative confirmed cases by week since
   each outbreak's first confirmed case (22 March 2014 and 15 May 2026). West
   Africa uses ROWCA counts before 29 August 2014 and WHO counts after.
@@ -117,6 +120,17 @@ tables to `data/output/`, refreshed by the daily scrape:
   Total row across all affected countries, dated by the latest WHO "Data as
   of" date. `provinces_affected` counts DRC provinces with confirmed cases in
   the latest sitrep, dated by that sitrep.
+
+### Health zone map
+
+`uv run python src/ebola_2026_outbreak/drc_health_zone_geometry.py` writes
+`data/output/drc_health_zones_geometry.csv`, the 519 health zones of OCHA's
+[COD-AB](https://data.humdata.org/dataset/cod-ab-cod) (admin level 3,
+boundaries of September 2019) with `Geometry` (GeoJSON), `Code` (P-code) and
+`Name`. Shapes are simplified to about 550 m, keeping shared borders. It also
+writes `data/reference/drc_2026_health_zone_codes.csv`, the P-code of each
+sitrep zone. Re-run it when the gazetteer gains a zone. Dakwa (Bas-Uélé) has
+no COD-AB shape, and "A ventiler" is not a zone, so neither is mapped.
 
 ### Health expenditure
 

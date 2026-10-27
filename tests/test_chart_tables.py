@@ -24,6 +24,7 @@ from ebola_2026_outbreak.chart_tables import (
     weekly_comparison,
     west_africa_series,
     with_newer_sitrep,
+    zone_map,
 )
 
 D1, D2 = date(2026, 10, 17), date(2026, 10, 18)
@@ -276,3 +277,53 @@ def test_drc_outbreak_series_ends_on_newer_sitrep(who_drc: pl.DataFrame) -> None
         (D2, 1009.0),
         (D3, 1059.0),
     ]
+
+
+def zone_rows(rows: list[tuple[date, str, str, int]]) -> pl.DataFrame:
+    """Sitrep zone cumulative case rows from (date, province, zone, value)."""
+    return pl.DataFrame(
+        [(d, "zone", p, z, "Cumulative confirmed cases", v) for d, p, z, v in rows],
+        schema={
+            "date": pl.Date,
+            "level": pl.String,
+            "province": pl.String,
+            "zone": pl.String,
+            "indicator": pl.String,
+            "value": pl.Int64,
+        },
+        orient="row",
+    )
+
+
+ZONE_CODES = pl.DataFrame(
+    {
+        "province": ["Ituri", "Ituri", "Bas-Uélé"],
+        "zone": ["Bunia", "A ventiler", "Dakwa"],
+        "code": ["CD1", None, None],
+    }
+)
+ZONE_SHAPES = pl.DataFrame({"Code": ["CD1", "CD2"], "Name": ["Bunia", "Aru"]})
+
+
+def test_zone_map_keeps_every_map_zone() -> None:
+    by_zone = zone_rows(
+        [
+            (D1, "Ituri", "Bunia", 5),
+            (D2, "Ituri", "Bunia", 9),
+            (D2, "Ituri", "A ventiler", 0),
+            (D2, "Bas-Uélé", "Dakwa", 1),
+        ]
+    )
+    out = zone_map(by_zone, ZONE_CODES, ZONE_SHAPES)
+    assert out.rows() == [("CD1", "Bunia", 9), ("CD2", "Aru", None)]
+
+
+def test_zone_map_leaves_out_zone_missing_from_codes() -> None:
+    out = zone_map(zone_rows([(D2, "Ituri", "Nizi", 3)]), ZONE_CODES, ZONE_SHAPES)
+    assert out["Confirmed cases"].null_count() == out.height
+
+
+def test_zone_map_rejects_code_without_shape() -> None:
+    codes = ZONE_CODES.with_columns(code=pl.lit("CD9"))
+    with pytest.raises(ValueError, match="no map shape"):
+        zone_map(zone_rows([(D2, "Ituri", "Bunia", 3)]), codes, ZONE_SHAPES)

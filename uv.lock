@@ -478,6 +478,7 @@ dependencies = [
     { name = "httpx" },
     { name = "pdfplumber" },
     { name = "polars" },
+    { name = "shapely" },
 ]
 
 [package.dev-dependencies]
@@ -500,6 +501,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pdfplumber", specifier = ">=0.11.10" },
     { name = "polars", specifier = ">=2.0.0" },
+    { name = "shapely", specifier = ">=2.1" },
 ]
 
 [package.metadata.requires-dev]
