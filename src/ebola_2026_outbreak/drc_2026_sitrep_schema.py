@@ -352,6 +352,9 @@ Value rules:
 - Percentages are floats without the percent sign, with a point as the \
 decimal separator: `48,3 %` becomes 48.3.
 - A blank cell is `null`. A printed `0` is 0. `NA` or `N/A` is `null`.
+- In the zone-level table, a zone with no deaths that day often leaves the \
+day's columns blank, the "Total décès" column included. Return `null` for \
+each blank cell there, and 0 only where `0` is printed.
 - Copy numbers exactly as printed. Do not compute, correct, or infer any \
 value, and do not fill a blank from another table or another row.
 - Read each value from the column whose header names it. Tables may have \
