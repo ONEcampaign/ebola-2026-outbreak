@@ -5,8 +5,8 @@ Outputs, in data/output/, with display column names for charting tools:
       plus Total. When the latest DRC sitrep is newer than WHO's DRC figures,
       the DRC row takes the sitrep's confirmed cases and deaths.
     - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
-      for every DRC province, 0 where the sitrep reports none, keyed to the
-      map's OBJECTIDs.
+      for every DRC province, empty where the sitrep reports none, keyed to
+      the map's OBJECTIDs.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
       before 29 August 2014 and WHO/HDX counts from then on.
@@ -136,7 +136,7 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
     """Latest cumulative confirmed cases for every map province, with OBJECTIDs.
 
     Sitreps list only provinces with cases, so every other province in
-    `lookup` gets 0 and still appears on the map.
+    `lookup` gets an empty (null) count and still appears on the map.
 
     Args:
         provinces: Sitrep province rows (see `drc_2026_sitreps_parse.SCHEMA`).
@@ -144,7 +144,8 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
 
     Returns:
         `Name` (lookup spelling), `OBJECTID` and `Confirmed cases`, one row per
-        `lookup` province, sorted by cases then name.
+        `lookup` province, sorted by cases then name, provinces without
+        cases last.
 
     Raises:
         ValueError: If a province with cases has no OBJECTID.
@@ -167,9 +168,8 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
     with_cases = joined.select(OBJECTID, pl.col("value").cast(pl.Int64).alias(CASES))
     return (
         lookup.join(with_cases, on=OBJECTID, how="left")
-        .with_columns(pl.col(CASES).fill_null(0))
         .select(NAME, OBJECTID, CASES)
-        .sort([CASES, NAME], descending=[True, False])
+        .sort([CASES, NAME], descending=[True, False], nulls_last=True)
     )
 
 
