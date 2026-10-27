@@ -23,6 +23,7 @@ from ebola_2026_outbreak.chart_tables import (
     weekly,
     weekly_comparison,
     west_africa_series,
+    with_newer_sitrep,
 )
 
 D1, D2 = date(2026, 10, 17), date(2026, 10, 18)
@@ -166,7 +167,7 @@ def test_west_africa_series_rejects_overlap() -> None:
 def test_headline_figures(who: pl.DataFrame) -> None:
     mapped = province_map(provinces([("Ituri", 10), ("Haut-Uélé", 5)]), LOOKUP)
     figures = headline_figures(
-        summary=country_summary(who), who_as_of=D2, mapped=mapped, sitrep_as_of=D1
+        summary=country_summary(who), summary_as_of=D2, mapped=mapped, sitrep_as_of=D1
     )
     assert figures == {
         "total_confirmed_cases": {"value": 1009, "update_date": "18 October"},
@@ -179,7 +180,9 @@ def test_headline_figures(who: pl.DataFrame) -> None:
 def test_headline_figures_rejects_missing_total(who: pl.DataFrame) -> None:
     summary = country_summary(who).filter(pl.col("Country") != "Total")
     with pytest.raises(ValueError, match="one 'Total' row"):
-        headline_figures(summary=summary, who_as_of=D2, mapped=LOOKUP, sitrep_as_of=D2)
+        headline_figures(
+            summary=summary, summary_as_of=D2, mapped=LOOKUP, sitrep_as_of=D2
+        )
 
 
 def test_latest_date_rejects_empty() -> None:
@@ -189,3 +192,71 @@ def test_latest_date_rejects_empty() -> None:
 
 def test_prose_date_drops_leading_zero_and_year() -> None:
     assert prose_date(date(2026, 6, 5)) == "5 June"
+
+
+DRC_NAME = "Democratic Republic of the Congo"
+D3 = date(2026, 10, 19)
+
+
+def sitrep(day: date, rows: list[tuple[str, int, int]]) -> pl.DataFrame:
+    """Province cases and deaths on one sitrep date."""
+    records = [
+        (day, p, label, v)
+        for p, cases, deaths in rows
+        for label, v in (
+            ("Cumulative confirmed cases", cases),
+            ("Cumulative confirmed deaths", deaths),
+        )
+    ]
+    return pl.DataFrame(
+        records,
+        schema={
+            "date": pl.Date,
+            "province": pl.String,
+            "indicator": pl.String,
+            "value": pl.Int64,
+        },
+        orient="row",
+    )
+
+
+@pytest.fixture
+def who_drc() -> pl.DataFrame:
+    """WHO DRC figures on D2 and Kenya on D1."""
+    return who_rows(
+        [
+            (D2, DRC_NAME, "Confirmed cases", 1000.0),
+            (D2, DRC_NAME, "Confirmed deaths", 482.0),
+            (D2, DRC_NAME, "Recovered", 200.0),
+            (D1, "Kenya", "Confirmed cases", 9.0),
+            (D1, "Kenya", "Confirmed deaths", 1.0),
+        ]
+    )
+
+
+def test_with_newer_sitrep_replaces_drc_row(who_drc: pl.DataFrame) -> None:
+    latest = with_newer_sitrep(
+        who_drc, sitrep(D3, [("Ituri", 900, 400), ("Tshopo", 150, 90)])
+    )
+    rows = {r["Country"]: r for r in country_summary(latest).iter_rows(named=True)}
+    assert rows[DRC_NAME][CASES] == 1050
+    assert rows[DRC_NAME]["Confirmed deaths"] == 490
+    assert rows[DRC_NAME][RECOVERED] == 200  # WHO's, as sitreps have none.
+    assert rows["Kenya"][CASES] == 9
+    assert rows["Total"][CASES] == 1059
+    assert latest_date(latest["date"]) == D3
+
+
+@pytest.mark.parametrize("day", [D1, D2])
+def test_with_newer_sitrep_keeps_who_when_not_older(
+    who_drc: pl.DataFrame, day: date
+) -> None:
+    assert with_newer_sitrep(who_drc, sitrep(day, [("Ituri", 5, 1)])).equals(who_drc)
+
+
+def test_with_newer_sitrep_rejects_missing_deaths(who_drc: pl.DataFrame) -> None:
+    cases_only = sitrep(D3, [("Ituri", 900, 400)]).filter(
+        pl.col("indicator") == "Cumulative confirmed cases"
+    )
+    with pytest.raises(ValueError, match="no national"):
+        with_newer_sitrep(who_drc, cases_only)

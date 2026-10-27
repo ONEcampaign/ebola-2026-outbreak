@@ -10,6 +10,11 @@ forward by sitrep number, wins. Printed sitrep numbers are themselves
 occasionally wrong (two files print "N°153"), so they are kept for reference
 only. The manifest keeps one row per media item and flags the file kept for
 each report date.
+
+INSP (https://insp.cd) publishes the same sitreps, often a day or two before
+the ministry, through a second WordPress media API. Both are listed. When both
+have a file for a report date, the ministry's is kept, so INSP only fills
+dates the ministry has not published.
 """
 
 import logging
@@ -19,6 +24,7 @@ from pathlib import Path
 from typing import NamedTuple, TypedDict
 from urllib.parse import unquote
 
+import httpx
 import pdfplumber
 import polars as pl
 
@@ -28,7 +34,13 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTBREAK = "drc_2026"
-MEDIA_API = "https://administration.sante.gouv.cd/wp-json/wp/v2/media"
+MINISTRY_MEDIA_API = "https://administration.sante.gouv.cd/wp-json/wp/v2/media"
+INSP_MEDIA_API = "https://insp.cd/wp-json/wp/v2/media"
+MINISTRY_SITE = "https://administration.sante.gouv.cd/"
+HTTP_NOT_FOUND = 404
+# INSP's library also holds other outbreaks' sitreps; this outbreak's carry
+# "MVEBDB" in the file name.
+INSP_FILE_MARKER = "MVEBDB"
 MEDIA_QUERY = "?search=SitRep&per_page=100&_fields=id,modified,source_url,mime_type"
 SITREP_DIR = ROOT / "data" / "raw" / OUTBREAK / "sitreps"
 MANIFEST_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_sitrep_manifest.csv"
@@ -186,8 +198,8 @@ def read_first_page(path: Path) -> str:
         return pdf.pages[0].extract_text() or ""
 
 
-def list_media() -> list[MediaItem]:
-    """List every sitrep PDF in the WordPress media library.
+def list_api_pdfs(api: str) -> list[MediaItem]:
+    """List every sitrep PDF in one WordPress media library.
 
     Returns:
         Media items with id, modified, source_url and mime_type.
@@ -195,17 +207,41 @@ def list_media() -> list[MediaItem]:
     items: list[MediaItem] = []
     page, total_pages = 1, 1
     while page <= total_pages:
-        response = get(f"{MEDIA_API}{MEDIA_QUERY}&page={page}")
+        response = get(f"{api}{MEDIA_QUERY}&page={page}")
         total_pages = int(response.headers["X-WP-TotalPages"])
         items.extend(response.json())
         page += 1
+    return [item for item in items if item["mime_type"] == PDF_MIME]
 
-    pdfs = [item for item in items if item["mime_type"] == PDF_MIME]
-    for item in items:
-        if item["mime_type"] != PDF_MIME:
-            logger.warning("Ignoring non-PDF media item: %s", item["source_url"])
-    logger.info("Media API lists %d sitrep PDFs", len(pdfs))
-    return pdfs
+
+def select_insp(insp: list[MediaItem], *, ministry: list[MediaItem]) -> list[MediaItem]:
+    """Keep this outbreak's INSP sitreps.
+
+    Raises:
+        ValueError: If a kept INSP id is also a ministry id, since local files
+            and the extraction ledger are keyed by media id alone.
+    """
+    kept = [item for item in insp if INSP_FILE_MARKER in item["source_url"].upper()]
+    clashes = {item["id"] for item in kept} & {item["id"] for item in ministry}
+    if clashes:
+        raise ValueError(f"INSP media ids clash with ministry ids: {sorted(clashes)}")
+    return kept
+
+
+def list_media() -> list[MediaItem]:
+    """List ministry sitrep PDFs plus this outbreak's INSP sitrep PDFs.
+
+    Returns:
+        Media items with id, modified, source_url and mime_type.
+    """
+    ministry = list_api_pdfs(MINISTRY_MEDIA_API)
+    insp = select_insp(list_api_pdfs(INSP_MEDIA_API), ministry=ministry)
+    logger.info(
+        "Media APIs list %d ministry and %d INSP sitrep PDFs",
+        len(ministry),
+        len(insp),
+    )
+    return ministry + insp
 
 
 def download(item: MediaItem, *, refresh: bool = False) -> Path:
@@ -261,11 +297,16 @@ def resolve_report_dates(manifest: pl.DataFrame) -> pl.DataFrame:
 
 
 def flag_latest(manifest: pl.DataFrame) -> pl.DataFrame:
-    """Mark the most recently modified file for each report date as the one to use."""
-    latest = (pl.col("modified") == pl.col("modified").max().over("report_date")) & (
-        pl.col("media_id") == pl.col("media_id").max().over("report_date", "modified")
-    )
-    flagged = manifest.with_columns(is_latest=latest).sort("report_date", "media_id")
+    """Mark the file to use for each report date.
+
+    A ministry file beats an INSP one; among files from the same site, the most
+    recently modified wins.
+    """
+    is_ministry = pl.col("source_url").str.starts_with(MINISTRY_SITE).fill_null(False)
+    ranked = manifest.sort(
+        is_ministry, "modified", "media_id", descending=True
+    ).with_columns(is_latest=pl.int_range(pl.len()).over("report_date") == 0)
+    flagged = ranked.sort("report_date", "media_id")
 
     duplicates = flagged.filter(pl.len().over("report_date") > 1)
     for (report_date,), group in duplicates.group_by(
@@ -297,7 +338,7 @@ def log_gaps(manifest: pl.DataFrame) -> None:
 def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
     """Build the manifest, downloading only media items that are new or changed.
 
-    Rows for media the API no longer lists are kept with `in_api` False, so a
+    Rows for media the APIs no longer list are kept with `in_api` False, so a
     removed upload never deletes its date from the outputs.
 
     Args:
@@ -317,7 +358,16 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
             continue
         # A known id with a new `modified` time is an upload replaced in place.
         replaced = item["id"] in known_ids
-        path = download(item, refresh=replaced)
+        try:
+            path = download(item, refresh=replaced)
+        except httpx.HTTPStatusError as e:
+            # INSP lists some uploads whose file is gone; the ministry is the
+            # primary source, so its errors still fail the run.
+            is_insp = not item["source_url"].startswith(MINISTRY_SITE)
+            if not (is_insp and e.response.status_code == HTTP_NOT_FOUND):
+                raise
+            logger.warning("Skipping INSP media %s: file not found", item["id"])
+            continue
         rows.append(manifest_row(item, parse_header(read_first_page(path))))
         logger.info("%s %s", "Replaced" if replaced else "Added", rows[-1]["file_name"])
 
