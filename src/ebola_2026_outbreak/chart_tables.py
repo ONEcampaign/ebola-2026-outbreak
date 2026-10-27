@@ -2,15 +2,16 @@
 
 Outputs, in data/output/, with display column names for charting tools:
     - 2026_outbreak_country_summary.csv: latest WHO figures per country,
-      plus Total.
+      plus Total. When the latest DRC sitrep is newer than WHO's DRC figures,
+      the DRC row takes the sitrep's confirmed cases and deaths.
     - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
       per province, keyed to the map's OBJECTIDs.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
       before 29 August 2014 and WHO/HDX counts from then on.
     - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
-      confirmed deaths and case fatality rate (percent) from WHO's Total row,
-      and the number of DRC provinces with confirmed cases from the latest
+      confirmed deaths and case fatality rate (percent) from the country
+      summary's Total row, and the number of DRC provinces with confirmed cases from the latest
       sitrep, each with the date its source reports in prose ("18 October").
 """
 
@@ -58,6 +59,7 @@ WHO_CASES, WHO_DEATHS, WHO_RECOVERED = (
     "Recovered",
 )
 TOTAL_LABEL = "Total"
+WHO_DRC = "Democratic Republic of the Congo"
 CFR_DECIMALS = 1
 
 COUNTRY, CASES, DEATHS, CFR, RECOVERED = (
@@ -179,10 +181,84 @@ def prose_date(day: date) -> str:
     return f"{day.day} {day:%B}"
 
 
+def with_newer_sitrep(who: pl.DataFrame, provinces: pl.DataFrame) -> pl.DataFrame:
+    """Add the latest sitrep's DRC totals to the WHO table when WHO is older.
+
+    WHO's DRC figures lag the DRC sitreps by a day or more. When the latest
+    sitrep is newer than WHO's latest DRC date, its national confirmed cases
+    and deaths (summed across provinces) are added as a DRC observation on the
+    sitrep date. Sitreps do not report recoveries, so WHO's latest DRC value is
+    carried onto that date.
+
+    Args:
+        who: Long WHO table rows (see `drc_2026_who.SCHEMA`).
+        provinces: Sitrep province rows (see `drc_2026_sitreps_parse.SCHEMA`).
+
+    Returns:
+        `who`, plus DRC cases, deaths and recoveries on the sitrep date when
+        the sitrep is newer.
+
+    Raises:
+        ValueError: If the latest sitrep lacks national cases or deaths.
+    """
+    drc = who.filter(pl.col("country") == WHO_DRC)
+    who_as_of = latest_date(drc["date"])
+    cumulative = provinces.filter(
+        pl.col("indicator").is_in(
+            [SITREP_INDICATORS["cases"], SITREP_INDICATORS["deaths"]]
+        )
+    )
+    sitrep_as_of = latest_date(cumulative["date"])
+    if sitrep_as_of <= who_as_of:
+        logger.info(
+            "DRC: WHO (%s) is as recent as the latest sitrep (%s); using WHO",
+            who_as_of,
+            sitrep_as_of,
+        )
+        return who
+
+    totals = dict(
+        cumulative.filter(pl.col("date") == sitrep_as_of)
+        .group_by("indicator")
+        .agg(pl.col("value").sum())
+        .iter_rows()
+    )
+    missing = [
+        label
+        for label in (SITREP_INDICATORS["cases"], SITREP_INDICATORS["deaths"])
+        if label not in totals
+    ]
+    if missing:
+        raise ValueError(f"Sitrep of {sitrep_as_of} has no national {missing}")
+    recovered = drc.filter(
+        pl.col("date") == who_as_of, pl.col("indicator") == WHO_RECOVERED
+    )["value"]
+    logger.info(
+        "DRC: sitrep (%s) is newer than WHO (%s); using the sitrep, with WHO's "
+        "recoveries",
+        sitrep_as_of,
+        who_as_of,
+    )
+    sitrep_rows = pl.DataFrame(
+        {
+            "date": [sitrep_as_of] * 3,
+            "country": [WHO_DRC] * 3,
+            "indicator": [WHO_CASES, WHO_DEATHS, WHO_RECOVERED],
+            "value": [
+                float(totals[SITREP_INDICATORS["cases"]]),
+                float(totals[SITREP_INDICATORS["deaths"]]),
+                recovered.item() if recovered.len() == 1 else None,
+            ],
+        },
+        schema={k: who.schema[k] for k in ("date", "country", "indicator", "value")},
+    )
+    return pl.concat([who, sitrep_rows], how="diagonal")
+
+
 def headline_figures(
     *,
     summary: pl.DataFrame,
-    who_as_of: date,
+    summary_as_of: date,
     mapped: pl.DataFrame,
     sitrep_as_of: date,
 ) -> dict[str, HeadlineFigure]:
@@ -190,7 +266,7 @@ def headline_figures(
 
     Args:
         summary: Output of `country_summary`, including its Total row.
-        who_as_of: Latest WHO "Data as of" date across countries.
+        summary_as_of: Latest date across the rows `summary` was built from.
         mapped: Output of `province_map`, one row per province with cases.
         sitrep_as_of: Date of the sitrep `mapped` comes from.
 
@@ -199,7 +275,7 @@ def headline_figures(
         (confirmed case fatality rate in percent) and `provinces_affected`.
 
     Raises:
-        ValueError: If the Total row is missing or any WHO figure is null.
+        ValueError: If the Total row is missing or any of its figures is null.
     """
     total = summary.filter(pl.col(COUNTRY) == TOTAL_LABEL)
     if total.height != 1:
@@ -207,13 +283,13 @@ def headline_figures(
     row = total.row(0, named=True)
     missing = [column for column in (CASES, DEATHS, CFR) if row[column] is None]
     if missing:
-        raise ValueError(f"WHO {TOTAL_LABEL} row has no value for {missing}")
+        raise ValueError(f"{TOTAL_LABEL} row has no value for {missing}")
 
-    who_date, sitrep_date = prose_date(who_as_of), prose_date(sitrep_as_of)
+    summary_date, sitrep_date = prose_date(summary_as_of), prose_date(sitrep_as_of)
     return {
-        "total_confirmed_cases": {"value": row[CASES], "update_date": who_date},
-        "total_deaths": {"value": row[DEATHS], "update_date": who_date},
-        "death_rate": {"value": row[CFR], "update_date": who_date},
+        "total_confirmed_cases": {"value": row[CASES], "update_date": summary_date},
+        "total_deaths": {"value": row[DEATHS], "update_date": summary_date},
+        "death_rate": {"value": row[CFR], "update_date": summary_date},
         "provinces_affected": {"value": mapped.height, "update_date": sitrep_date},
     }
 
@@ -313,11 +389,12 @@ def main() -> None:
     who = pl.read_csv(WHO_PATH, schema=WHO_SCHEMA)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    summary = country_summary(who)
+    provinces = pl.read_csv(PROVINCE_PATH, schema=PROVINCE_SCHEMA)
+    latest = with_newer_sitrep(who, provinces)
+    summary = country_summary(latest)
     summary.write_csv(COUNTRY_SUMMARY_PATH)
     logger.info("Wrote %d rows to %s", summary.height, COUNTRY_SUMMARY_PATH.name)
 
-    provinces = pl.read_csv(PROVINCE_PATH, schema=PROVINCE_SCHEMA)
     lookup = pl.read_csv(OBJECTID_PATH, schema={NAME: pl.String, OBJECTID: pl.Int64})
     mapped = province_map(provinces, lookup)
     mapped.write_csv(PROVINCE_MAP_PATH)
@@ -336,7 +413,7 @@ def main() -> None:
     sitrep_cases = provinces.filter(pl.col("indicator") == SITREP_INDICATORS["cases"])
     headline = headline_figures(
         summary=summary,
-        who_as_of=latest_date(who["date"]),
+        summary_as_of=latest_date(latest["date"]),
         mapped=mapped,
         sitrep_as_of=latest_date(sitrep_cases["date"]),
     )

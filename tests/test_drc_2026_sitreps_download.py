@@ -110,6 +110,62 @@ def test_flag_latest_keeps_most_recent_upload() -> None:
     }
 
 
+def test_flag_latest_prefers_ministry_over_newer_insp() -> None:
+    day = date(2026, 10, 19)
+    rows = [
+        {
+            "report_date": day,
+            "media_id": 712,
+            "modified": "2026-10-27T09:37:50",
+            "source_url": f"{dlm.MINISTRY_SITE}wp-content/uploads/a.pdf",
+        },
+        {
+            "report_date": day,
+            "media_id": 25749,
+            "modified": "2026-10-28T05:05:17",
+            "source_url": "https://insp.cd/wp-content/uploads/a.pdf",
+        },
+        {
+            "report_date": date(2026, 10, 25),
+            "media_id": 25776,
+            "modified": "2026-10-27T08:09:30",
+            "source_url": "https://insp.cd/wp-content/uploads/b.pdf",
+        },
+    ]
+    manifest = pl.DataFrame(rows).with_columns(file_name=pl.lit("f.pdf"))
+    manifest = manifest.select(
+        pl.col(c) if c in manifest.columns else pl.lit(None).alias(c)
+        for c in MANIFEST_SCHEMA
+    ).cast(MANIFEST_SCHEMA)
+    flagged = flag_latest(manifest)
+    assert dict(flagged.select("media_id", "is_latest").iter_rows()) == {
+        712: True,
+        25749: False,
+        25776: True,
+    }
+
+
+def test_select_insp_keeps_this_outbreak_only() -> None:
+    insp = [
+        {
+            **_item(25776, "2026-10-27"),
+            "source_url": "https://insp.cd/SitRep_MVEBDB_164.pdf",
+        },
+        {
+            **_item(24000, "2025-10-16"),
+            "source_url": "https://insp.cd/SitRep_MVE_Kasai.pdf",
+        },
+    ]
+    kept = dlm.select_insp(insp, ministry=[_item(712, "2026-10-27")])
+    assert [item["id"] for item in kept] == [25776]
+
+
+def test_select_insp_rejects_id_clash() -> None:
+    insp = [{**_item(712, "2026-10-27"), "source_url": "https://insp.cd/MVEBDB.pdf"}]
+    with pytest.raises(ValueError, match="clash"):
+        dlm.select_insp(insp, ministry=[_item(712, "2026-10-27")])
+
+
 def _item(media_id: int, modified: str) -> dlm.MediaItem:
     """Media item stub."""
     return {
