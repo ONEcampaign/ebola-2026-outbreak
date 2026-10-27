@@ -9,11 +9,14 @@ Outputs, in data/output/, with display column names for charting tools:
       the map's OBJECTIDs.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
-      before 29 August 2014 and WHO/HDX counts from then on.
+      before 29 August 2014 and WHO/HDX counts from then on. The 2026 series
+      sums WHO's figures across countries, with DRC's from a newer sitrep as
+      in the country summary.
     - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
       confirmed deaths and case fatality rate (percent) from the country
       summary's Total row, and the number of DRC provinces with confirmed
-      cases from the latest sitrep, each with the date its source reports in prose ("18 October").
+      cases from the latest sitrep, each with the date its source reports in
+      prose ("18 October").
 """
 
 import json
@@ -307,9 +310,9 @@ def headline_figures(
 
 
 def drc_outbreak_series(who: pl.DataFrame) -> pl.DataFrame:
-    """WHO confirmed cases summed across all affected countries by date.
+    """Confirmed cases summed across all affected countries by date.
 
-    Each country's last value is carried onto later dates first, because
+    Takes WHO rows, or the output of `with_newer_sitrep`. Each country's last value is carried onto later dates first, because
     countries are reported on different dates.
     """
     confirmed = who.filter(pl.col("indicator") == WHO_CASES).select(
@@ -418,7 +421,7 @@ def main() -> None:
         ),
         pl.read_csv(WEST_AFRICA_PATH, try_parse_dates=True).select("date", "value"),
     )
-    comparison = weekly_comparison(west_africa, drc_outbreak_series(who))
+    comparison = weekly_comparison(west_africa, drc_outbreak_series(latest))
     comparison.write_csv(COMPARISON_PATH)
     logger.info("Wrote %d rows to %s", comparison.height, COMPARISON_PATH.name)
 

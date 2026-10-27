@@ -267,3 +267,12 @@ def test_with_newer_sitrep_rejects_missing_deaths(who_drc: pl.DataFrame) -> None
     )
     with pytest.raises(ValueError, match="no national"):
         with_newer_sitrep(who_drc, cases_only)
+
+
+def test_drc_outbreak_series_ends_on_newer_sitrep(who_drc: pl.DataFrame) -> None:
+    latest = with_newer_sitrep(who_drc, sitrep(D3, [("Ituri", 1050, 490)]))
+    assert drc_outbreak_series(latest).rows() == [
+        (D1, 9.0),
+        (D2, 1009.0),
+        (D3, 1059.0),
+    ]
