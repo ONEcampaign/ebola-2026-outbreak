@@ -306,6 +306,8 @@ def upsert(new: pl.DataFrame, path: Path) -> pl.DataFrame:
     """Merge new rows into the CSV at `path`, keeping the latest capture per key.
 
     WHO revises figures, so a later `retrieved_at` replaces an earlier one.
+    A re-capture of an unchanged value keeps the stored row, so a run that
+    finds nothing new rewrites the CSV byte for byte and makes no commit.
 
     Args:
         new: Rows from one or more snapshots.
@@ -316,7 +318,16 @@ def upsert(new: pl.DataFrame, path: Path) -> pl.DataFrame:
     """
     frames = [new]
     if path.exists():
-        frames.insert(0, pl.read_csv(path, schema=SCHEMA))
+        existing = pl.read_csv(path, schema=SCHEMA)
+        frames = [
+            existing,
+            new.join(
+                existing.select(*KEY, "value"),
+                on=[*KEY, "value"],
+                how="anti",
+                nulls_equal=True,
+            ),
+        ]
     merged = (
         pl.concat(frames)
         .sort("retrieved_at")

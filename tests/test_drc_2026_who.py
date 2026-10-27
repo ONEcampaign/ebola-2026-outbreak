@@ -88,6 +88,19 @@ def test_upsert_keeps_latest_capture(table: pl.DataFrame, tmp_path: Path) -> Non
     assert _value(merged, drc, "Confirmed cases") == 9553
 
 
+def test_upsert_keeps_stored_row_for_unchanged_value(
+    table: pl.DataFrame, tmp_path: Path
+) -> None:
+    path = tmp_path / "out.csv"
+    upsert(table, path)
+    before = path.read_bytes()
+    recapture = table.with_columns(
+        retrieved_at=pl.lit(datetime(2026, 10, 21, tzinfo=UTC))
+    )
+    upsert(recapture, path)
+    assert path.read_bytes() == before
+
+
 def test_image_only_section_raises() -> None:
     html = (
         "<html><h2>Ebola disease (Bundibugyo virus)</h2>"
