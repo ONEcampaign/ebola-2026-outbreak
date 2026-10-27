@@ -101,12 +101,16 @@ LOOKUP = pl.DataFrame(
 
 def test_province_map_matches_accents() -> None:
     out = province_map(provinces([("Ituri", 10), ("Haut-Uélé", 5)]), LOOKUP)
-    assert out.rows() == [("Ituri", 3, 10), ("Haut-Uele", 68, 5), ("Kasaï", 128, 0)]
+    assert out.rows() == [("Ituri", 3, 10), ("Haut-Uele", 68, 5), ("Kasaï", 128, None)]
 
 
 def test_province_map_keeps_every_lookup_province() -> None:
     out = province_map(provinces([("Ituri", 10), ("Kasai", 0)]), LOOKUP)
-    assert out.rows() == [("Ituri", 3, 10), ("Haut-Uele", 68, 0), ("Kasaï", 128, 0)]
+    assert out.rows() == [
+        ("Ituri", 3, 10),
+        ("Haut-Uele", 68, None),
+        ("Kasaï", 128, None),
+    ]
 
 
 def test_province_map_raises_on_unknown_province() -> None:
