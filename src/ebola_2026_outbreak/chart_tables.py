@@ -7,6 +7,10 @@ Outputs, in data/output/, with display column names for charting tools:
     - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
       for every DRC province, empty where the sitrep reports none, keyed to
       the map's OBJECTIDs.
+    - 2026_outbreak_drc_cases_by_zone.csv: latest sitrep confirmed cases for
+      every DRC health zone, empty where the sitrep reports none, keyed to the
+      COD-AB P-codes of drc_health_zones_geometry.csv (see
+      `drc_health_zone_geometry`).
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
       before 29 August 2014 and WHO/HDX counts from then on. The 2026 series
@@ -29,11 +33,13 @@ from typing import TypedDict
 import polars as pl
 
 from ebola_2026_outbreak.aggregate import forward_fill_cumulative
+from ebola_2026_outbreak.drc_2026_sitreps_extract import BY_ZONE_PATH, BY_ZONE_SCHEMA
 from ebola_2026_outbreak.drc_2026_sitreps_parse import INDICATORS as SITREP_INDICATORS
 from ebola_2026_outbreak.drc_2026_sitreps_parse import OUTPUT_PATH as PROVINCE_PATH
 from ebola_2026_outbreak.drc_2026_sitreps_parse import SCHEMA as PROVINCE_SCHEMA
 from ebola_2026_outbreak.drc_2026_who import OUTPUT_PATH as WHO_PATH
 from ebola_2026_outbreak.drc_2026_who import SCHEMA as WHO_SCHEMA
+from ebola_2026_outbreak.drc_health_zone_geometry import CODES_PATH, GEOMETRY_PATH
 from ebola_2026_outbreak.west_africa_2014_16 import FINAL_PATH as WEST_AFRICA_PATH
 from ebola_2026_outbreak.west_africa_2014_16_early import (
     OUTPUT_PATH as WEST_AFRICA_EARLY_PATH,
@@ -46,6 +52,7 @@ OUTPUT_DIR = ROOT / "data" / "output"
 OBJECTID_PATH = ROOT / "data" / "reference" / "drc_provinces_objectid.csv"
 COUNTRY_SUMMARY_PATH = OUTPUT_DIR / "2026_outbreak_country_summary.csv"
 PROVINCE_MAP_PATH = OUTPUT_DIR / "2026_outbreak_drc_cases_by_province.csv"
+ZONE_MAP_PATH = OUTPUT_DIR / "2026_outbreak_drc_cases_by_zone.csv"
 COMPARISON_PATH = OUTPUT_DIR / "outbreak_comparison_weekly.csv"
 HEADLINE_PATH = OUTPUT_DIR / "2026_outbreak_headline_figures.json"
 
@@ -73,7 +80,7 @@ COUNTRY, CASES, DEATHS, CFR, RECOVERED = (
     "Case Fatality Rate",
     "Recovered",
 )
-NAME, OBJECTID = "Name", "OBJECTID"
+NAME, OBJECTID, CODE = "Name", "OBJECTID", "Code"
 WEEK = "Weeks since the first confirmed case"
 WEST_AFRICA, DRC = "West Africa 2014-16 outbreak", "DRC 2026 outbreak"
 
@@ -172,6 +179,57 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
     return (
         lookup.join(with_cases, on=OBJECTID, how="left")
         .select(NAME, OBJECTID, CASES)
+        .sort([CASES, NAME], descending=[True, False], nulls_last=True)
+    )
+
+
+def zone_map(
+    by_zone: pl.DataFrame, codes: pl.DataFrame, shapes: pl.DataFrame
+) -> pl.DataFrame:
+    """Latest cumulative confirmed cases for every map zone, by P-code.
+
+    Zones the sitrep does not list, or lists with 0 cases, get an empty
+    count. A zone with cases but no P-code (not a mapped zone, such as "A
+    ventiler") is logged with its cases, which the map then leaves out. So is
+    a zone the gazetteer gained after `drc_health_zone_geometry` last wrote
+    the codes, which re-running that script settles.
+
+    Args:
+        by_zone: Sitrep zone rows (see `drc_2026_sitreps_extract.BY_ZONE_SCHEMA`).
+        codes: `province`, `zone` and `code` per sitrep zone.
+        shapes: Map zones with `Code` and `Name`.
+
+    Returns:
+        `Code`, `Name` and `Confirmed cases`, one row per `shapes` zone,
+        sorted by cases then name, zones without cases last.
+
+    Raises:
+        ValueError: If a code is not a map zone.
+    """
+    cases = by_zone.filter(
+        pl.col("level") == "zone",
+        pl.col("indicator") == SITREP_INDICATORS["cases"],
+        pl.col("date") == pl.col("date").max(),
+    )
+    logger.info("Zone cases as of %s", cases["date"].max())
+
+    joined = cases.join(codes, on=["province", "zone"], how="left", coalesce=True)
+    unknown = joined.join(codes, on=["province", "zone"], how="anti")
+    for province, zone in unknown.select("province", "zone").rows():
+        logger.warning("%s / %s is missing from %s", province, zone, CODES_PATH.name)
+    stray = set(codes["code"].drop_nulls()) - set(shapes[CODE])
+    if stray:
+        raise ValueError(f"Zone codes with no map shape: {sorted(stray)}")
+    unmapped = joined.filter(pl.col("code").is_null(), pl.col("value") > 0)
+    for province, zone, value in unmapped.select("province", "zone", "value").rows():
+        logger.warning("%s / %s: %d cases with no map zone", province, zone, value)
+
+    with_cases = joined.filter(
+        pl.col("code").is_not_null(), pl.col("value") > 0
+    ).select(pl.col("code").alias(CODE), pl.col("value").alias(CASES))
+    return (
+        shapes.select(CODE, NAME)
+        .join(with_cases, on=CODE, how="left")
         .sort([CASES, NAME], descending=[True, False], nulls_last=True)
     )
 
@@ -414,6 +472,14 @@ def main() -> None:
     mapped = province_map(provinces, lookup)
     mapped.write_csv(PROVINCE_MAP_PATH)
     logger.info("Wrote %d rows to %s", mapped.height, PROVINCE_MAP_PATH.name)
+
+    zones = zone_map(
+        pl.read_csv(BY_ZONE_PATH, schema=BY_ZONE_SCHEMA),
+        pl.read_csv(CODES_PATH, infer_schema=False),
+        pl.read_csv(GEOMETRY_PATH, columns=[CODE, NAME], infer_schema=False),
+    )
+    zones.write_csv(ZONE_MAP_PATH)
+    logger.info("Wrote %d rows to %s", zones.height, ZONE_MAP_PATH.name)
 
     west_africa = west_africa_series(
         pl.read_csv(WEST_AFRICA_EARLY_PATH, try_parse_dates=True).select(
