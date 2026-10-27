@@ -5,14 +5,15 @@ Outputs, in data/output/, with display column names for charting tools:
       plus Total. When the latest DRC sitrep is newer than WHO's DRC figures,
       the DRC row takes the sitrep's confirmed cases and deaths.
     - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
-      per province, keyed to the map's OBJECTIDs.
+      for every DRC province, 0 where the sitrep reports none, keyed to the
+      map's OBJECTIDs.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
       before 29 August 2014 and WHO/HDX counts from then on.
     - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
       confirmed deaths and case fatality rate (percent) from the country
-      summary's Total row, and the number of DRC provinces with confirmed cases from the latest
-      sitrep, each with the date its source reports in prose ("18 October").
+      summary's Total row, and the number of DRC provinces with confirmed
+      cases from the latest sitrep, each with the date its source reports in prose ("18 October").
 """
 
 import json
@@ -132,14 +133,18 @@ def _match_key(name: str) -> str:
 
 
 def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
-    """Latest cumulative confirmed cases for provinces with cases, with OBJECTIDs.
+    """Latest cumulative confirmed cases for every map province, with OBJECTIDs.
+
+    Sitreps list only provinces with cases, so every other province in
+    `lookup` gets 0 and still appears on the map.
 
     Args:
         provinces: Sitrep province rows (see `drc_2026_sitreps_parse.SCHEMA`).
         lookup: Map provinces with `Name` and `OBJECTID`.
 
     Returns:
-        `Name` (lookup spelling), `OBJECTID` and `Confirmed cases`.
+        `Name` (lookup spelling), `OBJECTID` and `Confirmed cases`, one row per
+        `lookup` province, sorted by cases then name.
 
     Raises:
         ValueError: If a province with cases has no OBJECTID.
@@ -159,9 +164,13 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
     unmatched = joined.filter(pl.col(OBJECTID).is_null())["province"].to_list()
     if unmatched:
         raise ValueError(f"No OBJECTID for provinces: {unmatched}")
-    return joined.select(
-        NAME, OBJECTID, pl.col("value").cast(pl.Int64).alias(CASES)
-    ).sort(CASES, descending=True)
+    with_cases = joined.select(OBJECTID, pl.col("value").cast(pl.Int64).alias(CASES))
+    return (
+        lookup.join(with_cases, on=OBJECTID, how="left")
+        .with_columns(pl.col(CASES).fill_null(0))
+        .select(NAME, OBJECTID, CASES)
+        .sort([CASES, NAME], descending=[True, False])
+    )
 
 
 def latest_date(dates: pl.Series) -> date:
@@ -267,7 +276,7 @@ def headline_figures(
     Args:
         summary: Output of `country_summary`, including its Total row.
         summary_as_of: Latest date across the rows `summary` was built from.
-        mapped: Output of `province_map`, one row per province with cases.
+        mapped: Output of `province_map`, one row per map province.
         sitrep_as_of: Date of the sitrep `mapped` comes from.
 
     Returns:
@@ -290,7 +299,10 @@ def headline_figures(
         "total_confirmed_cases": {"value": row[CASES], "update_date": summary_date},
         "total_deaths": {"value": row[DEATHS], "update_date": summary_date},
         "death_rate": {"value": row[CFR], "update_date": summary_date},
-        "provinces_affected": {"value": mapped.height, "update_date": sitrep_date},
+        "provinces_affected": {
+            "value": mapped.filter(pl.col(CASES) > 0).height,
+            "update_date": sitrep_date,
+        },
     }
 
 
