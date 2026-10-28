@@ -4,8 +4,9 @@ COD-AB's admin level 3 holds the 519 health zones (zones de santé), with
 boundaries from September 2019. The shapes are simplified as one coverage, so
 neighbouring zones keep a shared border, and written with each zone's P-code
 as `Code`. The sitrep gazetteer's zones are matched to those codes by province
-and name; zones COD-AB spells differently are listed in `COD_SPELLINGS`.
-A sitrep zone with no shape keeps an empty code. Run by hand; the boundaries
+and name; zones COD-AB spells differently are listed in `COD_SPELLINGS`,
+and health areas the sitreps report as zones take their zone's code in
+`HEALTH_AREA_ZONES`. A sitrep zone with no shape keeps an empty code. Run by hand; the boundaries
 do not change with the outbreak data.
 """
 
@@ -43,6 +44,10 @@ POLYGON_TYPES = frozenset({"Polygon", "MultiPolygon"})
 
 # Sitrep zone name -> COD-AB name, for the same zone spelled differently.
 COD_SPELLINGS = {"Mongbwalu": "Mongbalu", "Nyankunde": "Nyakunde"}
+# Health areas (aires de santé) the sitreps list as zones -> the COD-AB zone
+# holding them, under which their cases are mapped. Dakwa is a health area of
+# Ango in GRID3's health areas v9.0; neither COD-AB nor GRID3 has it as a zone.
+HEALTH_AREA_ZONES = {"Dakwa": "Ango"}
 
 GEOMETRY, CODE, NAME = "Geometry", "Code", "Name"
 
@@ -123,7 +128,8 @@ def zone_codes(features: list[dict], gazetteer: pl.DataFrame) -> pl.DataFrame:
     for province, zone, aliases in gazetteer.select(
         "province", "zone", "aliases"
     ).iter_rows():
-        names = [COD_SPELLINGS.get(zone, zone), *(aliases or "").split("|")]
+        target = HEALTH_AREA_ZONES.get(zone) or COD_SPELLINGS.get(zone, zone)
+        names = [target, *(aliases or "").split("|")]
         code = next(
             (
                 cod[k]

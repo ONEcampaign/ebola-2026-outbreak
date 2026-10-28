@@ -57,3 +57,12 @@ def test_zone_codes_matches_spellings_and_accents() -> None:
     )
     out = zone_codes(features, gazetteer)
     assert out["code"].to_list() == ["CD1", "CD2", None]
+
+
+def test_zone_codes_maps_a_health_area_to_its_zone() -> None:
+    features = [feature("CD3", "Ango", "Bas-Uele", SQUARE)]
+    gazetteer = pl.DataFrame(
+        {"province": ["Bas-Uélé"], "zone": ["Dakwa"], "aliases": [None]},
+        schema={"province": pl.String, "zone": pl.String, "aliases": pl.String},
+    )
+    assert zone_codes(features, gazetteer)["code"].to_list() == ["CD3"]

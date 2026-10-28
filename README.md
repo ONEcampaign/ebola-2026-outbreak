@@ -131,8 +131,9 @@ tables to `data/output/`, refreshed by the daily scrape:
 boundaries of September 2019) with `Geometry` (GeoJSON), `Code` (P-code) and
 `Name`. Shapes are simplified to about 550 m, keeping shared borders. It also
 writes `data/reference/drc_2026_health_zone_codes.csv`, the P-code of each
-sitrep zone. Re-run it when the gazetteer gains a zone. Dakwa (Bas-Uélé) has
-no COD-AB shape, and "A ventiler" is not a zone, so neither is mapped.
+sitrep zone. Re-run it when the gazetteer gains a zone. Dakwa (Bas-Uélé), which
+the sitreps list as a zone, is a health area of Ango, so its cases are mapped
+under Ango. "A ventiler" is not a zone and is not mapped.
 
 ### Health expenditure
 
