@@ -1,8 +1,8 @@
-"""Find and download DRC Ministry of Health sitreps for the 2026 outbreak.
+"""Find and download the DRC sitreps of the 2026 outbreak from INSP.
 
-The ministry's site (https://sante.gouv.cd/documents/sitreps) is a front end
-over WordPress, whose media API lists more sitreps than the listing page.
-Filenames are unreliable, so the report date comes from the PDF header. The
+INSP (https://insp.cd/category/sitrep/) publishes each sitrep first. Its
+site is a WordPress front end whose media API lists every upload, other
+outbreaks' sitreps included, so only files marked "MVEBDB" are kept. Filenames are unreliable, so the report date comes from the PDF header. The
 header has two dates: the printed report date and the date inside the sitrep
 reference ("SitRep N°150 /MVE-BDBV/11/10/2026"). Usually they agree. When they
 do not, the date that fits the nearest sitrep whose two dates agree, counted
@@ -11,10 +11,10 @@ occasionally wrong (two files print "N°153"), so they are kept for reference
 only. The manifest keeps one row per media item and flags the file kept for
 each report date.
 
-INSP (https://insp.cd) publishes the same sitreps, often a day or two before
-the ministry, through a second WordPress media API. Both are listed. When both
-have a file for a report date, the ministry's is kept, so INSP only fills
-dates the ministry has not published.
+Until 28 October 2026 sitreps also came from the Ministry of Health's media
+API (https://sante.gouv.cd/documents/sitreps), which publishes them a day or
+more later and is no longer read. Its files stay in the manifest, and a date
+that has one keeps it, so no report already processed changes file.
 """
 
 import logging
@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTBREAK = "drc_2026"
-MINISTRY_MEDIA_API = "https://administration.sante.gouv.cd/wp-json/wp/v2/media"
 INSP_MEDIA_API = "https://insp.cd/wp-json/wp/v2/media"
+# Host of the ministry files kept from before INSP became the only source.
 MINISTRY_SITE = "https://administration.sante.gouv.cd/"
 HTTP_NOT_FOUND = 404
 # INSP's library also holds other outbreaks' sitreps; this outbreak's carry
@@ -214,34 +214,24 @@ def list_api_pdfs(api: str) -> list[MediaItem]:
     return [item for item in items if item["mime_type"] == PDF_MIME]
 
 
-def select_insp(insp: list[MediaItem], *, ministry: list[MediaItem]) -> list[MediaItem]:
-    """Keep this outbreak's INSP sitreps.
-
-    Raises:
-        ValueError: If a kept INSP id is also a ministry id, since local files
-            and the extraction ledger are keyed by media id alone.
-    """
-    kept = [item for item in insp if INSP_FILE_MARKER in item["source_url"].upper()]
-    clashes = {item["id"] for item in kept} & {item["id"] for item in ministry}
-    if clashes:
-        raise ValueError(f"INSP media ids clash with ministry ids: {sorted(clashes)}")
-    return kept
-
-
 def list_media() -> list[MediaItem]:
-    """List ministry sitrep PDFs plus this outbreak's INSP sitrep PDFs.
+    """List this outbreak's sitrep PDFs in INSP's media library.
 
     Returns:
         Media items with id, modified, source_url and mime_type.
     """
-    ministry = list_api_pdfs(MINISTRY_MEDIA_API)
-    insp = select_insp(list_api_pdfs(INSP_MEDIA_API), ministry=ministry)
-    logger.info(
-        "Media APIs list %d ministry and %d INSP sitrep PDFs",
-        len(ministry),
-        len(insp),
-    )
-    return ministry + insp
+    items = [
+        item
+        for item in list_api_pdfs(INSP_MEDIA_API)
+        if INSP_FILE_MARKER in item["source_url"].upper()
+    ]
+    logger.info("INSP media API lists %d sitrep PDFs", len(items))
+    return items
+
+
+def is_ministry(source_url: str) -> bool:
+    """Whether a file came from the ministry's media API."""
+    return source_url.startswith(MINISTRY_SITE)
 
 
 def download(item: MediaItem, *, refresh: bool = False) -> Path:
@@ -299,12 +289,13 @@ def resolve_report_dates(manifest: pl.DataFrame) -> pl.DataFrame:
 def flag_latest(manifest: pl.DataFrame) -> pl.DataFrame:
     """Mark the file to use for each report date.
 
-    A ministry file beats an INSP one; among files from the same site, the most
-    recently modified wins.
+    A ministry file kept from before INSP became the only source beats an INSP
+    one, so a processed date keeps its file; among files from the same site,
+    the most recently modified wins.
     """
-    is_ministry = pl.col("source_url").str.starts_with(MINISTRY_SITE).fill_null(False)
+    from_ministry = pl.col("source_url").str.starts_with(MINISTRY_SITE).fill_null(False)
     ranked = manifest.sort(
-        is_ministry, "modified", "media_id", descending=True
+        from_ministry, "modified", "media_id", descending=True
     ).with_columns(is_latest=pl.int_range(pl.len()).over("report_date") == 0)
     flagged = ranked.sort("report_date", "media_id")
 
@@ -338,21 +329,34 @@ def log_gaps(manifest: pl.DataFrame) -> None:
 def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
     """Build the manifest, downloading only media items that are new or changed.
 
-    Rows for media the APIs no longer list are kept with `in_api` False, so a
-    removed upload never deletes its date from the outputs.
+    Rows for media the API no longer lists, and the ministry's files, are
+    kept with `in_api` False, so a removed upload never deletes its date from
+    the outputs.
 
     Args:
         previous: The existing manifest, or None on a first run.
 
     Returns:
         One row per sitrep PDF with `is_latest` flagged per report date.
+
+    Raises:
+        ValueError: If an INSP media id is also a ministry file's, since local
+            files and the extraction ledger are keyed by media id alone.
     """
     previous_rows = previous.to_dicts() if previous is not None else []
     known = {(row["media_id"], row["modified"]): row for row in previous_rows}
     known_ids = {row["media_id"] for row in previous_rows}
+    ministry_ids = {
+        r["media_id"] for r in previous_rows if is_ministry(r["source_url"])
+    }
+
+    items = list_media()
+    clashes = {item["id"] for item in items} & ministry_ids
+    if clashes:
+        raise ValueError(f"INSP media ids clash with ministry ids: {sorted(clashes)}")
 
     rows: list[dict[str, object]] = []
-    for item in list_media():
+    for item in items:
         if cached := known.get((item["id"], item["modified"])):
             rows.append(cached | {"in_api": True})
             continue
@@ -361,10 +365,8 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
         try:
             path = download(item, refresh=replaced)
         except httpx.HTTPStatusError as e:
-            # INSP lists some uploads whose file is gone; the ministry is the
-            # primary source, so its errors still fail the run.
-            is_insp = not item["source_url"].startswith(MINISTRY_SITE)
-            if not (is_insp and e.response.status_code == HTTP_NOT_FOUND):
+            # INSP lists some uploads whose file is gone.
+            if e.response.status_code != HTTP_NOT_FOUND:
                 raise
             logger.warning("Skipping INSP media %s: file not found", item["id"])
             continue
@@ -374,11 +376,12 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
     listed_ids = {row["media_id"] for row in rows}
     for row in previous_rows:
         if row["media_id"] not in listed_ids:
-            logger.warning(
-                "%s (%s) is no longer listed by the API; keeping it",
-                row["file_name"],
-                row["report_date"],
-            )
+            if not is_ministry(row["source_url"]):
+                logger.warning(
+                    "%s (%s) is no longer listed by the API; keeping it",
+                    row["file_name"],
+                    row["report_date"],
+                )
             rows.append(row | {"in_api": False})
 
     manifest = pl.DataFrame(rows, schema=MANIFEST_SCHEMA)
