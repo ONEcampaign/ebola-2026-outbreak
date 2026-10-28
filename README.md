@@ -62,7 +62,7 @@ Files are prefixed by outbreak so historical and current data stay apart:
 From SitRep 96 (report date 19 August 2026), the sitrep's health-zone table is
 read by two models, Gemini and Mistral OCR, and checked against the PDF's text
 layer and the table's own sums. `drc_2026_sitreps_extract.py` runs in the daily
-scrape at 12:30 and 18:00 UTC (`extract`, then `release`) and writes:
+scrape every 2 hours (`extract`, then `release`) and writes:
 
 - `drc_2026_sitrep_by_zone.csv`: one row per date, zone and indicator (cumulative
   confirmed cases and deaths, new cases, community, CTE and total deaths in the
