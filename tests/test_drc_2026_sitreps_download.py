@@ -145,8 +145,8 @@ def test_flag_latest_prefers_ministry_over_newer_insp() -> None:
     }
 
 
-def test_select_insp_keeps_this_outbreak_only() -> None:
-    insp = [
+def test_list_media_keeps_this_outbreak_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    items = [
         {
             **_item(25776, "2026-10-27"),
             "source_url": "https://insp.cd/SitRep_MVEBDB_164.pdf",
@@ -156,14 +156,8 @@ def test_select_insp_keeps_this_outbreak_only() -> None:
             "source_url": "https://insp.cd/SitRep_MVE_Kasai.pdf",
         },
     ]
-    kept = dlm.select_insp(insp, ministry=[_item(712, "2026-10-27")])
-    assert [item["id"] for item in kept] == [25776]
-
-
-def test_select_insp_rejects_id_clash() -> None:
-    insp = [{**_item(712, "2026-10-27"), "source_url": "https://insp.cd/MVEBDB.pdf"}]
-    with pytest.raises(ValueError, match="clash"):
-        dlm.select_insp(insp, ministry=[_item(712, "2026-10-27")])
+    monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
+    assert [item["id"] for item in dlm.list_media()] == [25776]
 
 
 def _item(media_id: int, modified: str) -> dlm.MediaItem:
@@ -233,3 +227,29 @@ def test_download_creates_missing_sitrep_dir(
     path = dlm.download(_item(710, "2026-10-20"))
     assert path == sitrep_dir / "710.pdf"
     assert path.read_bytes() == b"%PDF"
+
+
+def test_build_manifest_keeps_ministry_files_unlisted(fake_api: FakeApi) -> None:
+    ministry = {**_item(710, "2026-10-20"), "source_url": f"{dlm.MINISTRY_SITE}157.pdf"}
+    fake_api.items = [ministry]
+    first = dlm.build_manifest(None)
+    fake_api.items = [
+        {**_item(25746, "2026-10-21"), "source_url": "https://insp.cd/157.pdf"}
+    ]
+    second = dlm.build_manifest(first)
+    assert second.select("media_id", "in_api", "is_latest").rows() == [
+        (710, False, True),
+        (25746, True, False),
+    ]
+
+
+def test_build_manifest_rejects_insp_id_of_a_ministry_file(fake_api: FakeApi) -> None:
+    fake_api.items = [
+        {**_item(710, "2026-10-20"), "source_url": f"{dlm.MINISTRY_SITE}a.pdf"}
+    ]
+    first = dlm.build_manifest(None)
+    fake_api.items = [
+        {**_item(710, "2026-10-28"), "source_url": "https://insp.cd/b.pdf"}
+    ]
+    with pytest.raises(ValueError, match="clash"):
+        dlm.build_manifest(first)
