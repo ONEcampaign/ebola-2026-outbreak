@@ -8,9 +8,14 @@ Two steps, run in this order by default:
   answer and Mistral's answer, keyed on the PDF's sha256. An upload whose
   cache is complete costs no API call. An API error, an answer that breaks
   the schema, or a returned model id other than the pin leaves the upload
-  `pending`; the next run tries again, and the answer is not cached. Any
-  other error on an upload (a damaged PDF, say) is logged with its traceback
-  and leaves that upload pending too, keeping what was cached before it.
+  `pending`, and the answer is not cached. An HTTP error or a missing key is
+  tried again on the next run. An answer that was billed but is unusable (it
+  stopped early, is not JSON, breaks the schema, or names another model) is
+  recorded next to the answers as `<extractor>.failed.json`, and that model
+  is not called again on that PDF for `FAILURE_BACKOFF`. A pin change or
+  deleting the record forces a retry. Any other error on an upload
+  (a damaged PDF, say) is logged with its traceback and leaves that upload
+  pending too, keeping what was cached before it.
 - `release` needs neither keys nor PDFs. It is a function of committed files
   (the manifest, the cache, the review CSVs, the gazetteer and the status
   ledger). For every cached latest upload it normalises both answers and
@@ -67,15 +72,16 @@ calls nothing.
 
 import argparse
 import functools
+import json
 import logging
 import os
 import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Iterable, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import httpx
 import polars as pl
@@ -123,8 +129,10 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     RowKey,
     Status,
     TextRow,
+    UnusableAnswer,
     Values,
     atomic_write,
+    cache_path,
     load_gazetteer,
     normalise,
     read_model_result,
@@ -167,9 +175,13 @@ PENDING_DAYS = 3
 # Statuses that keep an upload's issue open.
 OPEN: frozenset[Status] = frozenset({"held", "pending"})
 # Errors that leave an upload pending: HTTP failures, unusable or
-# schema-breaking answers (ValueError), a missing key, GeminiError or a
-# changed model id (RuntimeError).
+# schema-breaking answers (ValueError, UnusableAnswer among them), or a
+# missing key (GeminiError, RuntimeError).
 EXTRACTOR_ERRORS = (httpx.HTTPError, ValueError, RuntimeError)
+# How long a billed but unusable answer stops a model being called again on
+# the same PDF under the same pin. Runs are every 2 h, so this caps the
+# repeat cost of a deterministic failure at one call a day.
+FAILURE_BACKOFF = timedelta(hours=24)
 KPIS = RowKey("kpis", "", "")
 # How `judge` reconciles, for release and the review check alike. Text-layer
 # arbitration stays on only while the golden set shows no accepted-wrong value.
@@ -479,7 +491,9 @@ def extract(
                 pdf = download(_media_item(upload))
                 sha256 = sha256_file(pdf)
                 row = row._replace(sha256=sha256)
-                records = _fill(pdf, sha256, read_records(sha256), gazetteer=gazetteer)
+                records = _fill(
+                    pdf, sha256, read_records(sha256), gazetteer=gazetteer, now=now
+                )
             except Exception:
                 logger.exception(
                     "Extracting %s (media %s, modified %s) failed",
@@ -502,13 +516,17 @@ def _media_item(upload: Upload) -> MediaItem:
     }
 
 
-def _fill(pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer) -> Records:
+def _fill(
+    pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer, now: str
+) -> Records:
     """Compute and cache each missing record of one PDF.
 
     Each record is cached as soon as it is made, and a model that fails is
     logged and left missing, so one model's outage leaves the other's answer
     in the cache. An answer that breaks the extraction schema, or names a
-    model other than the pin, counts as a failure.
+    model other than the pin, counts as a failure. A billed but unusable
+    answer is recorded with `write_failure`, and a model whose record is
+    `backing_off` is not called.
     """
     if records.words is None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -517,33 +535,130 @@ def _fill(pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer) -> 
     for extractor in EXTRACTORS:
         if getattr(records, extractor) is not None:
             continue
+        failure = read_failure(sha256, extractor)
+        if failure is not None and backing_off(failure, pin=_pin(extractor), now=now):
+            logger.warning(
+                "Not calling %s on %s: its answer of %s was unusable (%s); "
+                "delete %s to retry before %s",
+                extractor,
+                pdf.name,
+                failure["requested_at"],
+                failure["reason"],
+                _relative(failure_path(sha256, extractor)),
+                _retry_at(failure).isoformat(timespec="seconds"),
+            )
+            continue
         try:
             result = _call(extractor, pdf)
-            normalise(result.extraction_raw, gazetteer)
+            _check_schema(result, gazetteer)
+        except UnusableAnswer as e:
+            logger.error("%s answer unusable on %s: %s", extractor, pdf.name, e)
+            write_failure(sha256, extractor, e)
+            continue
         except EXTRACTOR_ERRORS as e:
             logger.error("%s failed on %s: %s", extractor, pdf.name, e)
             continue
         records = records._replace(**{extractor: result})
         write_model_result(sha256, extractor, result, root=CACHE_DIR)
+        failure_path(sha256, extractor).unlink(missing_ok=True)
     return records
+
+
+def _pin(extractor: Extractor) -> str:
+    """The model id an extractor is pinned to."""
+    return {"gemini": gemini.GEMINI_MODEL, "mistral": mistral.MISTRAL_OCR_MODEL}[
+        extractor
+    ]
 
 
 def _call(extractor: Extractor, pdf: Path) -> ModelResult:
     """One model's answer, checked against the pinned model id.
 
+    A mismatch is also written to stdout as a GitHub Actions `::error::`
+    annotation, since it blocks that model on every new upload until the pin
+    or the model is fixed.
+
     Raises:
-        RuntimeError: If the response names another model, or none.
+        UnusableAnswer: If the response names another model, or none.
     """
-    client, pin = {
-        "gemini": (gemini.extract, gemini.GEMINI_MODEL),
-        "mistral": (mistral.extract, mistral.MISTRAL_OCR_MODEL),
-    }[extractor]
+    client = gemini.extract if extractor == "gemini" else mistral.extract
+    pin = _pin(extractor)
     result = client(pdf)
     if result.model_id_returned != pin:
-        raise RuntimeError(
+        message = (
             f"{extractor} answered as {result.model_id_returned!r}, pinned to {pin!r}"
         )
+        # Workflow commands are read from stdout. A log line would prefix it.
+        print(f"::error title=Model pin mismatch::{message}", flush=True)
+        raise UnusableAnswer.from_result(message, result)
     return result
+
+
+def _check_schema(result: ModelResult, gazetteer: Gazetteer) -> None:
+    """Raise `UnusableAnswer` if a billed answer breaks the extraction schema."""
+    try:
+        normalise(result.extraction_raw, gazetteer)
+    except ValueError as e:
+        raise UnusableAnswer.from_result(
+            f"answer breaks the schema: {e}", result
+        ) from e
+
+
+# Failed attempts
+
+
+def failure_path(
+    sha256: str, extractor: Extractor, *, root: Path | None = None
+) -> Path:
+    """Path of the failed-attempt record of one model on one PDF."""
+    return cache_path(sha256, extractor, root=root or CACHE_DIR).with_suffix(
+        ".failed.json"
+    )
+
+
+def write_failure(
+    sha256: str,
+    extractor: Extractor,
+    error: UnusableAnswer,
+    *,
+    root: Path | None = None,
+) -> Path:
+    """Record a billed but unusable answer next to the cached answers.
+
+    The record holds when the call was made, why the answer was refused, the
+    pin in force and the raw response. It is not an answer, so `read_records`
+    ignores it, so the upload stays pending.
+    """
+    record = {
+        "requested_at": error.requested_at,
+        "reason": str(error),
+        "pin": error.model_id_requested,
+        "response": error.response,
+    }
+    text = json.dumps(record, indent=2, ensure_ascii=False) + "\n"
+    return atomic_write(failure_path(sha256, extractor, root=root), text)
+
+
+def read_failure(
+    sha256: str, extractor: Extractor, *, root: Path | None = None
+) -> dict[str, Any] | None:
+    """The failed-attempt record of one model on one PDF, or None."""
+    path = failure_path(sha256, extractor, root=root)
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def backing_off(failure: dict[str, Any], *, pin: str, now: str) -> bool:
+    """Whether a failed attempt still stops the model being called.
+
+    It does while it is younger than `FAILURE_BACKOFF` and was made under
+    the pin now in force. A pin change retries at once.
+    """
+    return failure["pin"] == pin and datetime.fromisoformat(now) < _retry_at(failure)
+
+
+def _retry_at(failure: dict[str, Any]) -> datetime:
+    """When a failed attempt stops blocking its model."""
+    return datetime.fromisoformat(failure["requested_at"]) + FAILURE_BACKOFF
 
 
 # Release
@@ -704,8 +819,10 @@ def release(
 
     Raises:
         ValueError: If an upload released before no longer releases while
-            its date has no newer released upload.
+            its date has no newer released upload, or if the manifest dates
+            an upload differently from the ledger.
     """
+    _check_dates(manifest, ledger)
     out: Ledger = {}
     reviews: dict[Path, list[ReviewRow]] = {}
     held: dict[UploadKey, HeldReport] = {}
@@ -834,6 +951,40 @@ def release(
         appended=appended,
         replaced=replaced - published.keys(),
     )
+
+
+def _check_dates(manifest: pl.DataFrame, ledger: Ledger) -> None:
+    """Refuse an upload whose manifest report date differs from the ledger's.
+
+    Release keeps the ledger's date, so a moved date would publish under one
+    date while the ledger keeps another. `resolve_report_dates` says how to
+    fix a wrong date.
+
+    Raises:
+        ValueError: Naming each such upload and both dates.
+    """
+    if not ledger:
+        return
+    moved = (
+        ledger_frame(ledger)
+        .select("media_id", "modified", "report_date")
+        .join(
+            manifest.select("media_id", "modified", "report_date"),
+            on=["media_id", "modified"],
+            suffix="_manifest",
+        )
+        .filter(pl.col("report_date") != pl.col("report_date_manifest"))
+        .sort("media_id", "modified")
+    )
+    if moved.height:
+        raise ValueError(
+            "The manifest dates uploads differently from the ledger: "
+            + "; ".join(
+                f"media {r['media_id']}, modified {r['modified']}: ledger "
+                f"{r['report_date']}, manifest {r['report_date_manifest']}"
+                for r in moved.iter_rows(named=True)
+            )
+        )
 
 
 def _moved(manifest: pl.DataFrame, ledger: Ledger) -> set[UploadKey]:
@@ -1115,8 +1266,10 @@ def pending_body(rows: Sequence[LedgerRow], *, run_url: str) -> str:
         f"{' '.join(REVIEWERS)}: extraction has failed for {PENDING_DAYS} days "
         "running on the uploads below, through an API error, an answer that "
         "breaks the schema, or a model id other than its pin. The run log "
-        "names the error. Each run tries again. This issue closes itself once "
-        "every upload is extracted.",
+        "names the error. Each run tries again after an API error; a billed "
+        "answer that was unusable is retried a day later, or at once if its "
+        "pin changes or its `.failed.json` record is deleted. This issue "
+        "closes itself once every upload is extracted.",
         "",
         "| Report date | Media id | Modified | First tried |",
         "| --- | --- | --- | --- |",

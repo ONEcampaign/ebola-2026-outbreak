@@ -85,6 +85,51 @@ def test_resolve_conflict_neither_fits() -> None:
         resolve_report_date(header, anchors=ANCHORS)
 
 
+def test_resolve_conflict_tied_anchors_disagree() -> None:
+    # #149 and #151 are equally near #150 but expect 11 and 12 Oct.
+    anchors = [(149, date(2026, 10, 10)), (151, date(2026, 10, 13))]
+    header = SitrepHeader(150, date(2026, 10, 12), date(2026, 10, 11), None)
+    with pytest.raises(ValueError, match="expect different dates"):
+        resolve_report_date(header, anchors=anchors)
+
+
+def test_resolve_conflict_tied_anchors_agree() -> None:
+    header = SitrepHeader(150, date(2026, 10, 12), date(2026, 10, 11), None)
+    anchors = [*ANCHORS, (149, date(2026, 10, 10))]
+    assert resolve_report_date(header, anchors=anchors) == date(2026, 10, 11)
+
+
+def test_resolve_report_dates_keeps_stored_dates() -> None:
+    # #150 was resolved to 11 Oct against #149. A new upload also numbered 150
+    # with agreeing dates of 12 Oct is a nearer anchor; re-resolving the old
+    # row would flip it to 12 Oct.
+    rows = [
+        (149, date(2026, 10, 10), date(2026, 10, 10), date(2026, 10, 10)),
+        (150, date(2026, 10, 11), date(2026, 10, 12), date(2026, 10, 11)),
+        (150, None, date(2026, 10, 12), date(2026, 10, 12)),
+    ]
+    manifest = pl.DataFrame(
+        rows,
+        schema=[
+            "sitrep_number",
+            "report_date",
+            "printed_report_date",
+            "reference_date",
+        ],
+        orient="row",
+    )
+    manifest = manifest.select(
+        pl.col(c) if c in manifest.columns else pl.lit(None).alias(c)
+        for c in MANIFEST_SCHEMA
+    ).cast(MANIFEST_SCHEMA)
+    resolved = dlm.resolve_report_dates(manifest)
+    assert resolved["report_date"].to_list() == [
+        date(2026, 10, 10),
+        date(2026, 10, 11),
+        date(2026, 10, 12),
+    ]
+
+
 def test_resolve_no_dates() -> None:
     with pytest.raises(ValueError, match="No date"):
         resolve_report_date(SitrepHeader(None, None, None, None), anchors=ANCHORS)

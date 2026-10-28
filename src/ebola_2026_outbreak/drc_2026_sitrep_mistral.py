@@ -21,7 +21,12 @@ from typing import Any
 import httpx
 
 from ebola_2026_outbreak import fetch
-from ebola_2026_outbreak.drc_2026_sitrep_schema import PROMPT, ModelResult, schema_for
+from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    PROMPT,
+    ModelResult,
+    UnusableAnswer,
+    schema_for,
+)
 
 MISTRAL_OCR_MODEL = "mistral-ocr-4-1"
 OCR_URL = "https://api.mistral.ai/v1/ocr"
@@ -96,8 +101,9 @@ def extract(
     Raises:
         RuntimeError: If `MISTRAL_API_KEY` is not set.
         httpx.HTTPError: If the request fails after retries.
-        ValueError: If the response carries no annotation, or one that is not
-            a JSON object.
+        UnusableAnswer: If Mistral answered, billing the call, but the
+            response carries no annotation, or one that is not a JSON
+            object. It carries the response body.
     """
     key = os.environ.get(API_KEY_ENV)
     if not key:
@@ -112,8 +118,17 @@ def extract(
         timeout=TIMEOUT_S,
     ).json()
 
+    try:
+        extraction = parse_annotation(response)
+    except ValueError as e:
+        raise UnusableAnswer(
+            str(e),
+            model_id_requested=model,
+            requested_at=requested_at,
+            response=response,
+        ) from e
     return ModelResult(
-        extraction_raw=parse_annotation(response),
+        extraction_raw=extraction,
         model_id_requested=model,
         model_id_returned=response.get("model"),
         usage=response.get("usage_info") or {},

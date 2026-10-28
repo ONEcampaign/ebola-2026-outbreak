@@ -21,7 +21,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # A queued run builds from the tip of main, whatever SHA queued it.
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.0

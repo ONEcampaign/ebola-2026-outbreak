@@ -19,8 +19,10 @@ from ebola_2026_outbreak import drc_2026_sitreps_extract as ex
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     EXTRACTORS,
     GAZETTEER_PATH,
+    Extractor,
     ModelResult,
     RowKey,
+    UnusableAnswer,
     cache_path,
     write_model_result,
     write_words,
@@ -33,6 +35,7 @@ MISTRAL_157 = FIXTURES / "sitrep_models" / "mistral_157_response.json"
 WORDS_157 = FIXTURES / "sitrep_words" / "SitRep_157.json"
 
 DAY = date(2026, 8, 19)
+REQUEST = httpx.Request("POST", "https://api.example.org")
 NOW = "2026-10-20T12:00:00+00:00"
 SHA_A, SHA_B = "aa" * 32, "bb" * 32
 
@@ -607,7 +610,9 @@ def clients(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
             if error := state["fail"].get(extractor):
                 raise error
             result = _result(state["answer"].get(extractor, _raw_157()), pin)
-            return result._replace(model_id_returned=state["model"].get(extractor, pin))
+            return result._replace(
+                model_id_returned=state["model"].get(extractor, pin), requested_at=NOW
+            )
 
         return extract
 
@@ -644,44 +649,142 @@ def _without_zones() -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    ("fail", "model", "answer"),
+    "error",
     [
-        ({"gemini": httpx.ConnectError("down")}, {}, {}),
-        (
-            {"mistral": httpx.HTTPStatusError("429", request=None, response=None)},
-            {},
-            {},
+        httpx.ConnectError("down"),
+        httpx.HTTPStatusError(
+            "429", request=REQUEST, response=httpx.Response(429, request=REQUEST)
         ),
-        ({"gemini": gemini.GeminiError("finishReason: MAX_TOKENS")}, {}, {}),
-        ({"mistral": ValueError("no document_annotation")}, {}, {}),
-        ({}, {"mistral": "mistral-ocr-5-0"}, {}),
-        ({}, {}, {"gemini": _without_zones()}),
+        gemini.GeminiError(f"{gemini.API_KEY_ENV} is not set"),
     ],
-    ids=["transport", "status", "gemini", "annotation", "model-id", "malformed"],
+    ids=["transport", "status", "missing-key"],
 )
-def test_extractor_failure_leaves_upload_pending(
-    clients: dict[str, Any],
-    issues: list[tuple[str, Any]],
-    fail: dict[str, Exception],
-    model: dict[str, str],
-    answer: dict[str, dict[str, Any]],
+def test_unbilled_failure_is_retried_next_run(
+    clients: dict[str, Any], issues: list[tuple[str, Any]], error: Exception
 ) -> None:
-    clients["fail"], clients["model"], clients["answer"] = fail, model, answer
+    clients["fail"] = {"gemini": error}
     ex.run(None, now=NOW)
 
     row = _status()[710]
     assert row["status"] == "pending"
     assert row["extracted_at"] == NOW
-    failed = next(iter(fail or model or answer))
-    assert not cache_path(row["sha256"], failed, root=ex.CACHE_DIR).exists()
+    assert not cache_path(row["sha256"], "gemini", root=ex.CACHE_DIR).exists()
+    assert not ex.failure_path(row["sha256"], "gemini").exists()
     assert issues == []
 
-    # The next run retries only the missing answer, and releases.
+    # The next run, even at once, retries only the missing answer, and releases.
+    clients["fail"], clients["calls"] = {}, []
+    ex.run(None, now=NOW)
+    assert clients["calls"] == ["gemini"]
+    assert _status()[710]["status"] == "held"
+
+
+def _unusable(extractor: Extractor) -> UnusableAnswer:
+    return UnusableAnswer(
+        "Gemini candidate did not finish (finishReason: MAX_TOKENS)",
+        model_id_requested=ex._pin(extractor),
+        requested_at=NOW,
+        response={"candidates": []},
+    )
+
+
+LATER = "2026-10-21T11:59:59+00:00"  # just inside `FAILURE_BACKOFF` of NOW
+EXPIRED = "2026-10-21T12:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    ("fail", "model", "answer", "reason"),
+    [
+        ({"gemini": _unusable("gemini")}, {}, {}, "MAX_TOKENS"),
+        ({}, {"mistral": "mistral-ocr-5-0"}, {}, "'mistral-ocr-5-0', pinned to"),
+        ({}, {}, {"gemini": _without_zones()}, "breaks the schema"),
+    ],
+    ids=["unusable", "model-id", "malformed"],
+)
+def test_billed_unusable_answer_backs_off(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    fail: dict[Extractor, Exception],
+    model: dict[Extractor, str],
+    answer: dict[Extractor, dict[str, Any]],
+    reason: str,
+) -> None:
+    clients["fail"], clients["model"], clients["answer"] = fail, model, answer
+    ex.run(None, now=NOW)
+
+    failed = next(iter(fail or model or answer))
+    row = _status()[710]
+    assert (row["status"], row["extracted_at"]) == ("pending", NOW)
+    assert not cache_path(row["sha256"], failed, root=ex.CACHE_DIR).exists()
+    record = ex.read_failure(row["sha256"], failed)
+    assert record is not None
+    assert reason in record["reason"]
+    assert record["pin"] == ex._pin(failed)
+    assert record["requested_at"] == NOW
+    assert isinstance(record["response"], dict)
+
+    # Within the back-off the model is not called, even once it would answer.
     clients["fail"], clients["model"], clients["answer"] = {}, {}, {}
     clients["calls"] = []
     ex.run(None, now=NOW)
-    assert clients["calls"] == [failed]
+    assert clients["calls"] == []
+    assert _status()[710]["status"] == "pending"
+
+
+def _fail_gemini_once(clients: dict[str, Any]) -> str:
+    """Run once with Gemini's answer unusable; return the PDF's sha256."""
+    clients["fail"] = {"gemini": _unusable("gemini")}
+    ex.run(None, now=NOW)
+    clients["fail"], clients["calls"] = {}, []
+    return _status()[710]["sha256"]
+
+
+def test_billed_failure_retried_after_backoff(
+    clients: dict[str, Any], issues: list[tuple[str, Any]]
+) -> None:
+    sha = _fail_gemini_once(clients)
+    ex.run(None, now=LATER)
+    assert clients["calls"] == []
+
+    ex.run(None, now=EXPIRED)
+    assert clients["calls"] == ["gemini"]
     assert _status()[710]["status"] == "held"
+    assert not ex.failure_path(sha, "gemini").exists()
+
+
+def test_billed_failure_retried_at_once_after_pin_change(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_gemini_once(clients)
+    monkeypatch.setattr(gemini, "GEMINI_MODEL", "gemini-9-flash")
+    clients["model"] = {"gemini": "gemini-9-flash"}
+    ex.run(None, now=NOW)
+    assert clients["calls"] == ["gemini"]
+    assert _status()[710]["status"] == "held"
+
+
+def test_billed_failure_retried_once_record_deleted(
+    clients: dict[str, Any], issues: list[tuple[str, Any]]
+) -> None:
+    sha = _fail_gemini_once(clients)
+    ex.failure_path(sha, "gemini").unlink()
+    ex.run(None, now=NOW)
+    assert clients["calls"] == ["gemini"]
+
+
+def test_pin_mismatch_annotates_the_log(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    clients["model"] = {"gemini": "gemini-0-flash"}
+    ex.run("extract", now=NOW)
+    assert (
+        "::error title=Model pin mismatch::gemini answered as 'gemini-0-flash', "
+        f"pinned to {gemini.GEMINI_MODEL!r}"
+    ) in capsys.readouterr().out
 
 
 class PDFSyntaxError(Exception):
@@ -842,3 +945,13 @@ def test_pending_upload_adopts_an_orphan_issue(
 
     assert _status()[710]["issue_number"] == 5
     assert ["issue", "create"] not in gh["calls"]
+
+
+def test_release_refuses_a_moved_report_date() -> None:
+    moved = date(2026, 8, 20)
+    _manifest((710, "t1"), report_date=moved)
+    _ledger((710, "t1", SHA_A))
+
+    expected = f"media 710, modified t1: ledger {DAY}, manifest {moved}"
+    with pytest.raises(ValueError, match=expected):
+        ex.run("release", now=NOW)

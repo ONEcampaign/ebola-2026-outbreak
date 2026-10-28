@@ -11,6 +11,7 @@ import pytest
 from ebola_2026_outbreak import drc_2026_sitrep_mistral as mistral
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     PROMPT,
+    UnusableAnswer,
     load_gazetteer,
     normalise,
     schema_for,
@@ -110,9 +111,12 @@ def test_extract_rejects_bad_annotation(
     pdf_path: Path, annotation: str | None, match: str
 ) -> None:
     body = {**RESPONSE, "document_annotation": annotation}
-    with pytest.raises(ValueError, match=match) as error:
+    with pytest.raises(UnusableAnswer, match=match) as error:
         mistral.extract(pdf_path, client=client_for(body, []))
     assert KEY not in str(error.value)
+    # The call was billed: the error carries what extraction records.
+    assert error.value.response == body
+    assert error.value.model_id_requested == mistral.MISTRAL_OCR_MODEL
 
 
 def test_extract_raises_on_rejected_request(pdf_path: Path) -> None:

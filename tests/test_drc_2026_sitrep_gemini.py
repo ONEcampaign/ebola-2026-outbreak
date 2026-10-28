@@ -15,6 +15,7 @@ from PIL import Image
 from ebola_2026_outbreak import drc_2026_sitrep_gemini as gemini
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     PROMPT,
+    UnusableAnswer,
     load_gazetteer,
     normalise,
     schema_for,
@@ -177,6 +178,10 @@ def test_extract_rejects_unusable_answer(
 ) -> None:
     corrupt(response_body)
 
-    with pytest.raises(gemini.GeminiError, match=code) as error:
+    with pytest.raises(UnusableAnswer, match=code) as error:
         gemini.extract(pdf_path, client=client_for(response_body, []))
     assert api_key not in str(error.value)
+    # The call was billed: the error carries what extraction records.
+    assert isinstance(error.value.__cause__, gemini.GeminiError)
+    assert error.value.response == response_body
+    assert error.value.model_id_requested == gemini.GEMINI_MODEL

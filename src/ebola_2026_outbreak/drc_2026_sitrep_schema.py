@@ -36,7 +36,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple, Self
 
 import polars as pl
 
@@ -198,6 +198,43 @@ class ModelResult(NamedTuple):
     usage: dict[str, Any]
     requested_at: str
     response: dict[str, Any]
+
+
+class UnusableAnswer(ValueError):
+    """A model answered, and the call was billed, but the answer is unusable.
+
+    Raised for an answer that stopped early, is not a JSON object, breaks the
+    schema, or names a model other than the pin. Extraction records it so
+    the same call is not paid for again on every run.
+
+    Attributes:
+        model_id_requested: Model id sent in the request (the pin).
+        requested_at: UTC timestamp of the request, ISO 8601.
+        response: The full response body, kept for audit.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        model_id_requested: str,
+        requested_at: str,
+        response: dict[str, Any],
+    ) -> None:
+        super().__init__(message)
+        self.model_id_requested = model_id_requested
+        self.requested_at = requested_at
+        self.response = response
+
+    @classmethod
+    def from_result(cls, message: str, result: ModelResult) -> Self:
+        """Build the error from the `ModelResult` that proved unusable."""
+        return cls(
+            message,
+            model_id_requested=result.model_id_requested,
+            requested_at=result.requested_at,
+            response=result.response,
+        )
 
 
 class TextRow(NamedTuple):
