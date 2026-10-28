@@ -78,7 +78,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -1133,24 +1133,37 @@ def previous_dates() -> set[date]:
 
 
 def plan_issues(
-    before: Ledger, after: Ledger, *, today: date
+    before: Ledger,
+    after: Ledger,
+    *,
+    today: date,
+    open_numbers: Mapping[int, str] | None,
 ) -> tuple[Ledger, IssuePlan]:
     """Decide which issues to open and close.
 
     An upload keeps its issue while it stays in the status the issue was
-    opened for. A newly held upload goes in the run's held issue, and an
-    upload pending for `PENDING_DAYS` days with no issue goes in the run's
-    pending issue. An issue none of whose uploads is held or pending closes.
+    opened for and the issue is still open. A newly held upload goes in the
+    run's held issue, and an upload pending for `PENDING_DAYS` days with no
+    issue goes in the run's pending issue, so an upload whose issue was
+    closed by hand is tracked again. An open issue none of whose uploads is
+    held or pending closes.
 
     Args:
         before: The ledger the run started from.
         after: The ledger the run would write, issue numbers as carried.
         today: The run's date.
+        open_numbers: The open issues by number, or None when `gh` did not
+            run, in which case every carried number is taken as open.
 
     Returns:
         `after` with the issue numbers of open uploads settled (None where a
         new issue is due), and the plan.
     """
+
+    def is_open(number: int) -> bool:
+        """Whether a carried issue number names an issue still open."""
+        return open_numbers is None or number in open_numbers
+
     after = dict(after)
     held: list[UploadKey] = []
     stale: list[UploadKey] = []
@@ -1158,7 +1171,12 @@ def plan_issues(
         if row.status not in OPEN:
             continue
         prev = before.get(key)
-        if prev is not None and prev.status == row.status and prev.issue_number:
+        if (
+            prev is not None
+            and prev.status == row.status
+            and prev.issue_number
+            and is_open(prev.issue_number)
+        ):
             after[key] = row._replace(issue_number=prev.issue_number)
             continue
         after[key] = row._replace(issue_number=None)
@@ -1175,6 +1193,7 @@ def plan_issues(
         if (
             prev.status in OPEN
             and prev.issue_number
+            and is_open(prev.issue_number)
             and prev.issue_number not in still_open
         ):
             close.setdefault(prev.issue_number, []).append(key)
@@ -1189,7 +1208,12 @@ def _pending_days(row: LedgerRow, *, today: date) -> int:
 
 
 def handle_issues(
-    result: Release, plan: IssuePlan, ledger: Ledger, *, dry_run: bool
+    result: Release,
+    plan: IssuePlan,
+    ledger: Ledger,
+    *,
+    open_now: Mapping[int, str],
+    dry_run: bool,
 ) -> Ledger:
     """Open and close the planned issues; record new issue numbers.
 
@@ -1198,14 +1222,18 @@ def handle_issues(
     in a new issue. `gh` runs only inside GitHub Actions and not in a dry
     run, so elsewhere new uploads keep no issue number and a later run opens
     their issue.
+
+    Args:
+        result: The release.
+        plan: From `plan_issues`.
+        ledger: The ledger `plan_issues` settled.
+        open_now: Bodies of the open issues by number; empty when `gh` did
+            not run.
+        dry_run: Open and close nothing.
     """
     ledger = dict(ledger)
     run_url = _run_url()
-    existing = {
-        n: body
-        for n, body in open_issues(dry_run=dry_run).items()
-        if n not in plan.close
-    }
+    existing = {n: body for n, body in open_now.items() if n not in plan.close}
 
     def adopt(
         keys: list[UploadKey], marker: Callable[[UploadKey], str]
@@ -1487,18 +1515,25 @@ def summarise_extract(result: Extracted, *, called: bool) -> list[str]:
 
 
 def summarise_release(
-    result: Release, plan: IssuePlan, ledger: Ledger, *, dry_run: bool
+    result: Release, plan: IssuePlan, ledger: Ledger, *, dry_run: bool, gh_ran: bool
 ) -> list[str]:
-    """Lines describing what a release run did, or would do."""
+    """Lines describing what a release run did, or would do.
+
+    `gh_ran` is False when `gh` was skipped outside GitHub Actions. The
+    issues it would have opened and closed are then reported as skipped.
+    """
     counts = {
         s: sum(r.status == s for r in ledger.values())
         for s in ("released", "held", "pending", "superseded")
     }
-    write, open_, close = (
-        ("Would write", "Would open", "Would close")
-        if dry_run
-        else ("Wrote", "Opened", "Closed")
-    )
+    write = "Would write" if dry_run else "Wrote"
+    if dry_run:
+        open_, close = "Would open", "Would close"
+    elif gh_ran:
+        open_, close = "Opened", "Closed"
+    else:
+        open_, close = "Skipped opening", "Skipped closing"
+    skipped = "" if dry_run or gh_ran else " (gh runs only inside GitHub Actions)"
     lines = [
         "Release: " + ", ".join(f"{n} {s}" for s, n in counts.items()),
         f"{write} {result.by_zone.height} by-zone rows and "
@@ -1521,8 +1556,8 @@ def summarise_release(
     for keys, what in ((plan.held, "held reports"), (plan.stale, "pending uploads")):
         if keys:
             dates = ", ".join(str(ledger[k].report_date) for k in keys)
-            lines.append(f"{open_} an issue for {len(keys)} {what}: {dates}")
-    lines += [f"{close} issue #{n}" for n in plan.close]
+            lines.append(f"{open_} an issue for {len(keys)} {what}: {dates}{skipped}")
+    lines += [f"{close} issue #{n}{skipped}" for n in plan.close]
     return lines
 
 
@@ -1579,13 +1614,19 @@ def run(
 
     result = release(manifest, ledger, gazetteer=gazetteer, now=now)
     check_outputs(result, previous_dates=previous_dates())
+    open_now = open_issues(dry_run=dry_run)
     after, plan = plan_issues(
-        ledger, result.ledger, today=datetime.fromisoformat(now).date()
+        ledger,
+        result.ledger,
+        today=datetime.fromisoformat(now).date(),
+        open_numbers=open_now,
     )
-    after = handle_issues(result, plan, after, dry_run=dry_run)
+    after = handle_issues(result, plan, after, open_now=open_now or {}, dry_run=dry_run)
     if not dry_run:
         write_release(result, after)
-    return lines + summarise_release(result, plan, after, dry_run=dry_run)
+    return lines + summarise_release(
+        result, plan, after, dry_run=dry_run, gh_ran=open_now is not None
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

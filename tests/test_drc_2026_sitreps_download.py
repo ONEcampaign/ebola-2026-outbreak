@@ -270,8 +270,28 @@ def test_download_creates_missing_sitrep_dir(
     monkeypatch.setattr(dlm, "SITREP_DIR", sitrep_dir)
     monkeypatch.setattr(dlm, "get", lambda url: type("R", (), {"content": b"%PDF"})())
     path = dlm.download(_item(710, "2026-10-20"))
-    assert path == sitrep_dir / "710.pdf"
+    assert path == sitrep_dir / "710_20261020.pdf"
     assert path.read_bytes() == b"%PDF"
+
+
+def test_download_names_file_by_modified_so_replaced_upload_is_fetched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(dlm, "SITREP_DIR", tmp_path)
+    content = iter([b"old", b"new"])
+    monkeypatch.setattr(
+        dlm, "get", lambda url: type("R", (), {"content": next(content)})()
+    )
+    old = dlm.download(_item(710, "2026-10-20T08:15:00"))
+    new = dlm.download(_item(710, "2026-10-21T09:30:00"))
+    assert old != new
+    assert (old.read_bytes(), new.read_bytes()) == (b"old", b"new")
+    assert dlm.download(_item(710, "2026-10-21T09:30:00")) == new
+
+
+def test_local_pdf_name_rejects_empty_modified() -> None:
+    with pytest.raises(ValueError, match="modified"):
+        dlm.local_pdf_name(_item(710, "--"))
 
 
 def test_build_manifest_keeps_ministry_files_unlisted(fake_api: FakeApi) -> None:

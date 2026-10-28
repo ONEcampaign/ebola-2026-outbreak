@@ -62,6 +62,8 @@ import logging
 from collections.abc import Callable, Iterable, Set
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    CFR_EPSILON,
+    CFR_TOLERANCE,
     COUNT_FIELDS,
     FIELDS,
     SECTIONS,
@@ -80,9 +82,6 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
 from ebola_2026_outbreak.drc_2026_sitreps_parse import PROVINCES
 
 logger = logging.getLogger(__name__)
-
-# Largest gap between a printed CFR and the CFR its counts give.
-CFR_TOLERANCE = 0.05
 
 # Whether a model's values reproduce a row's printed cells.
 type Matcher = Callable[[TextRow, Values, Section], bool]
@@ -333,8 +332,7 @@ def _failures(
         if not present([cfr, deaths, cases]) or values[key]["cfr_pct"] is None:
             continue
         computed = 100 * value(deaths) / value(cases) if value(cases) else 0.0
-        # The epsilon keeps a rounding tie in (3 / 16 is 18.75, printed 18.7).
-        if abs(value(cfr) - computed) > CFR_TOLERANCE + 1e-9:
+        if abs(value(cfr) - computed) > CFR_TOLERANCE + CFR_EPSILON:
             yield cfr, [deaths, cases], values[key]["cfr_pct"], round(computed, 2)
 
 

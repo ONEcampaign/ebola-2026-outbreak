@@ -9,10 +9,12 @@ fails here with its count instead of landing on reviewers.
 Record the fixtures with `drc_2026_sitrep_golden.py record`.
 """
 
+import hashlib
 from functools import cache
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from ebola_2026_outbreak import drc_2026_sitrep_golden as golden
@@ -164,3 +166,67 @@ def test_run_logs_a_failed_report_and_scores_the_rest(
             f"SitRep {report.sitrep_no} ({report.report_date}): 0 accepted-wrong"
             in (captured.out)
         )
+
+
+def _fake_get(served: dict[str, bytes]) -> Any:
+    """A `fetch.get` serving `served` by URL and failing on any other."""
+
+    def get(url: str) -> httpx.Response:
+        if url not in served:
+            raise httpx.ConnectError(f"gone: {url}")
+        return httpx.Response(200, content=served[url])
+
+    return get
+
+
+def _report(ministry: bytes, insp: bytes | None) -> Report:
+    return Report(
+        "2026-10-18",
+        157,
+        "https://ministry/157.pdf",
+        hashlib.sha256(ministry).hexdigest(),
+        "SitRep_157.json",
+        "https://insp/157.pdf" if insp is not None else "",
+        hashlib.sha256(insp).hexdigest() if insp is not None else "",
+    )
+
+
+def test_fetch_falls_back_to_the_insp_copy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report = _report(b"ministry", b"insp")
+    monkeypatch.setattr(golden.fetch, "get", _fake_get({report.insp_url: b"insp"}))
+
+    assert golden.fetch_pdf(report, tmp_path).read_bytes() == b"insp"
+
+
+def test_fetch_names_every_failed_copy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report = _report(b"ministry", b"insp")
+    served = {report.source_url: b"changed"}
+    monkeypatch.setattr(golden.fetch, "get", _fake_get(served))
+
+    with pytest.raises(golden.SourceError) as e:
+        golden.fetch_pdf(report, tmp_path)
+    assert "SOURCE CHANGED" in str(e.value) and "SOURCE GONE" in str(e.value)
+    assert not list(tmp_path.iterdir())
+
+
+def test_local_insp_copy_is_used_before_download(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report = _report(b"ministry", b"insp")
+    (tmp_path / "25746.pdf").write_bytes(b"insp")
+    monkeypatch.setattr(golden.fetch, "get", _fake_get({}))
+
+    local = golden._local_pdfs([tmp_path])
+    assert golden._pdf(report, local, tmp_path) == tmp_path / "25746.pdf"
+
+
+def test_golden_reports_name_insp_copies_by_url() -> None:
+    insp = [r for r in REPORTS if r.insp_url]
+    assert insp, "no golden report lists an INSP copy"
+    for report in insp:
+        assert report.insp_url.startswith("https://insp.cd/")
+        assert len(report.insp_sha256) == 64

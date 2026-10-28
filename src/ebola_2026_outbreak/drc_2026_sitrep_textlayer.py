@@ -77,14 +77,18 @@ from typing import NamedTuple
 import pdfplumber
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    CFR_EPSILON,
+    CFR_TOLERANCE,
     FIELDS,
     PERCENT_FIELDS,
+    TOTAL_KEYS,
     ZONE_TABLE_FIELDS,
     Gazetteer,
     Number,
     RowKey,
     Section,
     TextRow,
+    is_total,
     name_key,
     sha256_file,
 )
@@ -98,10 +102,8 @@ WRAP = 12  # points: a wrapped label's next word starts within this distance
 SPLIT_GAP = 0.5  # points: header words within this gap or overlap are one word
 CELL_GAP = 6  # points: words of one cell are at most this far apart
 GUARD = 3  # points: a cell's centre is at least this far inside its column
-CFR_TOLERANCE = 0.05 + 1e-9
 
 PROVINCE_KEYS = {name_key(p): p for p in PROVINCES.values()}
-TOTAL_KEYS = frozenset({"total", "totalgeneral", "totalnational", "totalrdc"})
 NULL_TOKENS = frozenset({"NA", "ND"})
 
 # What one cell may print, by the kind of its column.
@@ -353,7 +355,7 @@ def _tables(words: list[Word], rows: list[Row]) -> list[Table]:
             else (math.inf, math.inf)
         )
         total = next(
-            (r for r in rows if r.key in TOTAL_KEYS and start < r.pos < limit), None
+            (r for r in rows if is_total(r.key) and start < r.pos < limit), None
         )
         if total is not None:
             tables.append(
@@ -584,7 +586,7 @@ def _zone_rows(
     province = None
     for row in table.rows:
         zones = gazetteer.get(row.key, ())
-        if row.key in TOTAL_KEYS:
+        if is_total(row.key):
             yield RowKey("zone_total", "", ""), row
         elif row.key in PROVINCE_KEYS and not (
             province == PROVINCE_KEYS[row.key]
@@ -696,7 +698,7 @@ def _cell_matches(cell: str | None, value: Number | None, field: str) -> bool:
         return False
     if field in PERCENT_FIELDS:
         printed = float(cell.rstrip(" %").replace(",", "."))
-        return abs(printed - value) <= CFR_TOLERANCE
+        return abs(printed - value) <= CFR_TOLERANCE + CFR_EPSILON
     return value == int(value) and int(cell.replace(" ", "")) == value
 
 

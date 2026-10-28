@@ -438,7 +438,7 @@ def test_gh_is_skipped_outside_actions_or_in_dry_run(
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
 
     assert review.create_issue(title="t", body="b", dry_run=dry_run) is None
-    assert review.open_issues(dry_run=dry_run) == {}
+    assert review.open_issues(dry_run=dry_run) is None
     review.comment_issue(1, body="b", dry_run=dry_run)
     review.close_issue(1, comment="c", dry_run=dry_run)
     assert gh_calls == []

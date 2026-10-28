@@ -1,4 +1,4 @@
-name: Daily DRC 2026 sitrep scrape
+name: DRC 2026 sitrep scrape
 
 on:
   schedule:
@@ -10,6 +10,10 @@ on:
     # which also picks up any new WHO figures.
     - cron: "30 */2 * * *"
   workflow_dispatch:
+
+# No dev tool runs here, and uv run would otherwise sync the dev group back in.
+env:
+  UV_NO_DEV: "1"
 
 permissions:
   contents: write
@@ -35,7 +39,7 @@ jobs:
         run: uv python install '3.13'
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --no-dev
 
       - name: Configure git
         run: |
@@ -64,8 +68,17 @@ jobs:
             exit 0
           fi
           git commit -m "data: DRC 2026 sitrep extractions $(date -u +%Y-%m-%d)"
-          git pull --rebase
-          git push
+          # A WHO push can land between the pull and the push, so retry. Failing
+          # here would lose the answers just paid for.
+          for attempt in 1 2 3; do
+            if git pull --rebase && git push; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+          echo "::error::Could not push the extractions after 3 attempts"
+          exit 1
 
       # Release needs no keys. It opens an issue for any report held for review.
       # A failure here must not stop the province steps, so the job fails at the
@@ -138,7 +151,7 @@ jobs:
         run: uv python install '3.13'
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --no-dev
 
       - name: Configure git
         run: |

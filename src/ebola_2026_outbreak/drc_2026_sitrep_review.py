@@ -612,8 +612,8 @@ def _gh(args: list[str], *, body: str | None, dry_run: bool) -> str | None:
     return result.stdout.strip()
 
 
-def open_issues(*, dry_run: bool = False) -> dict[int, str]:
-    """The bodies of open issues labelled `LABEL`, by number; empty when skipped."""
+def open_issues(*, dry_run: bool = False) -> dict[int, str] | None:
+    """The bodies of open issues labelled `LABEL`, by number; None when skipped."""
     out = _gh(
         [
             "issue",
@@ -630,7 +630,7 @@ def open_issues(*, dry_run: bool = False) -> dict[int, str]:
         body=None,
         dry_run=dry_run,
     )
-    return {} if out is None else {i["number"]: i["body"] for i in json.loads(out)}
+    return None if out is None else {i["number"]: i["body"] for i in json.loads(out)}
 
 
 def create_issue(*, title: str, body: str, dry_run: bool = False) -> int | None:

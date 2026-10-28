@@ -1,5 +1,6 @@
 """Tests for the sitrep province table parser."""
 
+import logging
 from datetime import date
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from ebola_2026_outbreak.drc_2026_sitreps_download import MANIFEST_SCHEMA
 from ebola_2026_outbreak.drc_2026_sitreps_parse import (
     TOTAL,
     ProvinceCounts,
+    check_monotonic,
     find_province_table,
     parse_counts,
     parse_sitrep,
@@ -136,3 +138,24 @@ def test_main_writes_nothing_when_a_sitrep_fails(
     with pytest.raises(ValueError, match="1 sitreps could not be parsed"):
         parse_module.main()
     assert not output_path.exists()
+
+
+def test_check_monotonic_logs_province_fall(caplog: pytest.LogCaptureFixture) -> None:
+    df = pl.DataFrame(
+        {
+            "date": [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 2)],
+            "province": ["Ituri", "Ituri", "Ituri"],
+            "indicator": [
+                "Cumulative confirmed cases",
+                "Cumulative confirmed cases",
+                "New confirmed cases (24h)",
+            ],
+            "value": [10, 9, None],
+        }
+    )
+    with caplog.at_level(logging.WARNING):
+        check_monotonic(df)
+    assert (
+        "Ituri cumulative confirmed cases falls from 10 (2026-09-01) to 9 (2026-09-02)"
+        in caplog.text
+    )

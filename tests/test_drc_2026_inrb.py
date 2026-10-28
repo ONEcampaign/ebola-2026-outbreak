@@ -9,9 +9,9 @@ import pytest
 from ebola_2026_outbreak.drc_2026_inrb import (
     INRB_REF,
     SCHEMA,
-    check_monotonic,
     parse_national,
 )
+from ebola_2026_outbreak.drc_2026_sitreps_parse import check_monotonic
 
 METRIC = "national_cumulative_confirmed_cases"
 CASES = "Cumulative confirmed cases"
@@ -76,5 +76,8 @@ def test_check_monotonic_logs_fall(caplog: pytest.LogCaptureFixture) -> None:
         indicator=CASES,
     )
     with caplog.at_level(logging.WARNING):
-        check_monotonic(df)
-    assert "falls from 9 (2026-05-14) to 8 (2026-05-15)" in caplog.text
+        check_monotonic(df, by=(), label="INRB")
+    assert (
+        "INRB cumulative confirmed cases falls from 9 (2026-05-14) to 8 (2026-05-15)"
+        in caplog.text
+    )

@@ -41,7 +41,7 @@ from typing import Any, Literal, NamedTuple, Self
 import polars as pl
 
 from ebola_2026_outbreak.drc_2026_sitreps_download import OUTBREAK, ROOT
-from ebola_2026_outbreak.drc_2026_sitreps_parse import TOTAL, canonical_province
+from ebola_2026_outbreak.drc_2026_sitreps_parse import canonical_province
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,15 @@ ZONE_START = date(2026, 8, 19)
 GAZETTEER_PATH = ROOT / "data" / "reference" / f"{OUTBREAK}_health_zones.csv"
 CACHE_DIR = ROOT / "data" / "interim" / f"{OUTBREAK}_sitrep_extractions"
 REVIEW_DIR = ROOT / "data" / "review" / OUTBREAK
+
+# Largest gap between a printed CFR and the CFR its counts give, in points.
+CFR_TOLERANCE = 0.05
+# Float slack on `CFR_TOLERANCE`, so a rounding tie stays in (3 / 16 is 18.75,
+# printed 18.7).
+CFR_EPSILON = 1e-9
+
+# Name keys (`name_key`) of the labels a Total row prints.
+TOTAL_KEYS = frozenset({"total", "totalgeneral", "totalnational", "totalrdc"})
 
 type Section = Literal["kpis", "provinces", "zone_subtotals", "zone_total", "zones"]
 type Extractor = Literal["gemini", "mistral"]
@@ -414,6 +423,15 @@ def name_key(name: str) -> str:
     return re.sub(r"[\W_]+", "", letters)
 
 
+def is_total(key: str) -> bool:
+    """Whether a name key (`name_key`) labels a Total row.
+
+    A key in `TOTAL_KEYS` or any key starting with "total", so a label such as
+    "Total Ituri" counts, as does "Total général".
+    """
+    return key in TOTAL_KEYS or key.startswith("total")
+
+
 def _province(label: str) -> str | None:
     """Canonical province for a label, "Total", or None if unknown."""
     cleaned = " ".join(re.sub(r"[^\w\s-]", " ", label).split())
@@ -532,15 +550,16 @@ def canonical_key(
 
     Returns:
         The key and the flag reason, None when the names are canonical; or
-        None for a Total row, which belongs in `zone_total`.
+        None for a Total row (a label or zone name `is_total` accepts),
+        which belongs in `zone_total`.
     """
     section, label, zone = printed
     unknown = RowKey(section, label.strip(), zone.strip()), "unknown_name"
     if section in ("kpis", "zone_total"):
         return (printed, None) if not label and not zone else unknown
-    province = _province(label)
-    if province == TOTAL or (section == "zones" and name_key(zone) == name_key(TOTAL)):
+    if is_total(name_key(label)) or (section == "zones" and is_total(name_key(zone))):
         return None
+    province = _province(label)
     if section != "zones":
         if zone.strip() or province is None:
             return unknown

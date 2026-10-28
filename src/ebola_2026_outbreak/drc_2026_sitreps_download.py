@@ -247,20 +247,35 @@ def is_ministry(source_url: str) -> bool:
     return source_url.startswith(MINISTRY_SITE)
 
 
+def local_pdf_name(item: MediaItem) -> str:
+    """Name a media item's local PDF from its id and `modified` stamp.
+
+    Keying on `modified` as well as the id gives an upload replaced in place
+    a new file name, so each version of an upload has its own local copy.
+
+    Raises:
+        ValueError: If `modified` has no letters or digits to name the file by.
+    """
+    stamp = re.sub(r"[^0-9A-Za-z]+", "", item["modified"])
+    if not stamp:
+        raise ValueError(f"Media {item['id']} has no usable modified stamp")
+    return f"{item['id']}_{stamp}.pdf"
+
+
 def download(item: MediaItem, *, refresh: bool = False) -> Path:
     """Download a media item to the sitrep folder unless already present.
 
-    Files are named by media id because source filenames contain "N°" and
-    duplicate each other across uploads.
+    Files are named by media id and `modified` stamp because source filenames
+    contain "N°" and duplicate each other across uploads.
 
     Args:
         item: Media item to fetch.
-        refresh: Download even if a file exists, for an upload replaced in place.
+        refresh: Download even if a file exists.
 
     Returns:
         Path to the local PDF.
     """
-    path = SITREP_DIR / f"{item['id']}.pdf"
+    path = SITREP_DIR / local_pdf_name(item)
     if refresh or not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(get(item["source_url"]).content)

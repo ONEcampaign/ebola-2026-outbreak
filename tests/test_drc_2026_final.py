@@ -114,3 +114,33 @@ def test_cross_check_inrb_logs_mismatch(
         cross_check_inrb(intermediate=sum_by_date_indicator(provinces), inrb=inrb)
     assert "1 shared rows, 0 match" in caplog.text
     assert "2026-10-18 cumulative confirmed cases: sitrep 131, INRB 999" in caplog.text
+
+
+def test_backfill_from_inrb_logs_date_missing_an_indicator(
+    provinces: pl.DataFrame, inrb: pl.DataFrame, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        backfill_from_inrb(intermediate=sum_by_date_indicator(provinces), inrb=inrb)
+    assert f"INRB backfill on 2026-10-16 has no ['{NEW}']" in caplog.text
+
+
+def test_backfill_from_inrb_rejects_duplicate_date_indicator(
+    provinces: pl.DataFrame, inrb: pl.DataFrame
+) -> None:
+    doubled = pl.concat([inrb, inrb.filter(pl.col("date") == D0)])
+    with pytest.raises(ValueError, match="Duplicate \\(date, indicator\\)"):
+        backfill_from_inrb(intermediate=sum_by_date_indicator(provinces), inrb=doubled)
+
+
+def test_cross_check_who_raises_when_no_rows_match(provinces: pl.DataFrame) -> None:
+    final = build_final(sum_by_date_indicator(provinces))
+    who = pl.DataFrame(
+        {
+            "date": [D1],
+            "country": ["DR Congo"],
+            "indicator": ["Confirmed cases"],
+            "value": [110.0],
+        }
+    )
+    with pytest.raises(ValueError, match="No WHO rows"):
+        cross_check_who(final, who)

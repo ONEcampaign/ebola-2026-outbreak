@@ -330,23 +330,31 @@ def parse_sitrep(
     )
 
 
-def check_monotonic(df: pl.DataFrame) -> None:
-    """Log any fall in a province's cumulative counts between sitreps."""
-    cumulative = df.filter(pl.col("indicator") != INDICATORS["new_cases"]).sort("date")
-    for (province, indicator), group in cumulative.group_by(
-        "province", "indicator", maintain_order=True
-    ):
+def check_monotonic(
+    df: pl.DataFrame, *, by: tuple[str, ...] = ("province",), label: str = ""
+) -> None:
+    """Log any fall in a cumulative count between dates.
+
+    Shared with `drc_2026_inrb`. New-case rows and null values are skipped.
+
+    Args:
+        df: Long rows with `date`, `indicator`, `value` and the `by` columns.
+        by: Columns that, with `indicator`, identify one series.
+        label: Prefix for the log message, such as the source name.
+    """
+    cumulative = (
+        df.filter(pl.col("indicator") != INDICATORS["new_cases"])
+        .drop_nulls("value")
+        .sort("date")
+    )
+    for keys, group in cumulative.group_by(*by, "indicator", maintain_order=True):
+        *entity, indicator = keys
+        name = " ".join(
+            str(part) for part in (label, *entity, str(indicator).lower()) if part
+        )
         for (d0, v0), (d1, v1) in pairwise(group.select("date", "value").iter_rows()):
             if v1 < v0:
-                logger.warning(
-                    "%s %s falls from %d (%s) to %d (%s)",
-                    province,
-                    indicator.lower(),
-                    v0,
-                    d0,
-                    v1,
-                    d1,
-                )
+                logger.warning("%s falls from %d (%s) to %d (%s)", name, v0, d0, v1, d1)
 
 
 def ensure_pdf(*, media_id: int, modified: str, source_url: str) -> Path:

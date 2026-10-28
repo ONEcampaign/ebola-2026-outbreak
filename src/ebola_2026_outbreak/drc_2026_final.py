@@ -1,9 +1,9 @@
 """Build the national 2026 DRC series from the sitrep province counts.
 
-Mirrors the West Africa 2014-16 outputs so the two outbreaks stack:
+A reference and cross-check output that no chart reads. The outbreak
+comparison chart sums WHO's figures (see `chart_tables`). The files keep the West Africa 2014-16 shape and final indicator label:
     - Intermediate: one row per (date, indicator), value summed across provinces.
-    - Final: cumulative confirmed cases only, one row per date, with the same
-      indicator label as the West Africa final output.
+    - Final: cumulative confirmed cases only, one row per date.
 
 Dates with no parsed sitrep are backfilled with INRB's digitised national
 banner figures (see `drc_2026_inrb`), and the `source` column of the
@@ -32,6 +32,8 @@ from ebola_2026_outbreak.drc_2026_sitreps_parse import (
 from ebola_2026_outbreak.drc_2026_sitreps_parse import (
     SCHEMA as PROVINCE_SCHEMA,
 )
+from ebola_2026_outbreak.drc_2026_who import CONFIRMED_CASES as WHO_CASES
+from ebola_2026_outbreak.drc_2026_who import DRC_COUNTRY as WHO_COUNTRY
 from ebola_2026_outbreak.drc_2026_who import OUTPUT_PATH as WHO_PATH
 from ebola_2026_outbreak.drc_2026_who import SCHEMA as WHO_SCHEMA
 
@@ -45,8 +47,6 @@ CUMULATIVE_PREFIX = "Cumulative"
 SITREP_CASES = INDICATORS["cases"]
 # Matches the West Africa final output so both series share one label.
 FINAL_INDICATOR = "Cumulative number of confirmed Ebola cases"
-WHO_COUNTRY = "Democratic Republic of the Congo"
-WHO_CASES = "Confirmed cases"
 SOURCE_SITREP, SOURCE_INRB = "sitrep_pdf", "inrb"
 
 
@@ -70,6 +70,19 @@ def sum_by_date_indicator(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def log_incomplete_dates(rows: pl.DataFrame, *, expected: set[str]) -> None:
+    """Warn for each date in `rows` with no value for an `expected` indicator."""
+    present = (
+        rows.group_by("date")
+        .agg(pl.col("indicator").filter(pl.col("value").is_not_null()))
+        .sort("date")
+    )
+    for day, indicators in present.iter_rows():
+        absent = sorted(expected - set(indicators))
+        if absent:
+            logger.warning("INRB backfill on %s has no %s", day, absent)
+
+
 def backfill_from_inrb(
     *, intermediate: pl.DataFrame, inrb: pl.DataFrame
 ) -> pl.DataFrame:
@@ -83,20 +96,20 @@ def backfill_from_inrb(
         `intermediate` plus the INRB rows on its missing dates, sorted.
 
     Raises:
-        ValueError: If the row count after the merge is not the sum of both
-            inputs.
+        ValueError: If a (date, indicator) pair appears more than once after
+            the merge.
     """
     missing = inrb.filter(~pl.col("date").is_in(intermediate["date"].implode()))
-    nulls = missing.filter(pl.col("value").is_null())
-    for row in nulls.iter_rows(named=True):
-        logger.warning("INRB %s missing on %s", row["indicator"], row["date"])
     added = missing.drop_nulls("value").select(
         "outbreak", "date", "indicator", "value", pl.lit(SOURCE_INRB).alias("source")
     )
+    log_incomplete_dates(missing, expected=set(inrb["indicator"]))
 
     merged = pl.concat([intermediate, added]).sort("date", "indicator")
-    if merged.height != intermediate.height + added.height:
-        raise ValueError("Row count changed unexpectedly in INRB backfill")
+    duplicated = merged.filter(pl.struct("date", "indicator").is_duplicated())
+    if duplicated.height:
+        pairs = duplicated.select("date", "indicator").unique().sort("date").rows()
+        raise ValueError(f"Duplicate (date, indicator) after INRB backfill: {pairs}")
     if added.height:
         logger.info(
             "Backfilled %d rows on %d dates (%s to %s) from INRB",
@@ -155,10 +168,16 @@ def cross_check_who(final: pl.DataFrame, who: pl.DataFrame) -> None:
     Args:
         final: Final sitrep series.
         who: WHO table rows (all countries and indicators).
+
+    Raises:
+        ValueError: If `who` has no DRC confirmed-case rows, which means the
+            labels do not match.
     """
     who_cases = who.filter(
         pl.col("country") == WHO_COUNTRY, pl.col("indicator") == WHO_CASES
     ).select("date", pl.col("value").alias("who_value"))
+    if who_cases.is_empty():
+        raise ValueError(f"No WHO rows for {WHO_COUNTRY!r} / {WHO_CASES!r}")
     compared = final.join(who_cases, on="date", how="inner")
     mismatches = compared.filter(pl.col("value") != pl.col("who_value"))
     logger.info(

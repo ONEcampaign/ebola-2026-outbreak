@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+# No dev tool runs here, and uv run would otherwise sync the dev group back in.
+env:
+  UV_NO_DEV: "1"
+
 permissions:
   contents: read
 
@@ -55,7 +59,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.changes.outputs.review == 'true'
-        run: uv sync --frozen --project base
+        run: uv sync --frozen --no-dev --project base
 
       # Passes exactly when the release job would release the reviewed reports.
       - name: Check review

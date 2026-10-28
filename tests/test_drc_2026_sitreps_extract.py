@@ -173,18 +173,29 @@ def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def issues(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
+def open_now() -> dict[int, str]:
+    """Open issues by number, as the fake `gh` lists them."""
+    return {}
+
+
+@pytest.fixture
+def issues(
+    monkeypatch: pytest.MonkeyPatch, open_now: dict[int, str]
+) -> list[tuple[str, Any]]:
     """Calls to the issue wrappers; each new issue is numbered from 7."""
     calls: list[tuple[str, Any]] = []
 
     def create(*, title: str, body: str, dry_run: bool = False) -> int:
         calls.append(("create", title))
-        return 6 + sum(c[0] == "create" for c in calls)
+        number = 6 + sum(c[0] == "create" for c in calls)
+        open_now[number] = body
+        return number
 
     def close(number: int, *, comment: str, dry_run: bool = False) -> None:
         calls.append(("close", number))
+        open_now.pop(number, None)
 
-    monkeypatch.setattr(ex, "open_issues", lambda *, dry_run=False: {})
+    monkeypatch.setattr(ex, "open_issues", lambda *, dry_run=False: dict(open_now))
     monkeypatch.setattr(ex, "create_issue", create)
     monkeypatch.setattr(ex, "close_issue", close)
     return calls
@@ -283,6 +294,40 @@ def test_flagged_report_is_held_once(issues: list[tuple[str, Any]]) -> None:
     assert path.read_text() == before
     assert issues == [("create", "Review 1 held DRC sitrep")]
     assert _status()[710]["issue_number"] == 7
+
+
+def test_hand_closed_issue_of_held_report_is_replaced(
+    issues: list[tuple[str, Any]], open_now: dict[int, str]
+) -> None:
+    _manifest((710, "t1"))
+    _ledger((710, "t1", SHA_A))
+    _cache(SHA_A, _raw_157(), WORDS_157)
+    ex.run("release", now=NOW)
+    assert _status()[710]["issue_number"] == 7
+
+    open_now.clear()  # closed by hand, report still held
+    lines = ex.run("release", now=NOW)
+
+    assert _status()[710]["issue_number"] == 8
+    assert issues == [("create", "Review 1 held DRC sitrep")] * 2
+    assert not any(line.startswith("Closed issue") for line in lines)
+
+
+def test_issues_are_skipped_without_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _manifest((710, "t1"))
+    _ledger((710, "t1", SHA_A))
+    _cache(SHA_A, _raw_157(), WORDS_157)
+
+    lines = ex.run("release", now=NOW)
+
+    assert _status()[710]["issue_number"] is None
+    assert any(
+        line.startswith("Skipped opening an issue for 1 held reports")
+        and line.endswith("(gh runs only inside GitHub Actions)")
+        for line in lines
+    )
+    assert not any(line.startswith("Opened") for line in lines)
 
 
 def _hold_96(sha: str = SHA_A) -> Path:

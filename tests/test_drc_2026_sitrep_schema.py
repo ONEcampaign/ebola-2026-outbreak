@@ -13,6 +13,8 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     HealthZone,
     ModelResult,
     RowKey,
+    canonical_key,
+    is_total,
     load_gazetteer,
     name_key,
     normalise,
@@ -259,3 +261,18 @@ def test_cache_round_trip(tmp_path: Path) -> None:
         "gemini.json",
         "words.json",
     ]
+
+
+@pytest.mark.parametrize(
+    "label", ["Total", "TOTAL RDC", "Total général", "Total **", "Total Ituri"]
+)
+def test_total_labels_share_one_rule(label: str) -> None:
+    assert is_total(name_key(label))
+    assert canonical_key(RowKey("provinces", label, ""), GAZETTEER) is None
+    assert canonical_key(RowKey("zones", "Ituri", label), GAZETTEER) is None
+
+
+def test_total_prefix_rule_leaves_totaux_unknown() -> None:
+    printed = RowKey("zone_subtotals", "Totaux", "")
+    assert not is_total(name_key("Totaux"))
+    assert canonical_key(printed, GAZETTEER) == (printed, "unknown_name")
