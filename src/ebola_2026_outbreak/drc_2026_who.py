@@ -347,7 +347,12 @@ def upsert(new: pl.DataFrame, path: Path) -> pl.DataFrame:
 def main() -> None:
     """Fetch the WHO page, save a snapshot and upsert the parsed table."""
     retrieved_at = datetime.now(UTC)
-    html = get(SOURCE_URL).text
+    response = get(SOURCE_URL)
+    html = response.text
+    # When WHO last edited the page, to learn when it updates the table.
+    logger.info(
+        "Page last modified: %s", response.headers.get("last-modified", "not sent")
+    )
 
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
     snapshot = SNAPSHOT_DIR / f"{retrieved_at:%Y%m%dT%H%M%SZ}.html"
