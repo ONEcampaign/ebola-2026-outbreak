@@ -189,8 +189,10 @@ def zone_map(
     """Latest cumulative confirmed cases for every map zone, by P-code.
 
     Zones the sitrep does not list, or lists with 0 cases, get an empty
-    count. A zone with cases but no P-code (not a mapped zone, such as "A
-    ventiler") is logged with its cases, which the map then leaves out. So is
+    count. Rows sharing a P-code (a health area the sitrep lists as a zone,
+    and the zone holding it) are summed. A zone with cases but no P-code (not
+    a mapped zone, such as "A ventiler") is logged with its cases, which the
+    map then leaves out. So is
     a zone the gazetteer gained after `drc_health_zone_geometry` last wrote
     the codes, which re-running that script settles.
 
@@ -224,9 +226,12 @@ def zone_map(
     for province, zone, value in unmapped.select("province", "zone", "value").rows():
         logger.warning("%s / %s: %d cases with no map zone", province, zone, value)
 
-    with_cases = joined.filter(
-        pl.col("code").is_not_null(), pl.col("value") > 0
-    ).select(pl.col("code").alias(CODE), pl.col("value").alias(CASES))
+    # Summed by code, since a health area listed as a zone shares its zone's.
+    with_cases = (
+        joined.filter(pl.col("code").is_not_null(), pl.col("value") > 0)
+        .group_by(pl.col("code").alias(CODE))
+        .agg(pl.col("value").sum().alias(CASES))
+    )
     return (
         shapes.select(CODE, NAME)
         .join(with_cases, on=CODE, how="left")

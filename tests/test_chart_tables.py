@@ -327,3 +327,16 @@ def test_zone_map_rejects_code_without_shape() -> None:
     codes = ZONE_CODES.with_columns(code=pl.lit("CD9"))
     with pytest.raises(ValueError, match="no map shape"):
         zone_map(zone_rows([(D2, "Ituri", "Bunia", 3)]), codes, ZONE_SHAPES)
+
+
+def test_zone_map_sums_rows_sharing_a_code() -> None:
+    codes = pl.DataFrame(
+        {
+            "province": ["Bas-Uélé", "Bas-Uélé"],
+            "zone": ["Ango", "Dakwa"],
+            "code": ["CD2", "CD2"],
+        }
+    )
+    by_zone = zone_rows([(D2, "Bas-Uélé", "Ango", 2), (D2, "Bas-Uélé", "Dakwa", 1)])
+    out = zone_map(by_zone, codes, ZONE_SHAPES)
+    assert out.rows() == [("CD2", "Aru", 3), ("CD1", "Bunia", None)]
