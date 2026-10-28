@@ -4,6 +4,7 @@ import csv
 import json
 import shutil
 import subprocess
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -45,14 +46,17 @@ ZONE_ROW_96 = ("12", "6", "50,0 %", "1", "0", None, "0")
 
 
 def _result(raw: dict[str, Any], model: str) -> ModelResult:
+    """A model result holding `raw` from `model`."""
     return ModelResult(raw, model, model, {}, "2026-10-19T08:00:00+00:00", {})
 
 
 def _raw_96() -> dict[str, Any]:
+    """The raw Gemini extraction of SitRep 96."""
     return gemini.parse_response(json.loads(GEMINI_96.read_text()))
 
 
 def _raw_157() -> dict[str, Any]:
+    """The raw Mistral extraction of SitRep 157."""
     return mistral.parse_annotation(json.loads(MISTRAL_157.read_text()))
 
 
@@ -160,6 +164,7 @@ def _ledger(*rows: tuple[int, str, str]) -> None:
 
 @pytest.fixture(autouse=True)
 def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point every output path of the extract module at `tmp_path`."""
     for name, path in {
         "MANIFEST_PATH": "manifest.csv",
         "CACHE_DIR": "cache",
@@ -186,12 +191,14 @@ def issues(
     calls: list[tuple[str, Any]] = []
 
     def create(*, title: str, body: str, dry_run: bool = False) -> int:
+        """Record an issue creation and return its number."""
         calls.append(("create", title))
         number = 6 + sum(c[0] == "create" for c in calls)
         open_now[number] = body
         return number
 
     def close(number: int, *, comment: str, dry_run: bool = False) -> None:
+        """Record an issue closure."""
         calls.append(("close", number))
         open_now.pop(number, None)
 
@@ -202,6 +209,7 @@ def issues(
 
 
 def _status() -> dict[int, dict[str, Any]]:
+    """The status ledger rows by media ID."""
     return {r["media_id"]: r for r in pl.read_csv(ex.STATUS_PATH).to_dicts()}
 
 
@@ -616,7 +624,7 @@ def test_upload_replaced_with_another_date_drops_its_old_date(
     assert statuses == {("t1", "superseded"), ("t2", "held")}
     assert pl.read_csv(ex.BY_ZONE_PATH).is_empty()
     assert (
-        f"Dropped {DAY} from the outputs: the ministry replaced the upload with a "
+        f"Dropped {DAY} from the outputs: INSP replaced the upload with a "
         "report of another date"
     ) in lines
 
@@ -649,8 +657,11 @@ def clients(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     """
     state: dict[str, Any] = {"calls": [], "fail": {}, "model": {}, "answer": {}}
 
-    def fake(extractor: str, pin: str):
+    def fake(extractor: str, pin: str) -> Callable[[Path], ModelResult]:
+        """An extractor fake answering per `state`."""
+
         def extract(pdf_path: Path) -> ModelResult:
+            """Record the call and answer or fail per `state`."""
             state["calls"].append(extractor)
             if error := state["fail"].get(extractor):
                 raise error
@@ -690,6 +701,7 @@ def test_extract_fills_cache_once(
 
 
 def _without_zones() -> dict[str, Any]:
+    """The raw Mistral extraction with the zones removed."""
     return {k: v for k, v in _raw_157().items() if k != "zones"}
 
 
@@ -725,6 +737,7 @@ def test_unbilled_failure_is_retried_next_run(
 
 
 def _unusable(extractor: Extractor) -> UnusableAnswer:
+    """An unusable answer from `extractor`."""
     return UnusableAnswer(
         "Gemini candidate did not finish (finishReason: MAX_TOKENS)",
         model_id_requested=ex._pin(extractor),
@@ -842,6 +855,7 @@ def test_word_dump_failure_leaves_upload_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def damaged(pdf: Path, out: Path) -> Path:
+        """Fail as a damaged PDF."""
         raise PDFSyntaxError("damaged PDF")
 
     monkeypatch.setattr(ex, "dump_words", damaged)
@@ -885,6 +899,7 @@ def no_gh(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
 
     def refuse(*args: Any, **kwargs: Any) -> None:
+        """Fail on any `gh` call."""
         raise AssertionError("gh called in a dry run")
 
     monkeypatch.setattr(review.subprocess, "run", refuse)
@@ -943,6 +958,7 @@ def gh(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
 
     def run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        """Record a `gh` call and answer from `state`."""
         state["calls"].append(args[1:3])
         out = {
             ("issue", "list"): json.dumps(

@@ -20,9 +20,8 @@ resolved by adding an alias to the gazetteer.
 
 Raw model responses and the words of the PDF's table pages are cached in
 `data/interim/drc_2026_sitrep_extractions/<sha256>/`, keyed on the PDF's
-sha256 so a re-upload never overwrites the previous version's record. Parsed
-extractions and text-layer rows are not cached: release normalises again
-from the raw responses and reads the rows again from the words, so a
+sha256, so each upload keeps its own record. Release normalises the raw
+responses and reads the rows from the words again on every run, so a
 gazetteer change takes effect on the next run.
 """
 
@@ -230,6 +229,7 @@ class UnusableAnswer(ValueError):
         requested_at: str,
         response: dict[str, Any],
     ) -> None:
+        """Keep the request metadata and response alongside the message."""
         super().__init__(message)
         self.model_id_requested = model_id_requested
         self.requested_at = requested_at
@@ -307,6 +307,7 @@ type Gazetteer = dict[str, tuple[HealthZone, ...]]
 
 
 def _nullable(kind: str) -> dict[str, Any]:
+    """A JSON-schema type that accepts `kind` or null."""
     return {"type": [kind, "null"]}
 
 
@@ -321,6 +322,7 @@ def _object(properties: dict[str, Any], *, nullable: bool = False) -> dict[str, 
 
 
 def _fields(fields: tuple[str, ...]) -> dict[str, Any]:
+    """A JSON-schema property per field: number for percents, integer otherwise."""
     return {
         f: _nullable("number" if f in PERCENT_FIELDS else "integer") for f in fields
     }
@@ -494,6 +496,7 @@ def _get(obj: object, where: str, field: str) -> Any:
 
 
 def _list(raw: object, section: Section) -> list[Any]:
+    """The list under `extraction.<section>`, or raise if it is not a list."""
     rows = _get(raw, "extraction", section)
     if not isinstance(rows, list):
         raise ValueError(f"{section} is not a list: {rows!r}")
@@ -501,6 +504,7 @@ def _list(raw: object, section: Section) -> list[Any]:
 
 
 def _name(row: object, section: Section, field: str) -> str:
+    """A row's province or zone label, or raise if it is not a string."""
     name = _get(row, section, field)
     if not isinstance(name, str):
         raise ValueError(f"{section}.{field} is not a string: {name!r}")
@@ -598,6 +602,7 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     flags: list[Flag] = []
 
     def add(printed: RowKey, values: Values) -> None:
+        """File a row under its canonical key, flagging duplicates and name problems."""
         if (canonical := canonical_key(printed, gazetteer)) is None:
             logger.info("Dropping a Total row filed in %s", printed.section)
             return

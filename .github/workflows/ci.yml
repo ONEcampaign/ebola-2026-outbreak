@@ -39,8 +39,9 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
-      # The review check runs the base branch's code, so it cannot see a code
-      # change that would hold a released upload; this runs the pull request's.
+      # The review check runs the base branch's code and cannot see a code
+      # change that would hold a released upload. This step runs the pull
+      # request's own code.
       - name: Check release
         if: github.event_name == 'pull_request'
         env:

@@ -1,10 +1,11 @@
 """Offline golden-set test of the sitrep extraction pipeline.
 
-For each of the 13 golden reports, the recorded Gemini and Mistral responses
-in `fixtures/sitrep_golden/recorded/` and the report's word dump go through
-`judge` with no review, with text-layer arbitration on and off. No accepted value may differ from the truth, and the
-share of cells held for review must stay under a ceiling, so a rise in flags
-fails here with its count instead of landing on reviewers.
+For each golden report, the recorded Gemini and Mistral responses in
+`fixtures/sitrep_golden/recorded/` and the report's word dump go through
+`judge` with no review, with text-layer arbitration on and off. No accepted
+value may differ from the truth, and the share of cells held for review must
+stay under a ceiling, so a rise in flags fails here with its count instead of
+landing on reviewers.
 
 Record the fixtures with `drc_2026_sitrep_golden.py record`.
 """
@@ -43,7 +44,7 @@ GAZETTEER = load_gazetteer()
 REPORTS = load_reports()
 TRUTH = load_truth()
 
-# Share of truth cells held for review, across the 13 reports. Observed with
+# Share of truth cells held for review, across the golden reports. Observed with
 # the recorded fixtures: 15 of 7,197 (0.21%) with arbitration, 182 of 7,197
 # (2.5%) without. The ceilings sit above both, at 0.4% and 3.2%.
 FLAG_RATE_CEILING = {True: 0.004, False: 0.032}
@@ -51,6 +52,7 @@ FLAG_RATE_CEILING = {True: 0.004, False: 0.032}
 
 @cache
 def outcome(report: Report, *, arbitration: bool) -> Score:
+    """Score a golden report with its recorded model answers, cached per call."""
     records = Records(
         read_recorded("gemini", report),
         read_recorded("mistral", report),
@@ -137,6 +139,7 @@ def test_run_logs_a_failed_report_and_scores_the_rest(
     by_name = {r.report_date: r for r in REPORTS}
 
     def failing_score(records: Records, **kwargs: Any) -> Score:
+        """Score `records`, failing on the report named `failing`."""
         if records.words == WORDS_DIR / failing.words:
             raise ValueError("bad row")
         return score(records, **kwargs)
@@ -172,6 +175,7 @@ def _fake_get(served: dict[str, bytes]) -> Any:
     """A `fetch.get` serving `served` by URL and failing on any other."""
 
     def get(url: str) -> httpx.Response:
+        """Serve `served` by URL, failing on any other."""
         if url not in served:
             raise httpx.ConnectError(f"gone: {url}")
         return httpx.Response(200, content=served[url])
@@ -180,6 +184,7 @@ def _fake_get(served: dict[str, bytes]) -> Any:
 
 
 def _report(ministry: bytes, insp: bytes | None) -> Report:
+    """A report row for SitRep 157 with the given ministry and INSP bytes."""
     return Report(
         "2026-10-18",
         157,

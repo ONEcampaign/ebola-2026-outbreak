@@ -28,6 +28,7 @@ PAGE_SIZE_PT = (200, 100)
 
 @pytest.fixture
 def response_body() -> dict[str, Any]:
+    """The recorded Gemini response for SitRep 96."""
     return json.loads(FIXTURE.read_text())
 
 
@@ -44,6 +45,7 @@ def pdf_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def api_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Set the Gemini API key in the environment and return it."""
     monkeypatch.setenv(gemini.API_KEY_ENV, KEY)
     return KEY
 
@@ -52,6 +54,7 @@ def client_for(body: dict[str, Any], seen: list[httpx.Request]) -> httpx.Client:
     """A client whose server answers every request with `body`."""
 
     def handle(request: httpx.Request) -> httpx.Response:
+        """Record the request and answer with `body`."""
         seen.append(request)
         return httpx.Response(200, json=body)
 
@@ -139,23 +142,28 @@ def test_extract_without_key_fails_before_sending(
 
 
 def _blocked(body: dict[str, Any]) -> None:
+    """Corrupt `body` into a response blocked by the safety filter."""
     body.pop("candidates")
     body["promptFeedback"] = {"blockReason": "SAFETY"}
 
 
 def _stopped_early(body: dict[str, Any]) -> None:
+    """Corrupt `body` into a candidate that stopped at the token limit."""
     body["candidates"][0]["finishReason"] = "MAX_TOKENS"
 
 
 def _no_parts(body: dict[str, Any]) -> None:
+    """Corrupt `body` into a candidate with no content parts."""
     body["candidates"][0]["content"]["parts"] = []
 
 
 def _not_json(body: dict[str, Any]) -> None:
+    """Corrupt `body` into a candidate whose text is truncated JSON."""
     body["candidates"][0]["content"]["parts"][0]["text"] = '{"sitrep_no": 96,'
 
 
 def _json_array(body: dict[str, Any]) -> None:
+    """Corrupt `body` into a candidate whose text is a JSON array."""
     body["candidates"][0]["content"]["parts"][0]["text"] = "[]"
 
 

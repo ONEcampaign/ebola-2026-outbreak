@@ -2,7 +2,7 @@ name: Weekly sitrep golden check
 
 on:
   schedule:
-    # Mondays, re-extract the 13 golden sitreps live and compare with the truth.
+    # Mondays, re-extract the golden sitreps live and compare with the truth.
     - cron: "0 6 * * 1"
   workflow_dispatch:
 

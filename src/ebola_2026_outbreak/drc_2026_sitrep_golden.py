@@ -1,13 +1,15 @@
-"""Check the sitrep extraction pipeline against 13 hand-checked reports.
+"""Check the sitrep extraction pipeline against hand-checked reports.
 
-The golden set is 13 current-layout reports between SitReps 96 and 157
-(`tests/fixtures/sitrep_golden/reports.csv`: report date, number, ministry
+The golden set is the current-layout reports listed in
+`tests/fixtures/sitrep_golden/reports.csv` (report date, number, ministry
 URL, the PDF's sha256 and its word dump, and the URL and sha256 of the INSP
-copy of the same report where the manifest lists one). Their truth is
-`tests/fixtures/sitrep_words/truth.csv` for the table rows, read from the
-text layer and checked against the PDFs, and
-`tests/fixtures/sitrep_golden/kpis.csv` for the headline indicators, checked
-against the rendered first page.
+copy of the same report where the manifest lists one). Their truth has two
+parts.
+
+- Table rows are in `tests/fixtures/sitrep_words/truth.csv`, read from the
+  text layer and checked against the PDFs.
+- Headline indicators are in `tests/fixtures/sitrep_golden/kpis.csv`, checked
+  against the rendered first page.
 
 A report is scored by `judge`, the function release decides with, given no
 review. A value is accepted when `judge` leaves its cell closed, so a value
@@ -19,8 +21,8 @@ is a regression pin, not a measured error rate.
 
 Subcommands:
 
-- `record` runs the production clients (or one, with `--extractor`) on the 13
-  PDFs and saves each raw `ModelResult` as
+- `record` runs the production clients (or one, with `--extractor`) on the
+  golden PDFs and saves each raw `ModelResult` as
   `recorded/<extractor>/<report_date>.json`, the fixtures of the offline test
   (`tests/test_drc_2026_sitrep_golden.py`).
 - `run` is the live check, run weekly by `.github/workflows/sitrep_golden.yml`.
@@ -157,6 +159,7 @@ def load_reports(path: Path = REPORTS_PATH) -> list[Report]:
 
 
 def _number(text: str, field: str) -> Number | None:
+    """Parse a truth-CSV cell: float for percents, int otherwise, None if blank."""
     if text == "":
         return None
     return float(text) if field in PERCENT_FIELDS else int(text)

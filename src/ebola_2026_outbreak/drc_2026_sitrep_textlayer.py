@@ -1,6 +1,7 @@
 """Read sitrep table rows from the PDF text layer and check values against them.
 
-The text layer is the third, model-free reading of each sitrep. `read_rows`
+The text layer is a model-free reading of each sitrep, used to check the two
+models. `read_rows`
 finds every province summary row, zone row, zone-table subtotal row and the
 zone table's Total row, and records what each of the row's cells prints.
 `row_matches` then says whether a model's values for that row are exactly
@@ -49,8 +50,8 @@ ambiguous, its table's header words are missing, repeated or out of order,
 a cell sits near the boundary of two columns, two cells fall in one column,
 or a cell does not read as one value of its column. A dash, which the
 publisher prints for a zero, reads as no value of any field column, so its
-row is held rather than read as blank or 0. `row_matches` then
-fails, so the row is held.
+row is held rather than read as blank or 0. `row_matches` fails on a row
+with no cells.
 
 `row_matches` compares field by field. A blank cell prints nothing and a
 printed 0 prints "0", so blank-for-0, 0-for-blank and a value moved into an
@@ -105,6 +106,8 @@ GUARD = 3  # points: a cell's centre is at least this far inside its column
 
 PROVINCE_KEYS = {name_key(p): p for p in PROVINCES.values()}
 NULL_TOKENS = frozenset({"NA", "ND"})
+# A `dump_words` line is "top x0 x1 text"; the text may hold spaces.
+DUMP_LINE_SPLITS = 3
 
 # What one cell may print, by the kind of its column.
 CELL_GRAMMAR = {
@@ -131,6 +134,7 @@ class Word(NamedTuple):
 
     @property
     def key(self) -> str:
+        """The word's text as a name key."""
         return name_key(self.text)
 
     @property
@@ -150,6 +154,7 @@ class Word(NamedTuple):
 
     @property
     def is_alpha(self) -> bool:
+        """Whether the word has letters and is not a value token."""
         return bool(re.search(r"[a-z]", self.key)) and not self.is_token
 
     @property
@@ -176,10 +181,12 @@ class Row(NamedTuple):
 
     @property
     def pos(self) -> tuple[int, float]:
+        """The row's (page, top) position, for ordering."""
         return (self.page, self.top)
 
     @property
     def band(self) -> str:
+        """The row's value words joined as one printed string."""
         return " ".join(w.value for w in self.words)
 
 
@@ -238,12 +245,13 @@ def _dump_words(path: Path) -> list[Word]:
     words: list[Word] = []
     for page, lines in json.loads(path.read_text())["pages"].items():
         for line in lines:
-            top, x0, x1, text = line.split(" ", 3)
+            top, x0, x1, text = line.split(" ", DUMP_LINE_SPLITS)
             words.append(Word(int(page), float(top), float(x0), float(x1), text))
     return sorted(words)
 
 
 def _load_words(source: Path) -> list[Word]:
+    """Words of a PDF, or of a `dump_words` JSON fixture."""
     return _dump_words(source) if source.suffix == ".json" else _pdf_words(source)
 
 
@@ -398,6 +406,7 @@ def _header(words: list[Word], table: Table) -> list[Word]:
 
 
 def _one(words: Iterable[Word]) -> Word | None:
+    """The only word in `words`, or None if there are none or several."""
     found = list(words)
     return found[0] if len(found) == 1 else None
 
@@ -572,6 +581,7 @@ def _cells(row: Row, columns: Columns) -> dict[str, str | None] | None:
 
 
 def _province_rows(table: Table) -> Iterator[tuple[RowKey, Row]]:
+    """Rows of a table whose label is a known province."""
     for row in table.rows:
         if row.key in PROVINCE_KEYS:
             yield RowKey("provinces", PROVINCE_KEYS[row.key], ""), row
@@ -580,6 +590,7 @@ def _province_rows(table: Table) -> Iterator[tuple[RowKey, Row]]:
 def _zone_rows(
     header: list[Word], table: Table, gazetteer: Gazetteer
 ) -> Iterator[tuple[RowKey, Row]]:
+    """Rows of a zone table, keyed by province and zone through the gazetteer."""
     if not any("intra" in w.key for w in header):
         logger.warning("Zone table on page %d: unknown layout", table.anchor.page)
         return
@@ -692,6 +703,7 @@ def printed_labels(source: Path, names: Set[str]) -> set[str]:
 
 
 def _cell_matches(cell: str | None, value: Number | None, field: str) -> bool:
+    """Whether a printed cell equals the model's value for `field`."""
     if value is None:
         return cell is None or cell in NULL_TOKENS
     if cell is None or cell in NULL_TOKENS or isinstance(value, bool) or value < 0:

@@ -2,8 +2,8 @@ name: WHO scrape
 
 on:
   schedule:
-    # WHO updates its table at no fixed time and not every day, so check
-    # every 2 hours.
+    # WHO updates its table on irregular days and hours, so check every 2
+    # hours.
     - cron: "0 */2 * * *"
   workflow_dispatch:
 
@@ -14,8 +14,9 @@ env:
 permissions:
   contents: write
 
-# Outside the daily-scrape group, so a queued sitrep run cannot cancel a
-# capture. WHO shows only the latest figures, so a lost day cannot be recovered.
+# Outside the sitrep scrape's group (daily-scrape), so a queued sitrep run
+# cannot cancel a capture. WHO shows only the latest figures, so a missed
+# capture depends on the Wayback backfill to fill it.
 concurrency:
   group: who-scrape
   cancel-in-progress: false

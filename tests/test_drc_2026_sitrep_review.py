@@ -4,7 +4,7 @@ import csv
 import json
 import re
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
@@ -32,6 +32,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     GAZETTEER_PATH,
     REVIEW_DIR,
     Flag,
+    Gazetteer,
     ModelResult,
     RowKey,
     Section,
@@ -117,6 +118,7 @@ def match(text: TextRow, values: Values, section: Section) -> bool:
 
 
 def text_layer() -> dict[RowKey, TextRow]:
+    """A text layer that prints every non-KPI row of the truth."""
     return {
         key: TextRow(key, json.dumps(values, sort_keys=True), True, 3, None)
         for key, values in TRUTH.items()
@@ -128,6 +130,7 @@ def raw(rows: dict[RowKey, Values]) -> dict[str, Any]:
     """A model's raw extraction holding `rows`."""
 
     def listed(section: Section, *names: str) -> list[dict[str, Any]]:
+        """The raw rows of `section`, keyed by `names`."""
         return [
             {**dict(zip(names, key[1:], strict=False)), **values}
             for key, values in rows.items()
@@ -146,19 +149,22 @@ def raw(rows: dict[RowKey, Values]) -> dict[str, Any]:
 
 
 def write_gazetteer(path: Path, rows: str = "Ituri,A,\nIturi,B,\n") -> Path:
+    """Write a zone gazetteer CSV holding `rows` and return its path."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("province,zone,aliases\n" + rows)
     return path
 
 
 @pytest.fixture
-def gazetteer(tmp_path: Path):
+def gazetteer(tmp_path: Path) -> Gazetteer:
+    """The gazetteer loaded from a two-zone CSV."""
     return load_gazetteer(write_gazetteer(tmp_path / "zones.csv"))
 
 
 def row(
     key: RowKey, field: str, value: str, reason: str = "text_mismatch"
 ) -> ReviewRow:
+    """A review row for `key` holding `value` for `field`."""
     return {
         "report_date": DATE,
         "sha256": SHA,
@@ -413,9 +419,11 @@ def test_issue_body() -> None:
 
 @pytest.fixture
 def gh_calls(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """Stub `gh` and record every call with its issue body."""
     calls: list[list[str]] = []
 
     def run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        """Record a `gh` call and answer with an issue URL."""
         assert kwargs.get("shell") is not True
         body = args[args.index("--body-file") + 1] if "--body-file" in args else None
         calls.append([*args, Path(body).read_text() if body else ""])
@@ -469,18 +477,20 @@ def test_gh_runs_in_actions(
 
 
 @pytest.fixture
-def check_pr(monkeypatch: pytest.MonkeyPatch):
+def check_pr(monkeypatch: pytest.MonkeyPatch) -> Callable[[Path], list[str]]:
     """Run the review check on a repository, reading the stub text layer."""
     monkeypatch.setattr(ex, "MATCH", match)
     monkeypatch.setattr(ex, "read_rows", lambda words, gazetteer: text_layer())
 
     def run(repo: Path) -> list[str]:
+        """Run the review check on `repo`."""
         return ex.check_review(base="HEAD", repo=repo)
 
     return run
 
 
 def git(repo: Path, *args: str) -> None:
+    """Run a git command in `repo`."""
     subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
@@ -553,6 +563,7 @@ def make_repo(
 
 
 def printed(value: float | None) -> str:
+    """A cell value as printed, with a missing value as `blank`."""
     return "blank" if value is None else str(value)
 
 
@@ -720,6 +731,7 @@ def test_check_passes_a_garbled_zone_dismissed_as_absent(
 
 
 def edit_column(path: Path, column: str, value: str) -> None:
+    """Set `column` to `value` in the first row of a review CSV."""
     with path.open() as f:
         records = list(csv.DictReader(f))
     records[0][column] = value
@@ -779,6 +791,7 @@ def test_check_fails(tmp_path: Path, check_pr: Any, change: Any, message: str) -
 
 
 def _release_status(repo: Path) -> Status:
+    """The release status of `repo` at a fixed time."""
     result = ex.release(
         ex.read_manifest(repo=repo),
         ex.read_ledger(repo=repo),

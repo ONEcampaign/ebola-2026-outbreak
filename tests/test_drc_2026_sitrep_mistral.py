@@ -26,6 +26,7 @@ PDF = b"%PDF-1.7 not a real report"
 
 @pytest.fixture
 def pdf_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A blank PDF on disk, with the Mistral API key set."""
     monkeypatch.setenv(mistral.API_KEY_ENV, KEY)
     path = tmp_path / "SitRep_157.pdf"
     path.write_bytes(PDF)
@@ -36,6 +37,7 @@ def client_for(body: dict[str, Any], seen: list[httpx.Request]) -> httpx.Client:
     """A client whose server answers every request with `body`."""
 
     def handle(request: httpx.Request) -> httpx.Response:
+        """Record the request and answer with `body`."""
         seen.append(request)
         return httpx.Response(200, json=body)
 
@@ -121,6 +123,7 @@ def test_extract_rejects_bad_annotation(
 
 def test_extract_raises_on_rejected_request(pdf_path: Path) -> None:
     def handle(request: httpx.Request) -> httpx.Response:
+        """Reject every request as an invalid schema."""
         return httpx.Response(422, json={"detail": "invalid schema"})
 
     client = httpx.Client(transport=httpx.MockTransport(handle))

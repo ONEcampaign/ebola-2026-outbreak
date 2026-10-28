@@ -14,6 +14,7 @@ KEY = "secret-key-123"
 
 @pytest.fixture(autouse=True)
 def no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip the retry sleeps."""
     monkeypatch.setattr(fetch.time, "sleep", lambda _: None)
 
 
@@ -21,6 +22,7 @@ def client_for(statuses: list[int], seen: list[httpx.Request]) -> httpx.Client:
     """A client whose server answers with `statuses` in turn."""
 
     def handle(request: httpx.Request) -> httpx.Response:
+        """Record the request and answer with the next status."""
         seen.append(request)
         return httpx.Response(statuses[len(seen) - 1], json={"ok": True})
 
@@ -76,6 +78,7 @@ def client_raising(
     """A client whose transport raises each of `errors` in turn, then answers 200."""
 
     def handle(request: httpx.Request) -> httpx.Response:
+        """Record the request, then raise or answer 200."""
         seen.append(request)
         error = errors[len(seen) - 1] if len(seen) <= len(errors) else None
         if error is not None:

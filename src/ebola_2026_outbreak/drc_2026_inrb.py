@@ -1,12 +1,12 @@
 """Fetch INRB's national DRC sitrep series to backfill and cross-check ours.
 
 INRB (with the Kraemer Lab, Oxford) hand-digitises the INSP sitrep banner
-figures in INRB-UMIE/BDBV2026-Data. Their series covers dates the
-sante.gouv.cd media API does not list (mid-June to early August 2026).
+figures in INRB-UMIE/BDBV2026-Data. Their series covers dates with no parsed
+sitrep (mid-June to early August 2026).
 
 The source is pinned to one commit so upstream edits to past data change our
-history only when `INRB_REF` is bumped. Run by hand; not part of the daily
-scrape.
+history only when `INRB_REF` is bumped. Run it by hand after bumping
+`INRB_REF`.
 """
 
 import io

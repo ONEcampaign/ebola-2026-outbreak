@@ -229,6 +229,7 @@ def fake_api(monkeypatch: pytest.MonkeyPatch) -> FakeApi:
     api = FakeApi()
 
     def download(item: dlm.MediaItem, *, refresh: bool = False) -> Path:
+        """Record the download request and return a stub path."""
         api.downloads.append((item["id"], refresh))
         return Path(f"{item['id']}.pdf")
 

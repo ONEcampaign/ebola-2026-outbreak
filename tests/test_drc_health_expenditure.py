@@ -92,6 +92,7 @@ def test_load_ghed_raises_on_missing_code(monkeypatch: pytest.MonkeyPatch) -> No
 
     class FakeGHED:
         def get_data(self) -> object:
+            """The GHED rows with a unit and country added."""
             return rows.with_columns(
                 iso3_code=pl.lit("COD"), unit=pl.lit("Millions")
             ).to_pandas()
@@ -121,6 +122,7 @@ def test_load_ghed_raises_on_unexpected_usd_unit(
 
     class FakeGHED:
         def get_data(self) -> object:
+            """The GHED rows as they are."""
             return rows.to_pandas()
 
     monkeypatch.setattr(drc_health_expenditure, "GHED", FakeGHED)

@@ -1,12 +1,14 @@
-"""Parse province case and death counts from DRC Ministry of Health sitreps.
+"""Parse province case and death counts from the DRC sitreps.
+
+The sitreps come from INSP. Files taken from the Ministry of Health's site
+before 28 October 2026 are kept for the dates that have one.
 
 Each sitrep since mid-June has a table of confirmed cases and deaths by
 province, ending in a Total row. Its layout drifts between sitreps (column
-order, headers, wrapped province names), so rows are found by province name
-rather than by template. Numbers use a space as thousands separator, which
-makes "44 5 659 2 583" ambiguous; the row's printed case fatality rate
-(deaths / cases) settles which reading is right. Province rows must sum to the
-Total row, so a misread or missing province fails loudly.
+order, headers, wrapped province names), so rows are found by province name.
+Numbers use a space as thousands separator, which makes "44 5 659 2 583"
+ambiguous. The row's printed case fatality rate (deaths / cases) settles the
+reading. Province rows must sum to the Total row, otherwise parsing raises.
 """
 
 import logging
@@ -63,6 +65,16 @@ NON_COUNT = re.compile(r"\d+\s*(?:/|sur)\s*\d+|\(\s*[\d,]+\s*%\s*\)|—|-")
 MISSING = "ND"
 # Non-row lines (footnotes, wrap fragments) tolerated inside one table.
 MAX_GAP_LINES = 3
+# A wrapped province row spans this many lines (see `WRAP_HEAD`).
+WRAPPED_ROW_LINES = 3
+# Digits in a thousands group: "5 659" is 5 and 659.
+THOUSANDS_GROUP_DIGITS = 3
+# Count columns before the CFR when a row has new cases: new, cumulative, deaths.
+COUNT_COLUMNS_WITH_NEW = 3
+# Row errors quoted when no province table is found.
+MAX_ERRORS_SHOWN = 5
+# Null rows named in the log when the monotonic check skips them.
+MAX_NULLS_LISTED = 5
 # Half a unit of the printed CFR's one decimal place.
 CFR_TOLERANCE = 0.05 + 1e-9
 
@@ -126,7 +138,7 @@ def join_split_rows(lines: list[str]) -> list[str]:
         if head and tail and bool(head.group(2)) != bool(tail.group(1)):
             name = f"{head.group(1)}-{head.group(2) or tail.group(1)}"
             out.append(f"{name} {lines[i + 1]} {head.group(3)} {tail.group(2)}")
-            i += 3
+            i += WRAPPED_ROW_LINES
             continue
         if (
             NUMBERS_ONLY.match(line)
@@ -154,7 +166,9 @@ def readings(tokens: list[str]) -> list[list[int]]:
     for k in range(1, len(tokens) + 1):
         head = tokens[:k]
         if k > 1 and (
-            len(head[0]) > 3 or head[0].startswith("0") or len(head[-1]) != 3
+            len(head[0]) > THOUSANDS_GROUP_DIGITS
+            or head[0].startswith("0")
+            or len(head[-1]) != THOUSANDS_GROUP_DIGITS
         ):
             break
         value = int("".join(head))
@@ -190,7 +204,7 @@ def parse_counts(rest: str) -> ProvinceCounts:
 
     candidates: set[ProvinceCounts] = set()
     for values in readings(digits):
-        if len(values) == 3 and not new_missing:
+        if len(values) == COUNT_COLUMNS_WITH_NEW and not new_missing:
             new, cases, deaths = values
         elif len(values) == 2 and len(after) <= 1:
             cases, deaths = values
@@ -244,7 +258,9 @@ def find_province_table(text: str) -> dict[str, ProvinceCounts]:
         block[name] = counts
         if name == TOTAL and len(block) > 1:
             return block
-    raise ValueError(f"No province table found; row errors: {errors[:5]}")
+    raise ValueError(
+        f"No province table found; row errors: {errors[:MAX_ERRORS_SHOWN]}"
+    )
 
 
 def validate_table(table: dict[str, ProvinceCounts]) -> None:
@@ -342,11 +358,17 @@ def check_monotonic(
         by: Columns that, with `indicator`, identify one series.
         label: Prefix for the log message, such as the source name.
     """
-    cumulative = (
-        df.filter(pl.col("indicator") != INDICATORS["new_cases"])
-        .drop_nulls("value")
-        .sort("date")
-    )
+    series = df.filter(pl.col("indicator") != INDICATORS["new_cases"])
+    nulls = series.filter(pl.col("value").is_null())
+    if nulls.height:
+        logger.info(
+            "%s: skipping %d null values in the monotonic check, first %d: %s",
+            label or "Monotonic check",
+            nulls.height,
+            MAX_NULLS_LISTED,
+            nulls.select("date", *by, "indicator").head(MAX_NULLS_LISTED).rows(),
+        )
+    cumulative = series.drop_nulls("value").sort("date")
     for keys, group in cumulative.group_by(*by, "indicator", maintain_order=True):
         *entity, indicator = keys
         name = " ".join(

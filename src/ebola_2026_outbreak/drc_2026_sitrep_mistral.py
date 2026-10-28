@@ -2,9 +2,9 @@
 
 The whole PDF goes to Mistral's OCR endpoint as a base64 data URL. The model
 reads every page and returns, besides the per-page markdown, a
-`document_annotation`: a JSON string shaped by `schema_for("mistral")` and
-written under `PROMPT`. That string is parsed into the raw extraction;
-`drc_2026_sitrep_schema.normalise` keys it on canonical names later.
+`document_annotation`, a JSON string shaped by `schema_for("mistral")` and
+written under `PROMPT`. That string is parsed into the raw extraction, and
+`drc_2026_sitrep_schema.normalise` keys it on canonical names.
 
 The model is pinned to `mistral-ocr-4-1`. Mistral echoes the requested id in
 the response's `model`, so a silent change behind the pin shows only in the

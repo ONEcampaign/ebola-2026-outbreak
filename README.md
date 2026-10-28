@@ -1,26 +1,31 @@
 # Ebola 2026 outbreak
 
+Data pipelines and chart tables for the 2026 Bundibugyo virus disease outbreak in the Democratic Republic of the Congo (DRC), with the 2014-16 West Africa outbreak as a comparison. Scheduled GitHub Actions workflows scrape the WHO table and the DRC situation reports (sitreps) and commit the results.
+
 ## Installation
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
 ```bash
-# Install dependencies
 uv sync
 ```
 
-## Project Structure
+## Project structure
 
 - `src/ebola_2026_outbreak/`: Reusable analysis code (importable package)
-- `data/raw/`: Input data files (gitignored — never commit source data)
+- `data/raw/`: Input data files (gitignored)
+- `data/interim/`: Cached model answers for the sitrep extraction
 - `data/processed/`: Derived/processed data (tracked in git)
+- `data/review/`: Cells of held sitreps awaiting a person's check
+- `data/reference/`: Lookup tables (health zones, province map IDs)
+- `data/output/`: Display-ready chart tables (see Chart tables)
 
 Files are prefixed by outbreak so historical and current data stay apart:
 
 - `west_africa_2014_16_*`: 2014-16 West Africa outbreak (WHO via
   [HDX](https://data.humdata.org/dataset/ebola-cases-2014)), used for comparison.
   Built by `uv run python src/ebola_2026_outbreak/west_africa_2014_16.py`.
-  WHO's series starts on 29 August 2014; `west_africa_2014_16_early.py` fills
+  WHO's series starts on 29 August 2014. `west_africa_2014_16_early.py` fills
   the months before from OCHA ROWCA's national confirmed counts
   ([HDX](https://data.humdata.org/dataset/rowca-ebola-cases)) into
   `west_africa_2014_16_early_confirmed_cases.csv`.
@@ -28,41 +33,42 @@ Files are prefixed by outbreak so historical and current data stay apart:
   - `drc_2026_who_by_country.csv`: the WHO country table from the
     [alert-and-response page](https://www.who.int/emergencies/alert-and-response).
     WHO shows only the latest figures, so each run of
-    `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history;
-    the `who_scrape.yml` workflow runs it every 2 hours
-    and rebuilds the chart tables.
+    `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history.
+    The "WHO scrape" workflow (`who_scrape.yml`) runs it every 2 hours and
+    commits only the WHO table.
     `drc_2026_who_wayback.py` backfills it from Wayback Machine captures.
-    Until early September WHO published the table as an image;
+    Until early September 2026 WHO published the table as an image.
     `drc_2026_who_ocr.py` reads those images from the cached captures (run
     `uv sync --group ocr` first).
   - `drc_2026_sitrep_manifest.csv`: every sitrep PDF with its report date,
     built by `drc_2026_sitreps_download.py` from
     [INSP](https://insp.cd/category/sitrep/), which publishes them first.
     Files taken from the Ministry of Health's site before 28 October 2026
-    stay, and keep their dates. PDFs are saved to `data/raw/drc_2026/sitreps/`.
+    stay in the manifest. PDFs are saved to `data/raw/drc_2026/sitreps/`.
   - `drc_2026_sitrep_by_province.csv`: new, cumulative confirmed cases and
     cumulative confirmed deaths by province from each sitrep's province
     table, built by `drc_2026_sitreps_parse.py`.
   - `drc_2026_inrb_national.csv`: national cumulative confirmed cases and
     deaths from INSP sitreps, as digitised by INRB and the Kraemer Lab
     (Oxford) in [BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data).
-    Pinned to one commit (`INRB_REF`); rerun
+    Pinned to one commit (`INRB_REF`). Rerun
     `drc_2026_inrb.py` by hand after bumping it. INRB's metadata asks users to
     confirm distribution terms with INSP before republishing externally.
   - `drc_2026_indicators_by_date.csv` and
     `drc_2026_cumulative_confirmed_cases.csv`: national totals summed across
     provinces, in the same shape and with the same final indicator label as
-    the West Africa files. Built by `drc_2026_final.py`. Dates with no parsed
-    sitrep, including most of 16 June to 5 August, which the Ministry's media
-    API does not list, come from the INRB series. The intermediate's
-    `source` column says which.
+    the West Africa files. Built by `drc_2026_final.py`. No chart reads them.
+    They serve as reference and cross-check outputs. Dates with no parsed
+    sitrep, including most of 16 June to 5 August, come from the INRB series.
+    The intermediate's `source` column says which.
 
 ### Zone-level sitreps
 
 From SitRep 96 (report date 19 August 2026), the sitrep's health-zone table is
 read by two models, Gemini and Mistral OCR, and checked against the PDF's text
-layer and the table's own sums. `drc_2026_sitreps_extract.py` runs in the daily
-scrape every 2 hours (`extract`, then `release`) and writes:
+layer and the table's own sums. `drc_2026_sitreps_extract.py` runs in the
+"DRC 2026 sitrep scrape" workflow every 2 hours (`extract`, then `release`) and
+writes:
 
 - `drc_2026_sitrep_by_zone.csv`: one row per date, zone and indicator (cumulative
   confirmed cases and deaths, new cases, community, CTE and total deaths in the
@@ -102,10 +108,13 @@ Raw model answers are cached in `data/interim/drc_2026_sitrep_extractions/`, so
 ### Chart tables
 
 `uv run python src/ebola_2026_outbreak/chart_tables.py` writes display-ready
-tables to `data/output/`, refreshed by the daily scrape:
+tables to `data/output/`. The tables job of the sitrep scrape workflow rebuilds
+them every 2 hours:
 
 - `2026_outbreak_country_summary.csv`: latest WHO confirmed cases, deaths,
-  case fatality rate and recoveries per country, with a Total row.
+  case fatality rate and recoveries per country, with a Total row. When the
+  latest DRC sitrep is newer than WHO's DRC figures, the DRC row takes the
+  sitrep's confirmed cases and deaths.
 - `2026_outbreak_drc_cases_by_province.csv`: latest sitrep confirmed cases for
   every province, empty where the sitrep reports none, keyed to the map
   OBJECTIDs in `data/reference/drc_provinces_objectid.csv`.
@@ -114,14 +123,16 @@ tables to `data/output/`, refreshed by the daily scrape:
   `drc_health_zones_geometry.csv` (see below).
 - `outbreak_comparison_weekly.csv`: cumulative confirmed cases by week since
   each outbreak's first confirmed case (22 March 2014 and 15 May 2026). West
-  Africa uses ROWCA counts before 29 August 2014 and WHO counts after.
+  Africa uses ROWCA counts before 29 August 2014 and WHO counts after. The
+  2026 series sums WHO's country figures, with DRC from the latest sitrep when
+  it is newer.
 - `2026_outbreak_headline_figures.json`: four figures, each with `value` and
   `update_date`, written as day and month ("18 October").
   `total_confirmed_cases`, `total_deaths` (confirmed) and
-  `death_rate` (confirmed case fatality rate, in percent) come from WHO's
-  Total row across all affected countries, dated by the latest WHO "Data as
-  of" date. `provinces_affected` counts DRC provinces with confirmed cases in
-  the latest sitrep, dated by that sitrep.
+  `death_rate` (confirmed case fatality rate, in percent) come from the
+  country summary's Total row across all affected countries, dated by the DRC
+  row's date (WHO's or a newer sitrep's). `provinces_affected` counts DRC
+  provinces with confirmed cases in the latest sitrep, dated by that sitrep.
 
 ### Health zone map
 
@@ -145,13 +156,13 @@ other private, out-of-pocket). Data come from WHO's GHED via `bblocks.data_impor
 the method of `expenditure_by_source.csv` in
 [topic_health_financing](https://github.com/ONEcampaign/topic_health_financing).
 
-### Tests
+## Tests
 
 ```bash
 uv run pytest
 ```
 
-### Code Quality
+## Code quality
 
 ```bash
 # Run linter
@@ -164,9 +175,9 @@ uv run ruff format .
 uv run ty check src/ebola_2026_outbreak
 ```
 
-## Pre-commit Hooks
+## Pre-commit hooks
 
-Pre-commit hooks are configured to run automatically. To manually run:
+The hooks run on each commit. Run them by hand with:
 
 ```bash
 pre-commit run --all-files
@@ -174,4 +185,4 @@ pre-commit run --all-files
 
 ## License
 
-This project is licensed under the mit License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the LICENSE file for details.

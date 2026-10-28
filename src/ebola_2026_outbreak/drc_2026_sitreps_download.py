@@ -2,21 +2,22 @@
 
 INSP (https://insp.cd/category/sitrep/) publishes each sitrep first. Its
 site is a WordPress front end whose media API lists every upload, other
-outbreaks' sitreps included, so only files marked "MVEBDB" are kept. Filenames are unreliable, so the report date comes from the PDF header. The
+outbreaks' sitreps included, so only files marked "MVEBDB" are kept.
+
+The report date comes from the PDF header, since filenames are unreliable. The
 header has two dates: the printed report date and the date inside the sitrep
 reference ("SitRep N°150 /MVE-BDBV/11/10/2026"). Usually they agree. When they
 do not, the date that fits the nearest sitrep whose two dates agree, counted
 forward by sitrep number, wins. If equally near anchors disagree, the run
 fails. A date is resolved once, when its upload is new or replaced, and kept
-after that. Printed sitrep numbers are themselves
-occasionally wrong (two files print "N°153"), so they are kept for reference
-only. The manifest keeps one row per media item and flags the file kept for
-each report date.
+after that. Printed sitrep numbers are themselves occasionally wrong (two
+files print "N°153"), so they are kept for reference only. The manifest keeps
+one row per media item and flags the file kept for each report date.
 
-Until 28 October 2026 sitreps also came from the Ministry of Health's media
-API (https://sante.gouv.cd/documents/sitreps), which publishes them a day or
-more later and is no longer read. Its files stay in the manifest, and a date
-that has one keeps it, so no report already processed changes file.
+The manifest also holds files from the Ministry of Health's media API
+(https://sante.gouv.cd/documents/sitreps), which published sitreps a day or
+more after INSP and was last read on 28 October 2026. A date that has a
+ministry file keeps it, so no processed report changes file.
 """
 
 import logging
@@ -332,6 +333,13 @@ def flag_latest(manifest: pl.DataFrame) -> pl.DataFrame:
     one, so a processed date keeps its file; among files from the same site,
     the most recently modified wins.
     """
+    no_url = manifest.filter(pl.col("source_url").is_null())
+    if no_url.height:
+        logger.warning(
+            "%d manifest rows have no source_url and rank as non-ministry: %s",
+            no_url.height,
+            no_url["media_id"].to_list(),
+        )
     from_ministry = pl.col("source_url").str.starts_with(MINISTRY_SITE).fill_null(False)
     ranked = manifest.sort(
         from_ministry, "modified", "media_id", descending=True

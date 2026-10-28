@@ -68,7 +68,7 @@ repos:
       # Basic secret hygiene
       - id: detect-private-key
 
-      # Large files (1MB) with sensible excludes
+      # Large files (5 MB) with sensible excludes
       - id: check-added-large-files
         args: [--maxkb=5000]
         exclude: |
@@ -126,5 +126,4 @@ repos:
         additional_dependencies:
           - mdformat-gfm>=1.0.0
           - mdformat-frontmatter>=2.1.0
-        # Example: limit to docs if desired
-        # files: ^(README\.md|docs/|.*/README\.md)$
+        # To limit it to docs: files: ^(README\.md|docs/|.*/README\.md)$

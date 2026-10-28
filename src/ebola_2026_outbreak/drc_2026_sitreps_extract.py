@@ -1,11 +1,12 @@
 """Extract zone-level sitrep data with two models and release what checks out.
 
-Two steps, run in this order by default:
+Four subcommands. `extract` and `release` run in this order by default, and
+`check` and `check-release` test review pull requests.
 
 - `extract` needs the API keys and the PDFs. For every latest upload of a
   report date from `ZONE_START` onwards, it downloads the PDF if absent and
-  fills whatever its cache lacks: the words of its table pages, Gemini's
-  answer and Mistral's answer, keyed on the PDF's sha256. An upload whose
+  fills whatever its cache lacks (the words of its table pages, Gemini's
+  answer and Mistral's answer), keyed on the PDF's sha256. An upload whose
   cache is complete costs no API call. An API error, an answer that breaks
   the schema, or a returned model id other than the pin leaves the upload
   `pending`, and the answer is not cached. An HTTP error or a missing key is
@@ -23,22 +24,22 @@ Two steps, run in this order by default:
   gazetteer, reconciles the answers against the rows, applies a completed
   review whose sha256 matches, and runs the sum checks. A report with
   nothing open is released. Otherwise it is held and its review CSV is
-  written. An existing review CSV is not rewritten, since a reviewer may be
+  written. An existing review CSV is left as it is, since a reviewer may be
   filling it. Open cells it lacks (after a gazetteer edit, or a sum that
   runs only once a held row is typed in) are appended as new rows, unless a
   reviewer has added rows for them, and filled rows for cells that are not
   open are ignored.
 
-`by_zone.csv` and `headline.csv` are rebuilt from every released upload. A
-report date whose latest upload is held or pending keeps the values of the
-upload released before it, so no date drops out while a re-upload waits. That
-older upload is marked `superseded` once the new one is released, or at once
-when the ministry replaces it in place (same media id) with a report of
-another date; its old date then drops out, the one case release allows. The
-ledger (`extraction_status.csv`) keeps one row per upload. Its `extracted_at`
-is when the cached answers were requested, or, for a pending upload, when
-extraction was first tried, which is what the three-day issue rule counts
-from.
+`drc_2026_sitrep_by_zone.csv` and `drc_2026_sitrep_headline.csv` are rebuilt
+from every released upload. A report date whose latest upload is held or
+pending keeps the values of the upload released before it, so no date drops
+out while a re-upload waits. That older upload is marked `superseded` once the
+new one is released, or at once when INSP replaces it in place (same media
+id) with a report of another date. Its old date then drops out, the only case
+release allows. The ledger (`drc_2026_sitrep_extraction_status.csv`) keeps one
+row per upload. Its `extracted_at` is when the cached answers were requested,
+or, for a pending upload, when extraction was first tried, which
+`PENDING_DAYS` counts from.
 
 `check` tests a review pull request. After the review file rules of
 `drc_2026_sitrep_review.check_diff`, it runs the whole of release on the
@@ -55,11 +56,10 @@ a released upload fails there, before it reaches main.
 
 A run that newly holds reports opens one issue listing them, and a run that
 finds uploads pending for `PENDING_DAYS` days running opens one issue for
-those. The ledger records each upload's issue, and each issue carries a
-hidden marker per upload, so no run opens a second issue for an upload
-already tracked. An open issue whose marker names the upload is adopted even
-when its number never reached the ledger. An issue is commented on and
-closed once none of its uploads is held or pending.
+those. The ledger records each upload's issue, and an open issue whose hidden
+marker names an upload is adopted even when its number never reached the
+ledger (see `drc_2026_sitrep_review`). An issue is commented on and closed
+once none of its uploads is held or pending.
 
 Release computes everything first, then checks that no output key repeats
 and no previously released date drops out, and only then opens issues and
@@ -89,6 +89,7 @@ import polars as pl
 from ebola_2026_outbreak import drc_2026_sitrep_gemini as gemini
 from ebola_2026_outbreak import drc_2026_sitrep_mistral as mistral
 from ebola_2026_outbreak.drc_2026_sitrep_review import (
+    GIT_CMD_PREFIX_LEN,
     REVIEWERS,
     HeldReport,
     ReviewError,
@@ -245,6 +246,7 @@ class Upload(NamedTuple):
 
     @property
     def key(self) -> UploadKey:
+        """The (media_id, modified) pair that identifies this upload."""
         return (self.media_id, self.modified)
 
 
@@ -285,6 +287,7 @@ class Records(NamedTuple):
 
     @property
     def complete(self) -> bool:
+        """Whether all three extractions are present."""
         return None not in (self.gemini, self.mistral, self.words)
 
 
@@ -319,8 +322,8 @@ class Release(NamedTuple):
     `published` maps each report date to the upload whose values are in the
     outputs. `reviews` holds the rows of new review files, `appended` the
     rows to add to existing ones. `replaced` holds the report dates that
-    leave the outputs because the ministry replaced their released upload in
-    place with a report of another date.
+    leave the outputs because INSP replaced their released upload in place
+    with a report of another date.
     """
 
     ledger: Ledger
@@ -395,6 +398,7 @@ def read_ledger(*, repo: Path | None = None) -> Ledger:
 
 
 def _parse_ledger(csv: bytes) -> Ledger:
+    """Parse ledger CSV bytes into rows keyed by upload."""
     rows = pl.read_csv(csv, schema=STATUS_SCHEMA).iter_rows(named=True)
     return {(r["media_id"], r["modified"]): LedgerRow(**r) for r in rows}
 
@@ -411,6 +415,7 @@ def read_records(sha256: str | None, *, root: Path | None = None) -> Records:
 
 
 def _new_row(upload: Upload) -> LedgerRow:
+    """A pending ledger row for an upload not yet extracted."""
     return LedgerRow(
         report_date=upload.report_date,
         media_id=upload.media_id,
@@ -508,6 +513,7 @@ def extract(
 
 
 def _media_item(upload: Upload) -> MediaItem:
+    """The manifest entry sent to the extractors for an upload."""
     return {
         "id": upload.media_id,
         "modified": upload.modified,
@@ -892,7 +898,7 @@ def release(
     # Of the uploads that are no longer latest, the last released one of a date
     # whose latest upload is not released stays published and every other is
     # superseded. So is one whose media id now holds a report of another date:
-    # the ministry replaced the file, and its old date has no source left.
+    # INSP replaced the file, and its old date has no source left.
     by_date = {u.report_date: u for u in uploads}
     moved = _moved(manifest, ledger)
     replaced: set[date] = set()
@@ -1001,6 +1007,7 @@ def _moved(manifest: pl.DataFrame, ledger: Ledger) -> set[UploadKey]:
 
 
 def _log_discrepancies(report: str, verdict: Verdict) -> None:
+    """Log each place the publisher's printed total differs from its sum."""
     for d in verdict.discrepancies:
         logger.info(
             "Publisher discrepancy in %s: %s %s printed %s, sums to %s",
@@ -1013,6 +1020,7 @@ def _log_discrepancies(report: str, verdict: Verdict) -> None:
 
 
 def _cells(flags: Sequence[Flag]) -> set[Cell]:
+    """The (key, field) cells that `flags` point at."""
     return {(f.key, f.field or "") for f in flags}
 
 
@@ -1035,10 +1043,12 @@ def _review_cells(row: ReviewRow, gazetteer: Gazetteer) -> set[Cell]:
 
 
 def _relative(path: Path) -> str:
+    """A path relative to the repo root, or as given when outside it."""
     return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
 def _by_zone(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.DataFrame:
+    """The long-format table of indicators by province and zone."""
     records = [
         {
             "outbreak": OUTBREAK,
@@ -1063,6 +1073,7 @@ def _by_zone(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.Dat
 
 
 def _headline(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.DataFrame:
+    """The long-format table of headline indicators."""
     records = [
         {
             "outbreak": OUTBREAK,
@@ -1089,6 +1100,7 @@ class OutputError(ValueError):
     def __init__(
         self, code: Literal["duplicate_key", "dates_dropped"], message: str
     ) -> None:
+        """Store the machine-readable `code` next to the message."""
         super().__init__(message)
         self.code = code
 
@@ -1096,7 +1108,7 @@ class OutputError(ValueError):
 def check_outputs(result: Release, *, previous_dates: set[date]) -> None:
     """Refuse outputs with a repeated key, or without a date released before.
 
-    A date in `result.replaced` may drop out: the ministry replaced its upload.
+    A date in `result.replaced` may drop out, because INSP replaced its upload.
 
     Raises:
         OutputError: On either.
@@ -1543,7 +1555,7 @@ def summarise_release(
         dates = ", ".join(str(d) for d in sorted(result.replaced))
         lines.append(
             f"{'Would drop' if dry_run else 'Dropped'} {dates} from the outputs: "
-            "the ministry replaced the upload with a report of another date"
+            "INSP replaced the upload with a report of another date"
         )
     lines += [
         f"{write} review file {_relative(p)} ({len(rows)} cells)"
@@ -1670,7 +1682,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             errors = check(base=args.base, repo=args.repo.resolve())
         except subprocess.CalledProcessError as e:
             print(
-                f"git {' '.join(e.cmd[3:])} failed: {e.stderr.strip()}", file=sys.stderr
+                f"git {' '.join(e.cmd[GIT_CMD_PREFIX_LEN:])} failed: {e.stderr.strip()}",
+                file=sys.stderr,
             )
             return 1
         for error in errors:

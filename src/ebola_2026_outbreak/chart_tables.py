@@ -337,11 +337,12 @@ def with_newer_sitrep(who: pl.DataFrame, provinces: pl.DataFrame) -> pl.DataFram
         sitrep_as_of,
         who_as_of,
     )
+    indicators = [WHO_CASES, WHO_DEATHS, WHO_RECOVERED]
     sitrep_rows = pl.DataFrame(
         {
-            "date": [sitrep_as_of] * 3,
-            "country": [WHO_DRC] * 3,
-            "indicator": [WHO_CASES, WHO_DEATHS, WHO_RECOVERED],
+            "date": [sitrep_as_of] * len(indicators),
+            "country": [WHO_DRC] * len(indicators),
+            "indicator": indicators,
             "value": [
                 float(totals[SITREP_INDICATORS["cases"]]),
                 float(totals[SITREP_INDICATORS["deaths"]]),

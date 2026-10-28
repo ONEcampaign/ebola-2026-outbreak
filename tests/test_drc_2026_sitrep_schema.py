@@ -28,6 +28,7 @@ GAZETTEER = load_gazetteer()
 
 
 def zone_row(province: str, zone: str, cases: Any = 12) -> dict[str, Any]:
+    """A zone row in `province` with `cases` confirmed."""
     return {
         "province": province,
         "zone": zone,
@@ -42,6 +43,7 @@ def zone_row(province: str, zone: str, cases: Any = 12) -> dict[str, Any]:
 
 
 def raw(**sections: Any) -> dict[str, Any]:
+    """A raw extraction with empty sections, overridden by `sections`."""
     empty = {
         "kpis": None,
         "provinces": [],
@@ -53,6 +55,7 @@ def raw(**sections: Any) -> dict[str, Any]:
 
 
 def walk_objects(schema: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every object schema nested inside `schema`."""
     found = [schema] if "properties" in schema else []
     children = [*schema.get("properties", {}).values()]
     if "items" in schema:

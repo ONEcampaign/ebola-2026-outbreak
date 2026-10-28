@@ -1,7 +1,9 @@
 """Build the national 2026 DRC series from the sitrep province counts.
 
 A reference and cross-check output that no chart reads. The outbreak
-comparison chart sums WHO's figures (see `chart_tables`). The files keep the West Africa 2014-16 shape and final indicator label:
+comparison chart sums WHO's figures (see `chart_tables`). The files keep the
+West Africa 2014-16 shape and final indicator label:
+
     - Intermediate: one row per (date, indicator), value summed across provinces.
     - Final: cumulative confirmed cases only, one row per date.
 
@@ -10,8 +12,8 @@ banner figures (see `drc_2026_inrb`), and the `source` column of the
 intermediate records which rows came from where. On shared dates the parsed
 sitrep wins and INRB is only a cross-check.
 
-The national totals are cross-checked against the WHO table, which WHO
-updates from the previous day's DRC sitrep.
+The national totals are cross-checked against the WHO table, whose "Data as
+of" date matches the sitrep date.
 """
 
 import logging
