@@ -2,13 +2,12 @@ name: Daily DRC 2026 sitrep scrape
 
 on:
   schedule:
-    # DRC sitreps land the morning after the report date. The second run
-    # retries the day when a pending run was cancelled by a queued release run
-    # in the shared concurrency group. Download, extract and release are
-    # idempotent and the cache means no sitrep is paid for twice, so a second
-    # run on a quiet day does nothing.
-    - cron: "30 12 * * *"
-    - cron: "0 18 * * *"
+    # INSP uploads sitreps at any hour (mostly 04:00-12:00 UTC, some after
+    # 20:00), so check every 2 hours. A later run also retries one cancelled
+    # by a queued release run in the shared concurrency group. Download,
+    # extract and release are idempotent and the cache means no sitrep is paid
+    # for twice, so a run with no new sitrep does nothing.
+    - cron: "30 */2 * * *"
   workflow_dispatch:
 
 permissions:
