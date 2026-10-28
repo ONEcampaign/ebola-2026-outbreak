@@ -2,8 +2,9 @@ name: WHO scrape
 
 on:
   schedule:
-    # WHO updates its table at no fixed time, so check every 8 hours.
-    - cron: "0 */8 * * *"
+    # WHO updates its table at no fixed time and not every day, so check
+    # every 2 hours, on the hour, between the sitrep runs at half past.
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 
 permissions:
