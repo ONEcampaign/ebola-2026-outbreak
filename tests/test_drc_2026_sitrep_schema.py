@@ -7,6 +7,7 @@ import pytest
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     FIELDS,
+    GAZETTEER_PATH,
     JSON_SCHEMA,
     SECTIONS,
     Flag,
@@ -97,7 +98,9 @@ def test_name_key_matches_variants(a: str, b: str) -> None:
 
 def test_gazetteer_covers_every_seed_zone() -> None:
     zones = {z for entries in GAZETTEER.values() for z in entries}
-    assert len(zones) == 67
+    # One zone per CSV row, so the count follows the file as reviews add zones.
+    rows = GAZETTEER_PATH.read_text(encoding="utf-8").strip().splitlines()[1:]
+    assert len(zones) == len(rows)
     assert GAZETTEER[name_key("Boma Mangbetu")] == (
         HealthZone("Haut-Uélé", "Boma Mangbetu"),
     )
