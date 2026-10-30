@@ -18,9 +18,9 @@ Outputs, in data/output/, with display column names for charting tools:
       in the country summary.
     - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
       confirmed deaths and case fatality rate (percent) from the country
-      summary's Total row, and the number of DRC provinces with confirmed
-      cases from the latest sitrep, each with the date its source reports in
-      prose ("18 October").
+      summary's Total row, dated by the DRC row's date (DRC holds over 99% of
+      cases), and the number of DRC provinces with confirmed cases from the
+      latest sitrep, dated by that sitrep. Dates are in prose ("18 October").
 """
 
 import json
@@ -37,7 +37,11 @@ from ebola_2026_outbreak.drc_2026_sitreps_extract import BY_ZONE_PATH, BY_ZONE_S
 from ebola_2026_outbreak.drc_2026_sitreps_parse import INDICATORS as SITREP_INDICATORS
 from ebola_2026_outbreak.drc_2026_sitreps_parse import OUTPUT_PATH as PROVINCE_PATH
 from ebola_2026_outbreak.drc_2026_sitreps_parse import SCHEMA as PROVINCE_SCHEMA
+from ebola_2026_outbreak.drc_2026_who import CONFIRMED_CASES as WHO_CASES
+from ebola_2026_outbreak.drc_2026_who import CONFIRMED_DEATHS as WHO_DEATHS
+from ebola_2026_outbreak.drc_2026_who import DRC_COUNTRY as WHO_DRC
 from ebola_2026_outbreak.drc_2026_who import OUTPUT_PATH as WHO_PATH
+from ebola_2026_outbreak.drc_2026_who import RECOVERED as WHO_RECOVERED
 from ebola_2026_outbreak.drc_2026_who import SCHEMA as WHO_SCHEMA
 from ebola_2026_outbreak.drc_health_zone_geometry import CODES_PATH, GEOMETRY_PATH
 from ebola_2026_outbreak.west_africa_2014_16 import FINAL_PATH as WEST_AFRICA_PATH
@@ -64,13 +68,7 @@ WEST_AFRICA_FIRST_CONFIRMED = date(2014, 3, 22)
 DRC_FIRST_CONFIRMED = date(2026, 5, 15)
 DAYS_PER_WEEK = 7
 
-WHO_CASES, WHO_DEATHS, WHO_RECOVERED = (
-    "Confirmed cases",
-    "Confirmed deaths",
-    "Recovered",
-)
 TOTAL_LABEL = "Total"
-WHO_DRC = "Democratic Republic of the Congo"
 CFR_DECIMALS = 1
 
 COUNTRY, CASES, DEATHS, CFR, RECOVERED = (
@@ -251,6 +249,31 @@ def latest_date(dates: pl.Series) -> date:
     return latest
 
 
+def summary_date(latest: pl.DataFrame) -> date:
+    """Date the country summary's totals by the DRC row's date.
+
+    DRC holds over 99% of cases, so a newer date for a small country (Kenya)
+    must not date the totals. Countries on other dates are logged.
+
+    Args:
+        latest: Rows the summary was built from (output of `with_newer_sitrep`).
+
+    Returns:
+        The latest DRC date in `latest`.
+
+    Raises:
+        ValueError: If `latest` has no DRC rows.
+    """
+    drc = latest.filter(pl.col("country") == WHO_DRC)
+    if drc.is_empty():
+        raise ValueError(f"No {WHO_DRC!r} rows to date the totals by")
+    drc_as_of = latest_date(drc["date"])
+    as_of = latest.group_by("country").agg(pl.col("date").max()).sort("country")
+    for country, day in as_of.filter(pl.col("date") != drc_as_of).rows():
+        logger.info("Totals dated by DRC (%s); %s is as of %s", drc_as_of, country, day)
+    return drc_as_of
+
+
 def prose_date(day: date) -> str:
     """Format a date as day and month name without the year, e.g. "18 October"."""
     return f"{day.day} {day:%B}"
@@ -314,11 +337,12 @@ def with_newer_sitrep(who: pl.DataFrame, provinces: pl.DataFrame) -> pl.DataFram
         sitrep_as_of,
         who_as_of,
     )
+    indicators = [WHO_CASES, WHO_DEATHS, WHO_RECOVERED]
     sitrep_rows = pl.DataFrame(
         {
-            "date": [sitrep_as_of] * 3,
-            "country": [WHO_DRC] * 3,
-            "indicator": [WHO_CASES, WHO_DEATHS, WHO_RECOVERED],
+            "date": [sitrep_as_of] * len(indicators),
+            "country": [WHO_DRC] * len(indicators),
+            "indicator": indicators,
             "value": [
                 float(totals[SITREP_INDICATORS["cases"]]),
                 float(totals[SITREP_INDICATORS["deaths"]]),
@@ -341,7 +365,7 @@ def headline_figures(
 
     Args:
         summary: Output of `country_summary`, including its Total row.
-        summary_as_of: Latest date across the rows `summary` was built from.
+        summary_as_of: Date for the Total row's figures (see `summary_date`).
         mapped: Output of `province_map`, one row per map province.
         sitrep_as_of: Date of the sitrep `mapped` comes from.
 
@@ -375,8 +399,9 @@ def headline_figures(
 def drc_outbreak_series(who: pl.DataFrame) -> pl.DataFrame:
     """Confirmed cases summed across all affected countries by date.
 
-    Takes WHO rows, or the output of `with_newer_sitrep`. Each country's last value is carried onto later dates first, because
-    countries are reported on different dates.
+    Takes WHO rows, or the output of `with_newer_sitrep`. Each country's last
+    value is carried onto later dates first, because countries are reported on
+    different dates.
     """
     confirmed = who.filter(pl.col("indicator") == WHO_CASES).select(
         "date", "country", "indicator", "value"
@@ -499,7 +524,7 @@ def main() -> None:
     sitrep_cases = provinces.filter(pl.col("indicator") == SITREP_INDICATORS["cases"])
     headline = headline_figures(
         summary=summary,
-        summary_as_of=latest_date(latest["date"]),
+        summary_as_of=summary_date(latest),
         mapped=mapped,
         sitrep_as_of=latest_date(sitrep_cases["date"]),
     )

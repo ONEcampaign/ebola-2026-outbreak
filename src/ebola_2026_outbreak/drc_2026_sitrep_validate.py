@@ -5,12 +5,12 @@ PDF text layer confirms. A table row is accepted when both models give the
 same row and it matches the row's printed cells. When the models disagree
 and exactly one model's row matches the printed cells, that row is accepted
 (text-layer arbitration, switched off with `arbitration=False`). Every other
-row is held: a row the text layer did not locate, a row whose name is unknown
-or filed under the wrong province, or a row both models read the same way but
-the text contradicts has every field flagged. A row the models disagree on
-and the text cannot settle has the fields the models dispute flagged
-`models_disagree`, and, when neither model matches the text, the rest flagged
-`text_mismatch`. The headline indicators have no text-layer row, so each is
+row is held. A row the text layer did not locate, a row whose name is unknown
+or filed under the wrong province, and a row both models read the same way
+but the text contradicts all have every field flagged. A row the models
+disagree on and the text cannot settle has the fields the models dispute
+flagged `models_disagree`, and, when neither model matches the text, the rest
+flagged `text_mismatch`. The headline indicators have no text-layer row, so each is
 accepted only when both models give the same value.
 
 A zone row that one model alone names, under a name the gazetteer lacks and
@@ -19,13 +19,13 @@ other model read correctly ("Mili-Murhesa" for "Miti-Murhesa"). It is
 dropped with a log line instead of holding the report, provided its province
 is canonical and every zone row the text layer locates there came back from
 a model under its canonical name. A name both models give, or one the page
-prints, is still flagged `unknown_name`, so a zone new to the gazetteer
-reaches a reviewer. A located zone neither model returned may have the
-misread as its only copy, so the misread is held, which covers a zone
-printing nothing but zeros and blanks that no sum check would catch. A
-dropped row standing for a zone the text layer did not locate leaves its
-province's zones short of the subtotal row, and the first sum check below
-flags the subtotal unless that zone too prints only zeros and blanks.
+prints, is flagged `unknown_name`, so a zone new to the gazetteer reaches a
+reviewer. A located zone neither model returned may have the misread as its
+only copy, so the misread is held. That also catches a zone printing nothing
+but zeros and blanks, which no sum check would. A dropped row for a zone the
+text layer did not locate leaves its province's zones short of the subtotal
+row, and the first sum check below flags the subtotal unless that zone too
+prints only zeros and blanks.
 
 Model agreement is exact, percentages included: 48.3 and 48.30000001
 disagree. Only the matcher compares a printed CFR within 0.05. The matcher
@@ -51,8 +51,8 @@ values:
    a section with no row at all is flagged as a whole.
 
 A blank counts as 0 in a sum. A check with an operand still under review is
-skipped, and a missing row is flagged by check 6, so no check goes unchecked
-silently. A failed check flags `sum_mismatch` on every operand a machine
+skipped, and a missing row is flagged by check 6, so every check either runs
+or is flagged. A failed check flags `sum_mismatch` on every operand a machine
 accepted, since two models can make the same error the text layer cannot
 see. A failed check whose operands a reviewer has all verified is a
 publisher discrepancy, released as printed and recorded.
@@ -62,6 +62,8 @@ import logging
 from collections.abc import Callable, Iterable, Set
 
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    CFR_EPSILON,
+    CFR_TOLERANCE,
     COUNT_FIELDS,
     FIELDS,
     SECTIONS,
@@ -80,9 +82,6 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
 from ebola_2026_outbreak.drc_2026_sitreps_parse import PROVINCES
 
 logger = logging.getLogger(__name__)
-
-# Largest gap between a printed CFR and the CFR its counts give.
-CFR_TOLERANCE = 0.05
 
 # Whether a model's values reproduce a row's printed cells.
 type Matcher = Callable[[TextRow, Values, Section], bool]
@@ -311,9 +310,11 @@ def _failures(
     """Failed checks as (target, operands, printed target, computed value)."""
 
     def present(cells: Iterable[Cell]) -> bool:
+        """Whether every cell has a value in `values`."""
         return all(key in values and field in values[key] for key, field in cells)
 
     def value(cell: Cell) -> Number:
+        """A cell's value, with a null read as 0."""
         key, field = cell
         return values[key][field] or 0
 
@@ -333,8 +334,7 @@ def _failures(
         if not present([cfr, deaths, cases]) or values[key]["cfr_pct"] is None:
             continue
         computed = 100 * value(deaths) / value(cases) if value(cases) else 0.0
-        # The epsilon keeps a rounding tie in (3 / 16 is 18.75, printed 18.7).
-        if abs(value(cfr) - computed) > CFR_TOLERANCE + 1e-9:
+        if abs(value(cfr) - computed) > CFR_TOLERANCE + CFR_EPSILON:
             yield cfr, [deaths, cases], values[key]["cfr_pct"], round(computed, 2)
 
 

@@ -11,9 +11,9 @@ Guinea, Liberia, Sierra Leone, Nigeria, Senegal and Mali since March 2014"
 
 The compilation has data-entry errors, such as Liberia at 342 then 22 on
 28 August 2014. A value far below the country's running maximum breaks its
-cumulative sequence, so it is dropped and logged rather than smoothed.
+cumulative sequence, so it is dropped and logged.
 Ministry figures run 2-4 days ahead of WHO's, so the joined series steps
-down slightly at the join; the size of that step is logged.
+down slightly at the join, and the size of that step is logged.
 """
 
 import logging

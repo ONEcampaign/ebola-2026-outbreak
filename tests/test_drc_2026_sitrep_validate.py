@@ -12,6 +12,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Extraction,
     Flag,
     Normalised,
+    Reconciled,
     RowKey,
     Section,
     TextRow,
@@ -44,10 +45,12 @@ ZONES = {
 
 
 def cfr(cases: int, deaths: int) -> float:
+    """The case fatality ratio in percent, to one decimal."""
     return round(100 * deaths / cases, 1)
 
 
 def table_row(counts: Iterable[int | None]) -> Values:
+    """A zone row from cases, deaths and daily counts."""
     cases, deaths, *daily = counts
     assert cases is not None and deaths is not None
     row: Values = dict(zip(COUNT_FIELDS, (cases, deaths, *daily), strict=True))
@@ -90,6 +93,7 @@ def report() -> dict[RowKey, Values]:
 def changed(
     rows: dict[RowKey, Values], key: RowKey, **fields: Any
 ) -> dict[RowKey, Values]:
+    """A copy of `rows` with `fields` overridden on `key`."""
     return {**rows, key: {**rows[key], **fields}}
 
 
@@ -106,6 +110,7 @@ def printed(values: Values, section: Section) -> str:
 
 
 def match(text: TextRow, values: Values, section: Section) -> bool:
+    """Whether the text layer prints `values` for the section."""
     return text.printed == printed(values, section)
 
 
@@ -115,6 +120,7 @@ def no_labels(names: Set[str]) -> set[str]:
 
 
 def text_layer(rows: dict[RowKey, Values]) -> dict[RowKey, TextRow]:
+    """A text layer that prints every non-KPI row."""
     return {
         key: TextRow(key, printed(values, key.section), True, 2, None)
         for key, values in rows.items()
@@ -123,6 +129,7 @@ def text_layer(rows: dict[RowKey, Values]) -> dict[RowKey, TextRow]:
 
 
 def model(rows: dict[RowKey, Values], flags: Iterable[Flag] = ()) -> Normalised:
+    """A normalised model answer holding `rows`."""
     return Normalised(Extraction(150, "2026-10-11", rows), list(flags))
 
 
@@ -131,7 +138,8 @@ def run(
     mistral: dict[RowKey, Values],
     text_rows: dict[RowKey, TextRow] | None = None,
     **kwargs: Any,
-):
+) -> Reconciled:
+    """Validate the two model answers against the text layer."""
     text_rows = text_layer(report()) if text_rows is None else text_rows
     return reconcile(
         model(gemini),
@@ -144,6 +152,7 @@ def run(
 
 
 def reasons(flags: Iterable[Flag]) -> dict[tuple[RowKey, str | None], str]:
+    """The flag reason by row and field."""
     return {(f.key, f.field): f.reason for f in flags}
 
 
@@ -308,6 +317,7 @@ def test_percentages_agree_only_when_exact(
     gemini_cfr: float, mistral_cfr: float, agree: bool
 ) -> None:
     def normalised(cfr_pct: float) -> Normalised:
+        """A normalised KPI answer with the given case fatality ratio."""
         kpis = dict.fromkeys(FIELDS["kpis"], 1) | {"cfr_pct": cfr_pct}
         raw = {
             "sitrep_no": 150,

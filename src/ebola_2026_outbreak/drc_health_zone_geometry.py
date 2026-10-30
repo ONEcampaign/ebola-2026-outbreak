@@ -3,11 +3,13 @@
 COD-AB's admin level 3 holds the 519 health zones (zones de santé), with
 boundaries from September 2019. The shapes are simplified as one coverage, so
 neighbouring zones keep a shared border, and written with each zone's P-code
-as `Code`. The sitrep gazetteer's zones are matched to those codes by province
-and name; zones COD-AB spells differently are listed in `COD_SPELLINGS`,
-and health areas the sitreps report as zones take their zone's code in
-`HEALTH_AREA_ZONES`. A sitrep zone with no shape keeps an empty code. Run by hand; the boundaries
-do not change with the outbreak data.
+as `Code` to `data/output/drc_health_zones_geometry.csv`. The sitrep
+gazetteer's zones are matched to those codes by province and name, and the
+matches are written to `data/reference/drc_2026_health_zone_codes.csv`. Zones
+COD-AB spells differently are listed in `COD_SPELLINGS`, and health areas the
+sitreps report as zones take their zone's code in `HEALTH_AREA_ZONES`. A
+sitrep zone with no shape keeps an empty code. Run it by hand when the
+gazetteer gains a zone.
 """
 
 import io
@@ -40,6 +42,7 @@ EXPECTED_ZONES = 519
 SIMPLIFY_TOLERANCE = 0.005
 # Degrees; four decimals is about 11 m.
 COORDINATE_GRID = 1e-4
+BYTES_PER_MB = 1e6
 POLYGON_TYPES = frozenset({"Polygon", "MultiPolygon"})
 
 # Sitrep zone name -> COD-AB name, for the same zone spelled differently.
@@ -155,7 +158,7 @@ def main() -> None:
     logger.info(
         "Wrote %d zones (%.1f MB) to %s",
         shapes.height,
-        GEOMETRY_PATH.stat().st_size / 1e6,
+        GEOMETRY_PATH.stat().st_size / BYTES_PER_MB,
         GEOMETRY_PATH.name,
     )
 

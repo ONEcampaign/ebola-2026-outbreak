@@ -1,4 +1,4 @@
-name: Daily DRC 2026 sitrep scrape
+name: DRC 2026 sitrep scrape
 
 on:
   schedule:
@@ -6,9 +6,14 @@ on:
     # 20:00), so check every 2 hours. A later run also retries one cancelled
     # by a queued release run in the shared concurrency group. Download,
     # extract and release are idempotent and the cache means no sitrep is paid
-    # for twice, so a run with no new sitrep does nothing.
+    # for twice, so a run with no new sitrep only rebuilds the chart tables,
+    # which also picks up any new WHO figures.
     - cron: "30 */2 * * *"
   workflow_dispatch:
+
+# No dev tool runs here, and uv run would otherwise sync the dev group back in.
+env:
+  UV_NO_DEV: "1"
 
 permissions:
   contents: write
@@ -22,7 +27,10 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
+      # A queued run builds from the tip of main, whatever SHA queued it.
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.0
@@ -31,7 +39,7 @@ jobs:
         run: uv python install '3.13'
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --no-dev
 
       - name: Configure git
         run: |
@@ -60,8 +68,17 @@ jobs:
             exit 0
           fi
           git commit -m "data: DRC 2026 sitrep extractions $(date -u +%Y-%m-%d)"
-          git pull --rebase
-          git push
+          # A WHO push can land between the pull and the push, so retry. Failing
+          # here would lose the answers just paid for.
+          for attempt in 1 2 3; do
+            if git pull --rebase && git push; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+          echo "::error::Could not push the extractions after 3 attempts"
+          exit 1
 
       # Release needs no keys. It opens an issue for any report held for review.
       # A failure here must not stop the province steps, so the job fails at the
@@ -94,18 +111,16 @@ jobs:
       - name: Build national series
         run: uv run python src/ebola_2026_outbreak/drc_2026_final.py
 
-      - name: Build chart tables
-        run: uv run python src/ebola_2026_outbreak/chart_tables.py
-
       - name: Commit sitrep data
         run: |
-          git add data/processed/drc_2026_*.csv data/output/*.csv data/output/*.json
+          git add data/processed/drc_2026_*.csv
           if git diff --cached --quiet; then
             echo "No data changes"
             exit 0
           fi
           git commit -m "data: DRC 2026 sitreps $(date -u +%Y-%m-%d)"
-          git pull --rebase
+          # On a conflict, drop the local commit. The next run rebuilds it.
+          git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
           git push
 
       # continue-on-error hides a zone failure from the job result. This step
@@ -115,3 +130,46 @@ jobs:
         run: |
           echo "::error::Zone release or its commit failed; see the Release zone data and Commit zone data steps"
           exit 1
+
+  # The only writer of data/output. The tables read the sitrep series and the
+  # WHO table, so they rebuild even when the scrape job fails, and new WHO
+  # figures still reach the charts.
+  tables:
+    needs: scrape
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      # The tip of main includes whatever the scrape job pushed.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+
+      - name: Set up Python 3.13
+        run: uv python install '3.13'
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Build chart tables
+        run: uv run python src/ebola_2026_outbreak/chart_tables.py
+
+      - name: Commit chart tables
+        run: |
+          git add data/output/*.csv data/output/*.json
+          if git diff --cached --quiet; then
+            echo "No chart table changes"
+            exit 0
+          fi
+          git commit -m "data: chart tables $(date -u +%Y-%m-%d)"
+          # On a conflict, drop the local commit. The tables are a pure
+          # function of committed state, so the next run rebuilds them.
+          git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
+          git push

@@ -20,9 +20,8 @@ resolved by adding an alias to the gazetteer.
 
 Raw model responses and the words of the PDF's table pages are cached in
 `data/interim/drc_2026_sitrep_extractions/<sha256>/`, keyed on the PDF's
-sha256 so a re-upload never overwrites the previous version's record. Parsed
-extractions and text-layer rows are not cached: release normalises again
-from the raw responses and reads the rows again from the words, so a
+sha256, so each upload keeps its own record. Release normalises the raw
+responses and reads the rows from the words again on every run, so a
 gazetteer change takes effect on the next run.
 """
 
@@ -36,12 +35,12 @@ from collections import defaultdict
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple, Self
 
 import polars as pl
 
 from ebola_2026_outbreak.drc_2026_sitreps_download import OUTBREAK, ROOT
-from ebola_2026_outbreak.drc_2026_sitreps_parse import TOTAL, canonical_province
+from ebola_2026_outbreak.drc_2026_sitreps_parse import canonical_province
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +50,15 @@ ZONE_START = date(2026, 8, 19)
 GAZETTEER_PATH = ROOT / "data" / "reference" / f"{OUTBREAK}_health_zones.csv"
 CACHE_DIR = ROOT / "data" / "interim" / f"{OUTBREAK}_sitrep_extractions"
 REVIEW_DIR = ROOT / "data" / "review" / OUTBREAK
+
+# Largest gap between a printed CFR and the CFR its counts give, in points.
+CFR_TOLERANCE = 0.05
+# Float slack on `CFR_TOLERANCE`, so a rounding tie stays in (3 / 16 is 18.75,
+# printed 18.7).
+CFR_EPSILON = 1e-9
+
+# Name keys (`name_key`) of the labels a Total row prints.
+TOTAL_KEYS = frozenset({"total", "totalgeneral", "totalnational", "totalrdc"})
 
 type Section = Literal["kpis", "provinces", "zone_subtotals", "zone_total", "zones"]
 type Extractor = Literal["gemini", "mistral"]
@@ -200,6 +208,44 @@ class ModelResult(NamedTuple):
     response: dict[str, Any]
 
 
+class UnusableAnswer(ValueError):
+    """A model answered, and the call was billed, but the answer is unusable.
+
+    Raised for an answer that stopped early, is not a JSON object, breaks the
+    schema, or names a model other than the pin. Extraction records it so
+    the same call is not paid for again on every run.
+
+    Attributes:
+        model_id_requested: Model id sent in the request (the pin).
+        requested_at: UTC timestamp of the request, ISO 8601.
+        response: The full response body, kept for audit.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        model_id_requested: str,
+        requested_at: str,
+        response: dict[str, Any],
+    ) -> None:
+        """Keep the request metadata and response alongside the message."""
+        super().__init__(message)
+        self.model_id_requested = model_id_requested
+        self.requested_at = requested_at
+        self.response = response
+
+    @classmethod
+    def from_result(cls, message: str, result: ModelResult) -> Self:
+        """Build the error from the `ModelResult` that proved unusable."""
+        return cls(
+            message,
+            model_id_requested=result.model_id_requested,
+            requested_at=result.requested_at,
+            response=result.response,
+        )
+
+
 class TextRow(NamedTuple):
     """A table row as printed in the PDF text layer.
 
@@ -261,6 +307,7 @@ type Gazetteer = dict[str, tuple[HealthZone, ...]]
 
 
 def _nullable(kind: str) -> dict[str, Any]:
+    """A JSON-schema type that accepts `kind` or null."""
     return {"type": [kind, "null"]}
 
 
@@ -275,6 +322,7 @@ def _object(properties: dict[str, Any], *, nullable: bool = False) -> dict[str, 
 
 
 def _fields(fields: tuple[str, ...]) -> dict[str, Any]:
+    """A JSON-schema property per field: number for percents, integer otherwise."""
     return {
         f: _nullable("number" if f in PERCENT_FIELDS else "integer") for f in fields
     }
@@ -377,6 +425,15 @@ def name_key(name: str) -> str:
     return re.sub(r"[\W_]+", "", letters)
 
 
+def is_total(key: str) -> bool:
+    """Whether a name key (`name_key`) labels a Total row.
+
+    A key in `TOTAL_KEYS` or any key starting with "total", so a label such as
+    "Total Ituri" counts, as does "Total général".
+    """
+    return key in TOTAL_KEYS or key.startswith("total")
+
+
 def _province(label: str) -> str | None:
     """Canonical province for a label, "Total", or None if unknown."""
     cleaned = " ".join(re.sub(r"[^\w\s-]", " ", label).split())
@@ -439,6 +496,7 @@ def _get(obj: object, where: str, field: str) -> Any:
 
 
 def _list(raw: object, section: Section) -> list[Any]:
+    """The list under `extraction.<section>`, or raise if it is not a list."""
     rows = _get(raw, "extraction", section)
     if not isinstance(rows, list):
         raise ValueError(f"{section} is not a list: {rows!r}")
@@ -446,6 +504,7 @@ def _list(raw: object, section: Section) -> list[Any]:
 
 
 def _name(row: object, section: Section, field: str) -> str:
+    """A row's province or zone label, or raise if it is not a string."""
     name = _get(row, section, field)
     if not isinstance(name, str):
         raise ValueError(f"{section}.{field} is not a string: {name!r}")
@@ -495,15 +554,16 @@ def canonical_key(
 
     Returns:
         The key and the flag reason, None when the names are canonical; or
-        None for a Total row, which belongs in `zone_total`.
+        None for a Total row (a label or zone name `is_total` accepts),
+        which belongs in `zone_total`.
     """
     section, label, zone = printed
     unknown = RowKey(section, label.strip(), zone.strip()), "unknown_name"
     if section in ("kpis", "zone_total"):
         return (printed, None) if not label and not zone else unknown
-    province = _province(label)
-    if province == TOTAL or (section == "zones" and name_key(zone) == name_key(TOTAL)):
+    if is_total(name_key(label)) or (section == "zones" and is_total(name_key(zone))):
         return None
+    province = _province(label)
     if section != "zones":
         if zone.strip() or province is None:
             return unknown
@@ -542,6 +602,7 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     flags: list[Flag] = []
 
     def add(printed: RowKey, values: Values) -> None:
+        """File a row under its canonical key, flagging duplicates and name problems."""
         if (canonical := canonical_key(printed, gazetteer)) is None:
             logger.info("Dropping a Total row filed in %s", printed.section)
             return

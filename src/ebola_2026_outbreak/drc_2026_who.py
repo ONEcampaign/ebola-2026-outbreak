@@ -34,18 +34,24 @@ MISSING = "-"
 # Footnote markers WHO appends to country names, e.g. "France ***", "Kenya#".
 FOOTNOTE_MARKERS = re.compile(r"[\s*#†]+$")
 
+# Labels other modules select on. A rename here reaches them all.
+DRC_COUNTRY = "Democratic Republic of the Congo"
+CONFIRMED_CASES = "Confirmed cases"
+CONFIRMED_DEATHS = "Confirmed deaths"
+RECOVERED = "Recovered"
+
 # Header text -> indicator label. Suspected deaths and CFR suspected appear
 # only in the May 2026 table images.
 INDICATORS = {
     "Suspected cases": "Suspected cases",
     "Suspected deaths": "Suspected deaths",
     "CFR (%) suspected": "CFR suspected (%)",
-    "Confirmed cases": "Confirmed cases",
-    "Confirmed deaths": "Confirmed deaths",
+    "Confirmed cases": CONFIRMED_CASES,
+    "Confirmed deaths": CONFIRMED_DEATHS,
     "Probable cases": "Probable cases",
     "Probable deaths": "Probable deaths",
     "CFR (%) confirmed": "CFR confirmed (%)",
-    "Recovered": "Recovered",
+    "Recovered": RECOVERED,
 }
 NON_ADDITIVE = frozenset({"CFR confirmed (%)", "CFR suspected (%)"})
 # Headers match ignoring spacing and case, and OCR typos ("Confrmed deaths")
@@ -54,7 +60,7 @@ HEADER_MATCH_CUTOFF = 0.9
 # Indicators used downstream: a Total mismatch here rejects the capture.
 # WHO's own Total row is occasionally off for the others (Recovered sums to
 # 1 970 against 1 960 on 24 September 2026), which only logs a warning.
-STRICT_INDICATORS = frozenset({"Confirmed cases", "Confirmed deaths"})
+STRICT_INDICATORS = frozenset({CONFIRMED_CASES, CONFIRMED_DEATHS})
 
 KEY = ["date", "country", "indicator"]
 SCHEMA = pl.Schema(
@@ -308,6 +314,9 @@ def upsert(new: pl.DataFrame, path: Path) -> pl.DataFrame:
     WHO revises figures, so a later `retrieved_at` replaces an earlier one.
     A re-capture of an unchanged value keeps the stored row, so a run that
     finds nothing new rewrites the CSV byte for byte and makes no commit.
+    The batch is reduced to its latest capture per key first, so a batch
+    holding a revision and then a revert back to the stored value keeps the
+    stored value.
 
     Args:
         new: Rows from one or more snapshots.
@@ -316,6 +325,9 @@ def upsert(new: pl.DataFrame, path: Path) -> pl.DataFrame:
     Returns:
         The merged DataFrame that was written.
     """
+    new = new.sort("retrieved_at", maintain_order=True).unique(
+        subset=KEY, keep="last", maintain_order=True
+    )
     frames = [new]
     if path.exists():
         existing = pl.read_csv(path, schema=SCHEMA)

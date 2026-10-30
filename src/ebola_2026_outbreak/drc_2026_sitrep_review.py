@@ -7,16 +7,15 @@ naming the row, the field, the PDF page and the reason, with an empty
 PDF instead of confirming a guess. A flag with no field (a whole section, or
 a province's zone rows, is missing) becomes one placeholder row with an empty
 `field`. The reviewer adds one row per cell of that section and province,
-with an empty `reason`; the placeholder's `reviewed_value` may be set to
+with an empty `reason`, and may set the placeholder's `reviewed_value` to
 `done`. A reviewer may add a row for any cell the same way, such as one a
 sum opens once a held value is typed in. `judge` in
 `drc_2026_sitreps_extract.py` decides which rows answer a cell under review,
 and the pull request check refuses an added row that answers none. A row
 flagged `unknown_name` that the table does not print (a misread zone name)
-is dismissed by typing `absent` in its cells. A missing
-row of a known shape (the headline indicators, the zone table's Total, a
-province subtotal) is flagged per field, so its cells are ordinary rows to
-fill.
+is dismissed by typing `absent` in its cells. A missing row of a known shape
+(the headline indicators, the zone table's Total, a province subtotal) is
+flagged per field, so its cells are ordinary rows to fill.
 
 The reviewer types each value as printed (a whole number, a decimal with a
 point, or `blank` for an empty cell) and opens a pull request. An unknown
@@ -88,6 +87,13 @@ COLUMNS = (
     "reason",
     "reviewed_value",
 )
+# The columns that name a row ("section / province / zone / field") in an
+# identity tuple, which is COLUMNS without the trailing `reviewed_value`.
+IDENTITY_LABEL_COLUMNS = slice(COLUMNS.index("section"), COLUMNS.index("field") + 1)
+# Leading characters of a PDF's SHA-256 in its review file name.
+SHA_PREFIX_LEN = 8
+# Arguments `git` puts before the caller's own: `git -C <repo>`.
+GIT_CMD_PREFIX_LEN = 3
 BLANK = "blank"
 # `reviewed_value` of a flagged row that is not in the PDF's table at all.
 ABSENT = "absent"
@@ -124,6 +130,7 @@ class ReviewError(ValueError):
     """
 
     def __init__(self, code: ReviewErrorCode, message: str) -> None:
+        """Store the machine-readable `code` next to the message."""
         super().__init__(message)
         self.code: ReviewErrorCode = code
 
@@ -166,7 +173,7 @@ class HeldReport(NamedTuple):
 
 def review_path(report_date: str, sha256: str, *, root: Path = REVIEW_DIR) -> Path:
     """Path of a report's review CSV."""
-    return root / f"{report_date}_{sha256[:8]}.csv"
+    return root / f"{report_date}_{sha256[:SHA_PREFIX_LEN]}.csv"
 
 
 def review_rows(
@@ -215,6 +222,7 @@ def review_rows(
         }
 
     def order(cell: tuple[RowKey, str]) -> tuple[int, str, str, int]:
+        """Sort key placing a cell in section, province, zone and field order."""
         key, field = cell
         fields = FIELDS[key.section]
         return (
@@ -288,6 +296,7 @@ def _records(text: str, name: str) -> list[tuple[int, dict[str, str]]]:
 
 
 def _review_row(record: dict[str, str]) -> ReviewRow:
+    """Validate a CSV record and return it as a `ReviewRow`."""
     section = record["section"]
     if section not in SECTIONS:
         raise ReviewError("unknown_section", f"unknown section {section!r}")
@@ -474,6 +483,7 @@ def _row_key(row: ReviewRow, gazetteer: Gazetteer) -> RowKey:
 
 
 def _absent_and_valued(key: RowKey) -> ReviewError:
+    """The error for a row marked absent that also carries values."""
     return ReviewError(
         "absent_and_valued",
         f"{describe(key)} is marked {ABSENT!r} and also given values",
@@ -509,6 +519,7 @@ def _dismissed(row: ReviewRow) -> bool:
 
 
 def _key(row: ReviewRow) -> RowKey:
+    """The `RowKey` a review row refers to."""
     return RowKey(row["section"], row["province"], row["zone"])
 
 
@@ -612,8 +623,8 @@ def _gh(args: list[str], *, body: str | None, dry_run: bool) -> str | None:
     return result.stdout.strip()
 
 
-def open_issues(*, dry_run: bool = False) -> dict[int, str]:
-    """The bodies of open issues labelled `LABEL`, by number; empty when skipped."""
+def open_issues(*, dry_run: bool = False) -> dict[int, str] | None:
+    """The bodies of open issues labelled `LABEL`, by number; None when skipped."""
     out = _gh(
         [
             "issue",
@@ -630,7 +641,7 @@ def open_issues(*, dry_run: bool = False) -> dict[int, str]:
         body=None,
         dry_run=dry_run,
     )
-    return {} if out is None else {i["number"]: i["body"] for i in json.loads(out)}
+    return None if out is None else {i["number"]: i["body"] for i in json.loads(out)}
 
 
 def create_issue(*, title: str, body: str, dry_run: bool = False) -> int | None:
@@ -768,6 +779,7 @@ def _changed_columns(
     """
 
     def identity(record: dict[str, str]) -> tuple[str, ...]:
+        """A record's columns other than the reviewer's value."""
         return tuple(record[c] for c in COLUMNS if c != "reviewed_value")
 
     added = Counter(identity(r) for _, r in new) - Counter(identity(r) for _, r in old)
@@ -775,8 +787,8 @@ def _changed_columns(
         identity(r) for _, r in new
     )
     errors = [
-        f"the row for {' / '.join(p for p in r[2:6] if p)} was removed or changed in a "
-        "column other than reviewed_value"
+        f"the row for {' / '.join(p for p in r[IDENTITY_LABEL_COLUMNS] if p)} was "
+        "removed or changed in a column other than reviewed_value"
         for r in removed.elements()
     ]
     for line, record in new:

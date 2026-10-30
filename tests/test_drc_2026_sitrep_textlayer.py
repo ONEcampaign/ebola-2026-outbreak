@@ -32,6 +32,7 @@ GAZETTEER = load_gazetteer()
 
 
 def read_truth() -> dict[str, dict[RowKey, Values]]:
+    """The truth rows from the fixture CSV, by SitRep number."""
     truth: defaultdict[str, dict[RowKey, Values]] = defaultdict(dict)
     with (FIXTURES / "truth.csv").open() as f:
         for r in csv.DictReader(f):
@@ -52,6 +53,7 @@ TRUTH = read_truth()
 
 @pytest.fixture(scope="module", params=sorted(TRUTH))
 def report(request: pytest.FixtureRequest) -> tuple[str, dict[RowKey, TextRow]]:
+    """A SitRep number with the rows read from its text layer."""
     sitrep = request.param
     return sitrep, read_rows(FIXTURES / f"SitRep_{sitrep}.json", GAZETTEER)
 
@@ -181,6 +183,7 @@ def _shift(text: str, dx: float) -> Callable[[str], str]:
     """An edit moving each dump word printing `text` by `dx` points."""
 
     def edit(word: str) -> str:
+        """Move the dump word printing `text` by `dx` points."""
         top, x0, x1, t = word.split(" ", 3)
         if t != text:
             return word

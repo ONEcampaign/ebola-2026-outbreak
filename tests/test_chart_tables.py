@@ -1,5 +1,6 @@
 """Tests for the chart-ready tables."""
 
+import logging
 from datetime import date, timedelta
 
 import polars as pl
@@ -20,6 +21,7 @@ from ebola_2026_outbreak.chart_tables import (
     latest_date,
     prose_date,
     province_map,
+    summary_date,
     weekly,
     weekly_comparison,
     west_africa_series,
@@ -191,6 +193,27 @@ def test_headline_figures_rejects_missing_total(who: pl.DataFrame) -> None:
         headline_figures(
             summary=summary, summary_as_of=D2, mapped=LOOKUP, sitrep_as_of=D2
         )
+
+
+def test_summary_date_uses_drc_date_over_newer_country(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    drc = "Democratic Republic of the Congo"
+    latest = who_rows(
+        [
+            (D1, drc, "Confirmed cases", 1000.0),
+            (D2, "Kenya", "Confirmed cases", 9.0),
+        ]
+    )
+    with caplog.at_level(logging.INFO):
+        assert summary_date(latest) == D1
+    assert "Kenya is as of 2026-10-18" in caplog.text
+
+
+def test_summary_date_rejects_missing_drc() -> None:
+    latest = who_rows([(D2, "Kenya", "Confirmed cases", 9.0)])
+    with pytest.raises(ValueError, match="No 'Democratic Republic of the Congo'"):
+        summary_date(latest)
 
 
 def test_latest_date_rejects_empty() -> None:

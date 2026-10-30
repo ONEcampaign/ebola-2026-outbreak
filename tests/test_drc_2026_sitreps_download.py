@@ -85,6 +85,51 @@ def test_resolve_conflict_neither_fits() -> None:
         resolve_report_date(header, anchors=ANCHORS)
 
 
+def test_resolve_conflict_tied_anchors_disagree() -> None:
+    # #149 and #151 are equally near #150 but expect 11 and 12 Oct.
+    anchors = [(149, date(2026, 10, 10)), (151, date(2026, 10, 13))]
+    header = SitrepHeader(150, date(2026, 10, 12), date(2026, 10, 11), None)
+    with pytest.raises(ValueError, match="expect different dates"):
+        resolve_report_date(header, anchors=anchors)
+
+
+def test_resolve_conflict_tied_anchors_agree() -> None:
+    header = SitrepHeader(150, date(2026, 10, 12), date(2026, 10, 11), None)
+    anchors = [*ANCHORS, (149, date(2026, 10, 10))]
+    assert resolve_report_date(header, anchors=anchors) == date(2026, 10, 11)
+
+
+def test_resolve_report_dates_keeps_stored_dates() -> None:
+    # #150 was resolved to 11 Oct against #149. A new upload also numbered 150
+    # with agreeing dates of 12 Oct is a nearer anchor; re-resolving the old
+    # row would flip it to 12 Oct.
+    rows = [
+        (149, date(2026, 10, 10), date(2026, 10, 10), date(2026, 10, 10)),
+        (150, date(2026, 10, 11), date(2026, 10, 12), date(2026, 10, 11)),
+        (150, None, date(2026, 10, 12), date(2026, 10, 12)),
+    ]
+    manifest = pl.DataFrame(
+        rows,
+        schema=[
+            "sitrep_number",
+            "report_date",
+            "printed_report_date",
+            "reference_date",
+        ],
+        orient="row",
+    )
+    manifest = manifest.select(
+        pl.col(c) if c in manifest.columns else pl.lit(None).alias(c)
+        for c in MANIFEST_SCHEMA
+    ).cast(MANIFEST_SCHEMA)
+    resolved = dlm.resolve_report_dates(manifest)
+    assert resolved["report_date"].to_list() == [
+        date(2026, 10, 10),
+        date(2026, 10, 11),
+        date(2026, 10, 12),
+    ]
+
+
 def test_resolve_no_dates() -> None:
     with pytest.raises(ValueError, match="No date"):
         resolve_report_date(SitrepHeader(None, None, None, None), anchors=ANCHORS)
@@ -184,6 +229,7 @@ def fake_api(monkeypatch: pytest.MonkeyPatch) -> FakeApi:
     api = FakeApi()
 
     def download(item: dlm.MediaItem, *, refresh: bool = False) -> Path:
+        """Record the download request and return a stub path."""
         api.downloads.append((item["id"], refresh))
         return Path(f"{item['id']}.pdf")
 
@@ -225,8 +271,28 @@ def test_download_creates_missing_sitrep_dir(
     monkeypatch.setattr(dlm, "SITREP_DIR", sitrep_dir)
     monkeypatch.setattr(dlm, "get", lambda url: type("R", (), {"content": b"%PDF"})())
     path = dlm.download(_item(710, "2026-10-20"))
-    assert path == sitrep_dir / "710.pdf"
+    assert path == sitrep_dir / "710_20261020.pdf"
     assert path.read_bytes() == b"%PDF"
+
+
+def test_download_names_file_by_modified_so_replaced_upload_is_fetched(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(dlm, "SITREP_DIR", tmp_path)
+    content = iter([b"old", b"new"])
+    monkeypatch.setattr(
+        dlm, "get", lambda url: type("R", (), {"content": next(content)})()
+    )
+    old = dlm.download(_item(710, "2026-10-20T08:15:00"))
+    new = dlm.download(_item(710, "2026-10-21T09:30:00"))
+    assert old != new
+    assert (old.read_bytes(), new.read_bytes()) == (b"old", b"new")
+    assert dlm.download(_item(710, "2026-10-21T09:30:00")) == new
+
+
+def test_local_pdf_name_rejects_empty_modified() -> None:
+    with pytest.raises(ValueError, match="modified"):
+        dlm.local_pdf_name(_item(710, "--"))
 
 
 def test_build_manifest_keeps_ministry_files_unlisted(fake_api: FakeApi) -> None:

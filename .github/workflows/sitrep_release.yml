@@ -8,11 +8,16 @@ on:
       - "data/reference/drc_2026_health_zones.csv"
   workflow_dispatch:
 
+# No dev tool runs here, and uv run would otherwise sync the dev group back in.
+env:
+  UV_NO_DEV: "1"
+
 permissions:
   contents: write
   issues: write
 
-# Shares the daily scrape's group so the two cannot push at the same time.
+# Shares the sitrep scrape's group (daily-scrape) so the two cannot push at the
+# same time.
 concurrency:
   group: daily-scrape
   cancel-in-progress: false
@@ -21,7 +26,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # A queued run builds from the tip of main, whatever SHA queued it.
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.0
@@ -30,7 +38,7 @@ jobs:
         run: uv python install '3.13'
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --no-dev
 
       - name: Configure git
         run: |

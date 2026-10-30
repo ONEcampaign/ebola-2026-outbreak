@@ -1,21 +1,26 @@
 """Fetch INRB's national DRC sitrep series to backfill and cross-check ours.
 
 INRB (with the Kraemer Lab, Oxford) hand-digitises the INSP sitrep banner
-figures in INRB-UMIE/BDBV2026-Data. Their series covers dates the
-sante.gouv.cd media API does not list (mid-June to early August 2026).
+figures in INRB-UMIE/BDBV2026-Data. Their series covers dates with no parsed
+sitrep (mid-June to early August 2026).
 
 The source is pinned to one commit so upstream edits to past data change our
-history only when `INRB_REF` is bumped. Run by hand; not part of the daily
-scrape.
+history only when `INRB_REF` is bumped. Run it by hand after bumping
+`INRB_REF`.
 """
 
 import io
 import logging
-from itertools import pairwise
 
 import polars as pl
 
-from ebola_2026_outbreak.drc_2026_sitreps_parse import INDICATORS, OUTBREAK, ROOT
+from ebola_2026_outbreak.drc_2026_sitreps_parse import (
+    INDICATORS,
+    MISSING,
+    OUTBREAK,
+    ROOT,
+    check_monotonic,
+)
 from ebola_2026_outbreak.fetch import get
 
 logger = logging.getLogger(__name__)
@@ -29,7 +34,6 @@ RAW_URL = (
 OUTPUT_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_inrb_national.csv"
 
 NATIONAL_NOM = "DRC"
-MISSING = "ND"
 # Our indicator label -> INRB metric (file insp_sitrep__<metric>__daily.csv).
 METRICS = {
     INDICATORS["cases"]: "national_cumulative_confirmed_cases",
@@ -106,23 +110,6 @@ def parse_national(*, raw: pl.DataFrame, metric: str, indicator: str) -> pl.Data
     ).sort("date")
 
 
-def check_monotonic(df: pl.DataFrame) -> None:
-    """Log any fall in a cumulative national count between dates."""
-    for indicator, group in df.drop_nulls("value").group_by(
-        "indicator", maintain_order=True
-    ):
-        for (d0, v0), (d1, v1) in pairwise(group.select("date", "value").iter_rows()):
-            if v1 < v0:
-                logger.warning(
-                    "INRB %s falls from %d (%s) to %d (%s)",
-                    indicator[0].lower(),
-                    v0,
-                    d0,
-                    v1,
-                    d1,
-                )
-
-
 def main() -> None:
     """Fetch, validate and write the INRB national series."""
     frames = [
@@ -130,7 +117,7 @@ def main() -> None:
         for label, metric in METRICS.items()
     ]
     national = pl.concat(frames).sort("date", "indicator")
-    check_monotonic(national)
+    check_monotonic(national, by=(), label="INRB")
     national.write_csv(OUTPUT_PATH)
     logger.info(
         "Wrote %d rows (%s to %s) to %s",

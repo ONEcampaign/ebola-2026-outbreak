@@ -1,12 +1,15 @@
-"""Check the sitrep extraction pipeline against 13 hand-checked reports.
+"""Check the sitrep extraction pipeline against hand-checked reports.
 
-The golden set is 13 current-layout reports between SitReps 96 and 157
-(`tests/fixtures/sitrep_golden/reports.csv`: report date, number, ministry
-URL, the PDF's sha256 and its word dump). Their truth is
-`tests/fixtures/sitrep_words/truth.csv` for the table rows, read from the
-text layer and checked against the PDFs, and
-`tests/fixtures/sitrep_golden/kpis.csv` for the headline indicators, checked
-against the rendered first page.
+The golden set is the current-layout reports listed in
+`tests/fixtures/sitrep_golden/reports.csv` (report date, number, ministry
+URL, the PDF's sha256 and its word dump, and the URL and sha256 of the INSP
+copy of the same report where the manifest lists one). Their truth has two
+parts.
+
+- Table rows are in `tests/fixtures/sitrep_words/truth.csv`, read from the
+  text layer and checked against the PDFs.
+- Headline indicators are in `tests/fixtures/sitrep_golden/kpis.csv`, checked
+  against the rendered first page.
 
 A report is scored by `judge`, the function release decides with, given no
 review. A value is accepted when `judge` leaves its cell closed, so a value
@@ -18,17 +21,19 @@ is a regression pin, not a measured error rate.
 
 Subcommands:
 
-- `record` runs the production clients (or one, with `--extractor`) on the 13
-  PDFs and saves each raw `ModelResult` as
+- `record` runs the production clients (or one, with `--extractor`) on the
+  golden PDFs and saves each raw `ModelResult` as
   `recorded/<extractor>/<report_date>.json`, the fixtures of the offline test
   (`tests/test_drc_2026_sitrep_golden.py`).
 - `run` is the live check, run weekly by `.github/workflows/sitrep_golden.yml`.
-  It downloads each PDF by URL, checks its sha256, runs both clients without
-  the cache, and prints accepted-wrong values, the flag rate and the returned
-  model ids. It exits 1 on any accepted-wrong value, a returned model id that
-  differs from the recorded one, or an extractor error, and 2 when it could
-  only fail on its sources: a URL that no longer serves the PDF, or a PDF
-  whose sha256 changed.
+  It takes each PDF from `--pdf-dir` by sha256, or downloads it from the
+  ministry URL, falling back to the INSP copy, and checks its sha256. The
+  INSP copies are other files of the same reports. Their table rows read the
+  same as the ministry copies'. It runs both clients without the cache, and
+  prints accepted-wrong values, the flag rate and the returned model ids. It
+  exits 1 on any accepted-wrong value, a returned model id that differs from
+  the recorded one, or an extractor error, and 2 when it could only fail on
+  its sources, because no URL of a report serves its recorded PDF.
 """
 
 import argparse
@@ -92,13 +97,25 @@ NO_TRUTH_ROW = "no truth row"
 
 
 class Report(NamedTuple):
-    """A golden report: where to fetch it and how to recognise it."""
+    """A golden report: where to fetch it and how to recognise it.
+
+    `insp_url` and `insp_sha256` are empty when INSP has no copy.
+    """
 
     report_date: str
     sitrep_no: int
     source_url: str
     sha256: str
     words: str
+    insp_url: str = ""
+    insp_sha256: str = ""
+
+    def sources(self) -> list[tuple[str, str]]:
+        """(URL, sha256) of each copy, the ministry's first."""
+        copies = [(self.source_url, self.sha256)]
+        if self.insp_url:
+            copies.append((self.insp_url, self.insp_sha256))
+        return copies
 
 
 class Score(NamedTuple):
@@ -134,12 +151,15 @@ def load_reports(path: Path = REPORTS_PATH) -> list[Report]:
                 r["source_url"],
                 r["sha256"],
                 r["words"],
+                r.get("insp_url") or "",
+                r.get("insp_sha256") or "",
             )
             for r in csv.DictReader(f)
         ]
 
 
 def _number(text: str, field: str) -> Number | None:
+    """Parse a truth-CSV cell: float for percents, int otherwise, None if blank."""
     if text == "":
         return None
     return float(text) if field in PERCENT_FIELDS else int(text)
@@ -267,31 +287,40 @@ def truth_cells(truth: Mapping[RowKey, Values]) -> int:
 
 
 def fetch_pdf(report: Report, directory: Path) -> Path:
-    """Download a golden PDF and check its sha256.
+    """Download a golden PDF and check its sha256, trying each copy in turn.
 
     Raises:
-        SourceError: If the URL fails, or the file is not the recorded one.
+        SourceError: If no copy downloads as its recorded file, naming why
+            each failed.
     """
-    try:
-        content = fetch.get(report.source_url).content
-    except httpx.HTTPError as e:
-        raise SourceError(
-            f"SOURCE GONE: SitRep {report.sitrep_no} ({report.report_date}) "
-            f"no longer downloads from {report.source_url}: {e}"
-        ) from e
+    label = f"SitRep {report.sitrep_no} ({report.report_date})"
     path = directory / f"{report.report_date}.pdf"
-    path.write_bytes(content)
-    if (sha256 := sha256_file(path)) != report.sha256:
-        raise SourceError(
-            f"SOURCE CHANGED: SitRep {report.sitrep_no} ({report.report_date}) "
-            f"at {report.source_url} has sha256 {sha256}, recorded {report.sha256}"
+    errors: list[str] = []
+    for url, expected in report.sources():
+        try:
+            content = fetch.get(url).content
+        except httpx.HTTPError as e:
+            errors.append(f"SOURCE GONE: {label} no longer downloads from {url}: {e}")
+            continue
+        path.write_bytes(content)
+        if (sha256 := sha256_file(path)) == expected:
+            return path
+        errors.append(
+            f"SOURCE CHANGED: {label} at {url} has sha256 {sha256}, recorded {expected}"
         )
-    return path
+    path.unlink(missing_ok=True)
+    raise SourceError("; ".join(errors))
 
 
 def _local_pdfs(pdf_dirs: Iterable[Path]) -> dict[str, Path]:
     """PDFs in the directories by sha256."""
     return {sha256_file(p): p for d in pdf_dirs for p in sorted(d.glob("*.pdf"))}
+
+
+def _pdf(report: Report, local: Mapping[str, Path], directory: Path) -> Path:
+    """A local copy of a golden PDF matched by sha256, or one downloaded."""
+    copy = next((local[sha] for _, sha in report.sources() if sha in local), None)
+    return copy or fetch_pdf(report, directory)
 
 
 # Commands
@@ -308,13 +337,13 @@ def record(
     Args:
         extractors: Which clients to run; their API keys must be set.
         limit: Record only the first `limit` reports.
-        pdf_dirs: Directories of local PDFs, matched by sha256; a report
-            with no local copy is downloaded.
+        pdf_dirs: Directories of local PDFs, matched by the sha256 of either
+            copy. A report with no local copy is downloaded.
     """
     local = _local_pdfs(pdf_dirs)
     with tempfile.TemporaryDirectory() as tmp:
         for report in load_reports()[:limit]:
-            pdf = local.get(report.sha256) or fetch_pdf(report, Path(tmp))
+            pdf = _pdf(report, local, Path(tmp))
             for extractor in extractors:
                 result = EXTRACT[extractor](pdf)
                 path = write_recorded(extractor, report, result)
@@ -327,8 +356,13 @@ def record(
                 )
 
 
-def run(*, limit: int | None = None) -> int:
+def run(*, limit: int | None = None, pdf_dirs: Iterable[Path] = ()) -> int:
     """Run both clients live on the golden PDFs and compare with the truth.
+
+    Args:
+        limit: Check only the first `limit` reports.
+        pdf_dirs: Directories of local PDFs, matched by the sha256 of either
+            copy. A report with no local copy is downloaded.
 
     Returns:
         0 if every report passes; 1 on an accepted-wrong value, a changed
@@ -339,12 +373,13 @@ def run(*, limit: int | None = None) -> int:
     failures: list[str] = []
     source_failures: list[str] = []
     flagged = total = 0
+    local = _local_pdfs(pdf_dirs)
 
     with tempfile.TemporaryDirectory() as tmp:
         for report in load_reports()[:limit]:
             label = f"SitRep {report.sitrep_no} ({report.report_date})"
             try:
-                pdf = fetch_pdf(report, Path(tmp))
+                pdf = _pdf(report, local, Path(tmp))
             except SourceError as e:
                 source_failures.append(str(e))
                 continue
@@ -415,22 +450,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--extractor", choices=EXTRACTORS, help="record one client (default: both)"
     )
     record_parser.add_argument("--limit", type=int)
-    record_parser.add_argument(
-        "--pdf-dir",
-        type=Path,
-        action="append",
-        default=[],
-        help="directory of local PDFs, matched by sha256 (repeatable)",
-    )
     run_parser = commands.add_parser("run", help="live check against the truth")
     run_parser.add_argument("--limit", type=int)
+    for sub in (record_parser, run_parser):
+        sub.add_argument(
+            "--pdf-dir",
+            type=Path,
+            action="append",
+            default=[],
+            help="directory of local PDFs, matched by sha256 (repeatable)",
+        )
     args = parser.parse_args(argv)
 
     if args.command == "record":
         extractors = [args.extractor] if args.extractor else EXTRACTORS
         record(extractors, limit=args.limit, pdf_dirs=args.pdf_dir)
         return 0
-    return run(limit=args.limit)
+    return run(limit=args.limit, pdf_dirs=args.pdf_dir)
 
 
 if __name__ == "__main__":

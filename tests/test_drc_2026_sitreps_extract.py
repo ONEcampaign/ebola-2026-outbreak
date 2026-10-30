@@ -4,6 +4,7 @@ import csv
 import json
 import shutil
 import subprocess
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -19,8 +20,10 @@ from ebola_2026_outbreak import drc_2026_sitreps_extract as ex
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     EXTRACTORS,
     GAZETTEER_PATH,
+    Extractor,
     ModelResult,
     RowKey,
+    UnusableAnswer,
     cache_path,
     write_model_result,
     write_words,
@@ -33,6 +36,7 @@ MISTRAL_157 = FIXTURES / "sitrep_models" / "mistral_157_response.json"
 WORDS_157 = FIXTURES / "sitrep_words" / "SitRep_157.json"
 
 DAY = date(2026, 8, 19)
+REQUEST = httpx.Request("POST", "https://api.example.org")
 NOW = "2026-10-20T12:00:00+00:00"
 SHA_A, SHA_B = "aa" * 32, "bb" * 32
 
@@ -42,14 +46,17 @@ ZONE_ROW_96 = ("12", "6", "50,0 %", "1", "0", None, "0")
 
 
 def _result(raw: dict[str, Any], model: str) -> ModelResult:
+    """A model result holding `raw` from `model`."""
     return ModelResult(raw, model, model, {}, "2026-10-19T08:00:00+00:00", {})
 
 
 def _raw_96() -> dict[str, Any]:
+    """The raw Gemini extraction of SitRep 96."""
     return gemini.parse_response(json.loads(GEMINI_96.read_text()))
 
 
 def _raw_157() -> dict[str, Any]:
+    """The raw Mistral extraction of SitRep 157."""
     return mistral.parse_annotation(json.loads(MISTRAL_157.read_text()))
 
 
@@ -157,6 +164,7 @@ def _ledger(*rows: tuple[int, str, str]) -> None:
 
 @pytest.fixture(autouse=True)
 def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point every output path of the extract module at `tmp_path`."""
     for name, path in {
         "MANIFEST_PATH": "manifest.csv",
         "CACHE_DIR": "cache",
@@ -170,24 +178,38 @@ def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def issues(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Any]]:
+def open_now() -> dict[int, str]:
+    """Open issues by number, as the fake `gh` lists them."""
+    return {}
+
+
+@pytest.fixture
+def issues(
+    monkeypatch: pytest.MonkeyPatch, open_now: dict[int, str]
+) -> list[tuple[str, Any]]:
     """Calls to the issue wrappers; each new issue is numbered from 7."""
     calls: list[tuple[str, Any]] = []
 
     def create(*, title: str, body: str, dry_run: bool = False) -> int:
+        """Record an issue creation and return its number."""
         calls.append(("create", title))
-        return 6 + sum(c[0] == "create" for c in calls)
+        number = 6 + sum(c[0] == "create" for c in calls)
+        open_now[number] = body
+        return number
 
     def close(number: int, *, comment: str, dry_run: bool = False) -> None:
+        """Record an issue closure."""
         calls.append(("close", number))
+        open_now.pop(number, None)
 
-    monkeypatch.setattr(ex, "open_issues", lambda *, dry_run=False: {})
+    monkeypatch.setattr(ex, "open_issues", lambda *, dry_run=False: dict(open_now))
     monkeypatch.setattr(ex, "create_issue", create)
     monkeypatch.setattr(ex, "close_issue", close)
     return calls
 
 
 def _status() -> dict[int, dict[str, Any]]:
+    """The status ledger rows by media ID."""
     return {r["media_id"]: r for r in pl.read_csv(ex.STATUS_PATH).to_dicts()}
 
 
@@ -280,6 +302,40 @@ def test_flagged_report_is_held_once(issues: list[tuple[str, Any]]) -> None:
     assert path.read_text() == before
     assert issues == [("create", "Review 1 held DRC sitrep")]
     assert _status()[710]["issue_number"] == 7
+
+
+def test_hand_closed_issue_of_held_report_is_replaced(
+    issues: list[tuple[str, Any]], open_now: dict[int, str]
+) -> None:
+    _manifest((710, "t1"))
+    _ledger((710, "t1", SHA_A))
+    _cache(SHA_A, _raw_157(), WORDS_157)
+    ex.run("release", now=NOW)
+    assert _status()[710]["issue_number"] == 7
+
+    open_now.clear()  # closed by hand, report still held
+    lines = ex.run("release", now=NOW)
+
+    assert _status()[710]["issue_number"] == 8
+    assert issues == [("create", "Review 1 held DRC sitrep")] * 2
+    assert not any(line.startswith("Closed issue") for line in lines)
+
+
+def test_issues_are_skipped_without_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    _manifest((710, "t1"))
+    _ledger((710, "t1", SHA_A))
+    _cache(SHA_A, _raw_157(), WORDS_157)
+
+    lines = ex.run("release", now=NOW)
+
+    assert _status()[710]["issue_number"] is None
+    assert any(
+        line.startswith("Skipped opening an issue for 1 held reports")
+        and line.endswith("(gh runs only inside GitHub Actions)")
+        for line in lines
+    )
+    assert not any(line.startswith("Opened") for line in lines)
 
 
 def _hold_96(sha: str = SHA_A) -> Path:
@@ -568,7 +624,7 @@ def test_upload_replaced_with_another_date_drops_its_old_date(
     assert statuses == {("t1", "superseded"), ("t2", "held")}
     assert pl.read_csv(ex.BY_ZONE_PATH).is_empty()
     assert (
-        f"Dropped {DAY} from the outputs: the ministry replaced the upload with a "
+        f"Dropped {DAY} from the outputs: INSP replaced the upload with a "
         "report of another date"
     ) in lines
 
@@ -601,13 +657,18 @@ def clients(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     """
     state: dict[str, Any] = {"calls": [], "fail": {}, "model": {}, "answer": {}}
 
-    def fake(extractor: str, pin: str):
+    def fake(extractor: str, pin: str) -> Callable[[Path], ModelResult]:
+        """An extractor fake answering per `state`."""
+
         def extract(pdf_path: Path) -> ModelResult:
+            """Record the call and answer or fail per `state`."""
             state["calls"].append(extractor)
             if error := state["fail"].get(extractor):
                 raise error
             result = _result(state["answer"].get(extractor, _raw_157()), pin)
-            return result._replace(model_id_returned=state["model"].get(extractor, pin))
+            return result._replace(
+                model_id_returned=state["model"].get(extractor, pin), requested_at=NOW
+            )
 
         return extract
 
@@ -640,48 +701,148 @@ def test_extract_fills_cache_once(
 
 
 def _without_zones() -> dict[str, Any]:
+    """The raw Mistral extraction with the zones removed."""
     return {k: v for k, v in _raw_157().items() if k != "zones"}
 
 
 @pytest.mark.parametrize(
-    ("fail", "model", "answer"),
+    "error",
     [
-        ({"gemini": httpx.ConnectError("down")}, {}, {}),
-        (
-            {"mistral": httpx.HTTPStatusError("429", request=None, response=None)},
-            {},
-            {},
+        httpx.ConnectError("down"),
+        httpx.HTTPStatusError(
+            "429", request=REQUEST, response=httpx.Response(429, request=REQUEST)
         ),
-        ({"gemini": gemini.GeminiError("finishReason: MAX_TOKENS")}, {}, {}),
-        ({"mistral": ValueError("no document_annotation")}, {}, {}),
-        ({}, {"mistral": "mistral-ocr-5-0"}, {}),
-        ({}, {}, {"gemini": _without_zones()}),
+        gemini.GeminiError(f"{gemini.API_KEY_ENV} is not set"),
     ],
-    ids=["transport", "status", "gemini", "annotation", "model-id", "malformed"],
+    ids=["transport", "status", "missing-key"],
 )
-def test_extractor_failure_leaves_upload_pending(
-    clients: dict[str, Any],
-    issues: list[tuple[str, Any]],
-    fail: dict[str, Exception],
-    model: dict[str, str],
-    answer: dict[str, dict[str, Any]],
+def test_unbilled_failure_is_retried_next_run(
+    clients: dict[str, Any], issues: list[tuple[str, Any]], error: Exception
 ) -> None:
-    clients["fail"], clients["model"], clients["answer"] = fail, model, answer
+    clients["fail"] = {"gemini": error}
     ex.run(None, now=NOW)
 
     row = _status()[710]
     assert row["status"] == "pending"
     assert row["extracted_at"] == NOW
-    failed = next(iter(fail or model or answer))
-    assert not cache_path(row["sha256"], failed, root=ex.CACHE_DIR).exists()
+    assert not cache_path(row["sha256"], "gemini", root=ex.CACHE_DIR).exists()
+    assert not ex.failure_path(row["sha256"], "gemini").exists()
     assert issues == []
 
-    # The next run retries only the missing answer, and releases.
+    # The next run, even at once, retries only the missing answer, and releases.
+    clients["fail"], clients["calls"] = {}, []
+    ex.run(None, now=NOW)
+    assert clients["calls"] == ["gemini"]
+    assert _status()[710]["status"] == "held"
+
+
+def _unusable(extractor: Extractor) -> UnusableAnswer:
+    """An unusable answer from `extractor`."""
+    return UnusableAnswer(
+        "Gemini candidate did not finish (finishReason: MAX_TOKENS)",
+        model_id_requested=ex._pin(extractor),
+        requested_at=NOW,
+        response={"candidates": []},
+    )
+
+
+LATER = "2026-10-21T11:59:59+00:00"  # just inside `FAILURE_BACKOFF` of NOW
+EXPIRED = "2026-10-21T12:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    ("fail", "model", "answer", "reason"),
+    [
+        ({"gemini": _unusable("gemini")}, {}, {}, "MAX_TOKENS"),
+        ({}, {"mistral": "mistral-ocr-5-0"}, {}, "'mistral-ocr-5-0', pinned to"),
+        ({}, {}, {"gemini": _without_zones()}, "breaks the schema"),
+    ],
+    ids=["unusable", "model-id", "malformed"],
+)
+def test_billed_unusable_answer_backs_off(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    fail: dict[Extractor, Exception],
+    model: dict[Extractor, str],
+    answer: dict[Extractor, dict[str, Any]],
+    reason: str,
+) -> None:
+    clients["fail"], clients["model"], clients["answer"] = fail, model, answer
+    ex.run(None, now=NOW)
+
+    failed = next(iter(fail or model or answer))
+    row = _status()[710]
+    assert (row["status"], row["extracted_at"]) == ("pending", NOW)
+    assert not cache_path(row["sha256"], failed, root=ex.CACHE_DIR).exists()
+    record = ex.read_failure(row["sha256"], failed)
+    assert record is not None
+    assert reason in record["reason"]
+    assert record["pin"] == ex._pin(failed)
+    assert record["requested_at"] == NOW
+    assert isinstance(record["response"], dict)
+
+    # Within the back-off the model is not called, even once it would answer.
     clients["fail"], clients["model"], clients["answer"] = {}, {}, {}
     clients["calls"] = []
     ex.run(None, now=NOW)
-    assert clients["calls"] == [failed]
+    assert clients["calls"] == []
+    assert _status()[710]["status"] == "pending"
+
+
+def _fail_gemini_once(clients: dict[str, Any]) -> str:
+    """Run once with Gemini's answer unusable; return the PDF's sha256."""
+    clients["fail"] = {"gemini": _unusable("gemini")}
+    ex.run(None, now=NOW)
+    clients["fail"], clients["calls"] = {}, []
+    return _status()[710]["sha256"]
+
+
+def test_billed_failure_retried_after_backoff(
+    clients: dict[str, Any], issues: list[tuple[str, Any]]
+) -> None:
+    sha = _fail_gemini_once(clients)
+    ex.run(None, now=LATER)
+    assert clients["calls"] == []
+
+    ex.run(None, now=EXPIRED)
+    assert clients["calls"] == ["gemini"]
     assert _status()[710]["status"] == "held"
+    assert not ex.failure_path(sha, "gemini").exists()
+
+
+def test_billed_failure_retried_at_once_after_pin_change(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_gemini_once(clients)
+    monkeypatch.setattr(gemini, "GEMINI_MODEL", "gemini-9-flash")
+    clients["model"] = {"gemini": "gemini-9-flash"}
+    ex.run(None, now=NOW)
+    assert clients["calls"] == ["gemini"]
+    assert _status()[710]["status"] == "held"
+
+
+def test_billed_failure_retried_once_record_deleted(
+    clients: dict[str, Any], issues: list[tuple[str, Any]]
+) -> None:
+    sha = _fail_gemini_once(clients)
+    ex.failure_path(sha, "gemini").unlink()
+    ex.run(None, now=NOW)
+    assert clients["calls"] == ["gemini"]
+
+
+def test_pin_mismatch_annotates_the_log(
+    clients: dict[str, Any],
+    issues: list[tuple[str, Any]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    clients["model"] = {"gemini": "gemini-0-flash"}
+    ex.run("extract", now=NOW)
+    assert (
+        "::error title=Model pin mismatch::gemini answered as 'gemini-0-flash', "
+        f"pinned to {gemini.GEMINI_MODEL!r}"
+    ) in capsys.readouterr().out
 
 
 class PDFSyntaxError(Exception):
@@ -694,6 +855,7 @@ def test_word_dump_failure_leaves_upload_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def damaged(pdf: Path, out: Path) -> Path:
+        """Fail as a damaged PDF."""
         raise PDFSyntaxError("damaged PDF")
 
     monkeypatch.setattr(ex, "dump_words", damaged)
@@ -737,6 +899,7 @@ def no_gh(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
 
     def refuse(*args: Any, **kwargs: Any) -> None:
+        """Fail on any `gh` call."""
         raise AssertionError("gh called in a dry run")
 
     monkeypatch.setattr(review.subprocess, "run", refuse)
@@ -795,6 +958,7 @@ def gh(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
 
     def run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        """Record a `gh` call and answer from `state`."""
         state["calls"].append(args[1:3])
         out = {
             ("issue", "list"): json.dumps(
@@ -842,3 +1006,13 @@ def test_pending_upload_adopts_an_orphan_issue(
 
     assert _status()[710]["issue_number"] == 5
     assert ["issue", "create"] not in gh["calls"]
+
+
+def test_release_refuses_a_moved_report_date() -> None:
+    moved = date(2026, 8, 20)
+    _manifest((710, "t1"), report_date=moved)
+    _ledger((710, "t1", SHA_A))
+
+    expected = f"media 710, modified t1: ledger {DAY}, manifest {moved}"
+    with pytest.raises(ValueError, match=expected):
+        ex.run("release", now=NOW)

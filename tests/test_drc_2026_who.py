@@ -101,6 +101,23 @@ def test_upsert_keeps_stored_row_for_unchanged_value(
     assert path.read_bytes() == before
 
 
+def test_upsert_revision_then_revert_in_one_batch_keeps_stored_value(
+    table: pl.DataFrame, tmp_path: Path
+) -> None:
+    path = tmp_path / "out.csv"
+    upsert(table, path)
+    before = path.read_bytes()
+    revision = table.with_columns(
+        retrieved_at=pl.lit(datetime(2026, 10, 21, tzinfo=UTC)),
+        value=pl.col("value") + 1,
+    )
+    revert = table.with_columns(retrieved_at=pl.lit(datetime(2026, 10, 22, tzinfo=UTC)))
+    # Revert listed first: the batch is ordered by capture time, not row order.
+    merged = upsert(pl.concat([revert, revision]), path)
+    assert _value(merged, "Democratic Republic of the Congo", "Confirmed cases") == 9552
+    assert path.read_bytes() == before
+
+
 def test_image_only_section_raises() -> None:
     html = (
         "<html><h2>Ebola disease (Bundibugyo virus)</h2>"

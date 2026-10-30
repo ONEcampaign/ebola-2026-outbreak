@@ -1,16 +1,22 @@
 """Extract zone-level sitrep data with two models and release what checks out.
 
-Two steps, run in this order by default:
+Four subcommands. `extract` and `release` run in this order by default, and
+`check` and `check-release` test review pull requests.
 
 - `extract` needs the API keys and the PDFs. For every latest upload of a
   report date from `ZONE_START` onwards, it downloads the PDF if absent and
-  fills whatever its cache lacks: the words of its table pages, Gemini's
-  answer and Mistral's answer, keyed on the PDF's sha256. An upload whose
+  fills whatever its cache lacks (the words of its table pages, Gemini's
+  answer and Mistral's answer), keyed on the PDF's sha256. An upload whose
   cache is complete costs no API call. An API error, an answer that breaks
   the schema, or a returned model id other than the pin leaves the upload
-  `pending`; the next run tries again, and the answer is not cached. Any
-  other error on an upload (a damaged PDF, say) is logged with its traceback
-  and leaves that upload pending too, keeping what was cached before it.
+  `pending`, and the answer is not cached. An HTTP error or a missing key is
+  tried again on the next run. An answer that was billed but is unusable (it
+  stopped early, is not JSON, breaks the schema, or names another model) is
+  recorded next to the answers as `<extractor>.failed.json`, and that model
+  is not called again on that PDF for `FAILURE_BACKOFF`. A pin change or
+  deleting the record forces a retry. Any other error on an upload
+  (a damaged PDF, say) is logged with its traceback and leaves that upload
+  pending too, keeping what was cached before it.
 - `release` needs neither keys nor PDFs. It is a function of committed files
   (the manifest, the cache, the review CSVs, the gazetteer and the status
   ledger). For every cached latest upload it normalises both answers and
@@ -18,22 +24,22 @@ Two steps, run in this order by default:
   gazetteer, reconciles the answers against the rows, applies a completed
   review whose sha256 matches, and runs the sum checks. A report with
   nothing open is released. Otherwise it is held and its review CSV is
-  written. An existing review CSV is not rewritten, since a reviewer may be
+  written. An existing review CSV is left as it is, since a reviewer may be
   filling it. Open cells it lacks (after a gazetteer edit, or a sum that
   runs only once a held row is typed in) are appended as new rows, unless a
   reviewer has added rows for them, and filled rows for cells that are not
   open are ignored.
 
-`by_zone.csv` and `headline.csv` are rebuilt from every released upload. A
-report date whose latest upload is held or pending keeps the values of the
-upload released before it, so no date drops out while a re-upload waits. That
-older upload is marked `superseded` once the new one is released, or at once
-when the ministry replaces it in place (same media id) with a report of
-another date; its old date then drops out, the one case release allows. The
-ledger (`extraction_status.csv`) keeps one row per upload. Its `extracted_at`
-is when the cached answers were requested, or, for a pending upload, when
-extraction was first tried, which is what the three-day issue rule counts
-from.
+`drc_2026_sitrep_by_zone.csv` and `drc_2026_sitrep_headline.csv` are rebuilt
+from every released upload. A report date whose latest upload is held or
+pending keeps the values of the upload released before it, so no date drops
+out while a re-upload waits. That older upload is marked `superseded` once the
+new one is released, or at once when INSP replaces it in place (same media
+id) with a report of another date. Its old date then drops out, the only case
+release allows. The ledger (`drc_2026_sitrep_extraction_status.csv`) keeps one
+row per upload. Its `extracted_at` is when the cached answers were requested,
+or, for a pending upload, when extraction was first tried, which
+`PENDING_DAYS` counts from.
 
 `check` tests a review pull request. After the review file rules of
 `drc_2026_sitrep_review.check_diff`, it runs the whole of release on the
@@ -50,11 +56,10 @@ a released upload fails there, before it reaches main.
 
 A run that newly holds reports opens one issue listing them, and a run that
 finds uploads pending for `PENDING_DAYS` days running opens one issue for
-those. The ledger records each upload's issue, and each issue carries a
-hidden marker per upload, so no run opens a second issue for an upload
-already tracked. An open issue whose marker names the upload is adopted even
-when its number never reached the ledger. An issue is commented on and
-closed once none of its uploads is held or pending.
+those. The ledger records each upload's issue, and an open issue whose hidden
+marker names an upload is adopted even when its number never reached the
+ledger (see `drc_2026_sitrep_review`). An issue is commented on and closed
+once none of its uploads is held or pending.
 
 Release computes everything first, then checks that no output key repeats
 and no previously released date drops out, and only then opens issues and
@@ -67,15 +72,16 @@ calls nothing.
 
 import argparse
 import functools
+import json
 import logging
 import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Iterable, Sequence
-from datetime import UTC, date, datetime
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import httpx
 import polars as pl
@@ -83,6 +89,7 @@ import polars as pl
 from ebola_2026_outbreak import drc_2026_sitrep_gemini as gemini
 from ebola_2026_outbreak import drc_2026_sitrep_mistral as mistral
 from ebola_2026_outbreak.drc_2026_sitrep_review import (
+    GIT_CMD_PREFIX_LEN,
     REVIEWERS,
     HeldReport,
     ReviewError,
@@ -123,8 +130,10 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     RowKey,
     Status,
     TextRow,
+    UnusableAnswer,
     Values,
     atomic_write,
+    cache_path,
     load_gazetteer,
     normalise,
     read_model_result,
@@ -167,9 +176,13 @@ PENDING_DAYS = 3
 # Statuses that keep an upload's issue open.
 OPEN: frozenset[Status] = frozenset({"held", "pending"})
 # Errors that leave an upload pending: HTTP failures, unusable or
-# schema-breaking answers (ValueError), a missing key, GeminiError or a
-# changed model id (RuntimeError).
+# schema-breaking answers (ValueError, UnusableAnswer among them), or a
+# missing key (GeminiError, RuntimeError).
 EXTRACTOR_ERRORS = (httpx.HTTPError, ValueError, RuntimeError)
+# How long a billed but unusable answer stops a model being called again on
+# the same PDF under the same pin. Runs are every 2 h, so this caps the
+# repeat cost of a deterministic failure at one call a day.
+FAILURE_BACKOFF = timedelta(hours=24)
 KPIS = RowKey("kpis", "", "")
 # How `judge` reconciles, for release and the review check alike. Text-layer
 # arbitration stays on only while the golden set shows no accepted-wrong value.
@@ -233,6 +246,7 @@ class Upload(NamedTuple):
 
     @property
     def key(self) -> UploadKey:
+        """The (media_id, modified) pair that identifies this upload."""
         return (self.media_id, self.modified)
 
 
@@ -273,6 +287,7 @@ class Records(NamedTuple):
 
     @property
     def complete(self) -> bool:
+        """Whether all three extractions are present."""
         return None not in (self.gemini, self.mistral, self.words)
 
 
@@ -307,8 +322,8 @@ class Release(NamedTuple):
     `published` maps each report date to the upload whose values are in the
     outputs. `reviews` holds the rows of new review files, `appended` the
     rows to add to existing ones. `replaced` holds the report dates that
-    leave the outputs because the ministry replaced their released upload in
-    place with a report of another date.
+    leave the outputs because INSP replaced their released upload in place
+    with a report of another date.
     """
 
     ledger: Ledger
@@ -383,6 +398,7 @@ def read_ledger(*, repo: Path | None = None) -> Ledger:
 
 
 def _parse_ledger(csv: bytes) -> Ledger:
+    """Parse ledger CSV bytes into rows keyed by upload."""
     rows = pl.read_csv(csv, schema=STATUS_SCHEMA).iter_rows(named=True)
     return {(r["media_id"], r["modified"]): LedgerRow(**r) for r in rows}
 
@@ -399,6 +415,7 @@ def read_records(sha256: str | None, *, root: Path | None = None) -> Records:
 
 
 def _new_row(upload: Upload) -> LedgerRow:
+    """A pending ledger row for an upload not yet extracted."""
     return LedgerRow(
         report_date=upload.report_date,
         media_id=upload.media_id,
@@ -479,7 +496,9 @@ def extract(
                 pdf = download(_media_item(upload))
                 sha256 = sha256_file(pdf)
                 row = row._replace(sha256=sha256)
-                records = _fill(pdf, sha256, read_records(sha256), gazetteer=gazetteer)
+                records = _fill(
+                    pdf, sha256, read_records(sha256), gazetteer=gazetteer, now=now
+                )
             except Exception:
                 logger.exception(
                     "Extracting %s (media %s, modified %s) failed",
@@ -494,6 +513,7 @@ def extract(
 
 
 def _media_item(upload: Upload) -> MediaItem:
+    """The manifest entry sent to the extractors for an upload."""
     return {
         "id": upload.media_id,
         "modified": upload.modified,
@@ -502,13 +522,17 @@ def _media_item(upload: Upload) -> MediaItem:
     }
 
 
-def _fill(pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer) -> Records:
+def _fill(
+    pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer, now: str
+) -> Records:
     """Compute and cache each missing record of one PDF.
 
     Each record is cached as soon as it is made, and a model that fails is
     logged and left missing, so one model's outage leaves the other's answer
     in the cache. An answer that breaks the extraction schema, or names a
-    model other than the pin, counts as a failure.
+    model other than the pin, counts as a failure. A billed but unusable
+    answer is recorded with `write_failure`, and a model whose record is
+    `backing_off` is not called.
     """
     if records.words is None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -517,33 +541,130 @@ def _fill(pdf: Path, sha256: str, records: Records, *, gazetteer: Gazetteer) -> 
     for extractor in EXTRACTORS:
         if getattr(records, extractor) is not None:
             continue
+        failure = read_failure(sha256, extractor)
+        if failure is not None and backing_off(failure, pin=_pin(extractor), now=now):
+            logger.warning(
+                "Not calling %s on %s: its answer of %s was unusable (%s); "
+                "delete %s to retry before %s",
+                extractor,
+                pdf.name,
+                failure["requested_at"],
+                failure["reason"],
+                _relative(failure_path(sha256, extractor)),
+                _retry_at(failure).isoformat(timespec="seconds"),
+            )
+            continue
         try:
             result = _call(extractor, pdf)
-            normalise(result.extraction_raw, gazetteer)
+            _check_schema(result, gazetteer)
+        except UnusableAnswer as e:
+            logger.error("%s answer unusable on %s: %s", extractor, pdf.name, e)
+            write_failure(sha256, extractor, e)
+            continue
         except EXTRACTOR_ERRORS as e:
             logger.error("%s failed on %s: %s", extractor, pdf.name, e)
             continue
         records = records._replace(**{extractor: result})
         write_model_result(sha256, extractor, result, root=CACHE_DIR)
+        failure_path(sha256, extractor).unlink(missing_ok=True)
     return records
+
+
+def _pin(extractor: Extractor) -> str:
+    """The model id an extractor is pinned to."""
+    return {"gemini": gemini.GEMINI_MODEL, "mistral": mistral.MISTRAL_OCR_MODEL}[
+        extractor
+    ]
 
 
 def _call(extractor: Extractor, pdf: Path) -> ModelResult:
     """One model's answer, checked against the pinned model id.
 
+    A mismatch is also written to stdout as a GitHub Actions `::error::`
+    annotation, since it blocks that model on every new upload until the pin
+    or the model is fixed.
+
     Raises:
-        RuntimeError: If the response names another model, or none.
+        UnusableAnswer: If the response names another model, or none.
     """
-    client, pin = {
-        "gemini": (gemini.extract, gemini.GEMINI_MODEL),
-        "mistral": (mistral.extract, mistral.MISTRAL_OCR_MODEL),
-    }[extractor]
+    client = gemini.extract if extractor == "gemini" else mistral.extract
+    pin = _pin(extractor)
     result = client(pdf)
     if result.model_id_returned != pin:
-        raise RuntimeError(
+        message = (
             f"{extractor} answered as {result.model_id_returned!r}, pinned to {pin!r}"
         )
+        # Workflow commands are read from stdout. A log line would prefix it.
+        print(f"::error title=Model pin mismatch::{message}", flush=True)
+        raise UnusableAnswer.from_result(message, result)
     return result
+
+
+def _check_schema(result: ModelResult, gazetteer: Gazetteer) -> None:
+    """Raise `UnusableAnswer` if a billed answer breaks the extraction schema."""
+    try:
+        normalise(result.extraction_raw, gazetteer)
+    except ValueError as e:
+        raise UnusableAnswer.from_result(
+            f"answer breaks the schema: {e}", result
+        ) from e
+
+
+# Failed attempts
+
+
+def failure_path(
+    sha256: str, extractor: Extractor, *, root: Path | None = None
+) -> Path:
+    """Path of the failed-attempt record of one model on one PDF."""
+    return cache_path(sha256, extractor, root=root or CACHE_DIR).with_suffix(
+        ".failed.json"
+    )
+
+
+def write_failure(
+    sha256: str,
+    extractor: Extractor,
+    error: UnusableAnswer,
+    *,
+    root: Path | None = None,
+) -> Path:
+    """Record a billed but unusable answer next to the cached answers.
+
+    The record holds when the call was made, why the answer was refused, the
+    pin in force and the raw response. It is not an answer, so `read_records`
+    ignores it, so the upload stays pending.
+    """
+    record = {
+        "requested_at": error.requested_at,
+        "reason": str(error),
+        "pin": error.model_id_requested,
+        "response": error.response,
+    }
+    text = json.dumps(record, indent=2, ensure_ascii=False) + "\n"
+    return atomic_write(failure_path(sha256, extractor, root=root), text)
+
+
+def read_failure(
+    sha256: str, extractor: Extractor, *, root: Path | None = None
+) -> dict[str, Any] | None:
+    """The failed-attempt record of one model on one PDF, or None."""
+    path = failure_path(sha256, extractor, root=root)
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def backing_off(failure: dict[str, Any], *, pin: str, now: str) -> bool:
+    """Whether a failed attempt still stops the model being called.
+
+    It does while it is younger than `FAILURE_BACKOFF` and was made under
+    the pin now in force. A pin change retries at once.
+    """
+    return failure["pin"] == pin and datetime.fromisoformat(now) < _retry_at(failure)
+
+
+def _retry_at(failure: dict[str, Any]) -> datetime:
+    """When a failed attempt stops blocking its model."""
+    return datetime.fromisoformat(failure["requested_at"]) + FAILURE_BACKOFF
 
 
 # Release
@@ -704,8 +825,10 @@ def release(
 
     Raises:
         ValueError: If an upload released before no longer releases while
-            its date has no newer released upload.
+            its date has no newer released upload, or if the manifest dates
+            an upload differently from the ledger.
     """
+    _check_dates(manifest, ledger)
     out: Ledger = {}
     reviews: dict[Path, list[ReviewRow]] = {}
     held: dict[UploadKey, HeldReport] = {}
@@ -775,7 +898,7 @@ def release(
     # Of the uploads that are no longer latest, the last released one of a date
     # whose latest upload is not released stays published and every other is
     # superseded. So is one whose media id now holds a report of another date:
-    # the ministry replaced the file, and its old date has no source left.
+    # INSP replaced the file, and its old date has no source left.
     by_date = {u.report_date: u for u in uploads}
     moved = _moved(manifest, ledger)
     replaced: set[date] = set()
@@ -836,6 +959,40 @@ def release(
     )
 
 
+def _check_dates(manifest: pl.DataFrame, ledger: Ledger) -> None:
+    """Refuse an upload whose manifest report date differs from the ledger's.
+
+    Release keeps the ledger's date, so a moved date would publish under one
+    date while the ledger keeps another. `resolve_report_dates` says how to
+    fix a wrong date.
+
+    Raises:
+        ValueError: Naming each such upload and both dates.
+    """
+    if not ledger:
+        return
+    moved = (
+        ledger_frame(ledger)
+        .select("media_id", "modified", "report_date")
+        .join(
+            manifest.select("media_id", "modified", "report_date"),
+            on=["media_id", "modified"],
+            suffix="_manifest",
+        )
+        .filter(pl.col("report_date") != pl.col("report_date_manifest"))
+        .sort("media_id", "modified")
+    )
+    if moved.height:
+        raise ValueError(
+            "The manifest dates uploads differently from the ledger: "
+            + "; ".join(
+                f"media {r['media_id']}, modified {r['modified']}: ledger "
+                f"{r['report_date']}, manifest {r['report_date_manifest']}"
+                for r in moved.iter_rows(named=True)
+            )
+        )
+
+
 def _moved(manifest: pl.DataFrame, ledger: Ledger) -> set[UploadKey]:
     """Ledger uploads whose media id has a newer upload of another report date."""
     newer = (
@@ -850,6 +1007,7 @@ def _moved(manifest: pl.DataFrame, ledger: Ledger) -> set[UploadKey]:
 
 
 def _log_discrepancies(report: str, verdict: Verdict) -> None:
+    """Log each place the publisher's printed total differs from its sum."""
     for d in verdict.discrepancies:
         logger.info(
             "Publisher discrepancy in %s: %s %s printed %s, sums to %s",
@@ -862,6 +1020,7 @@ def _log_discrepancies(report: str, verdict: Verdict) -> None:
 
 
 def _cells(flags: Sequence[Flag]) -> set[Cell]:
+    """The (key, field) cells that `flags` point at."""
     return {(f.key, f.field or "") for f in flags}
 
 
@@ -884,10 +1043,12 @@ def _review_cells(row: ReviewRow, gazetteer: Gazetteer) -> set[Cell]:
 
 
 def _relative(path: Path) -> str:
+    """A path relative to the repo root, or as given when outside it."""
     return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
 
 
 def _by_zone(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.DataFrame:
+    """The long-format table of indicators by province and zone."""
     records = [
         {
             "outbreak": OUTBREAK,
@@ -912,6 +1073,7 @@ def _by_zone(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.Dat
 
 
 def _headline(published: Iterable[tuple[Upload, dict[RowKey, Values]]]) -> pl.DataFrame:
+    """The long-format table of headline indicators."""
     records = [
         {
             "outbreak": OUTBREAK,
@@ -938,6 +1100,7 @@ class OutputError(ValueError):
     def __init__(
         self, code: Literal["duplicate_key", "dates_dropped"], message: str
     ) -> None:
+        """Store the machine-readable `code` next to the message."""
         super().__init__(message)
         self.code = code
 
@@ -945,7 +1108,7 @@ class OutputError(ValueError):
 def check_outputs(result: Release, *, previous_dates: set[date]) -> None:
     """Refuse outputs with a repeated key, or without a date released before.
 
-    A date in `result.replaced` may drop out: the ministry replaced its upload.
+    A date in `result.replaced` may drop out, because INSP replaced its upload.
 
     Raises:
         OutputError: On either.
@@ -982,24 +1145,37 @@ def previous_dates() -> set[date]:
 
 
 def plan_issues(
-    before: Ledger, after: Ledger, *, today: date
+    before: Ledger,
+    after: Ledger,
+    *,
+    today: date,
+    open_numbers: Mapping[int, str] | None,
 ) -> tuple[Ledger, IssuePlan]:
     """Decide which issues to open and close.
 
     An upload keeps its issue while it stays in the status the issue was
-    opened for. A newly held upload goes in the run's held issue, and an
-    upload pending for `PENDING_DAYS` days with no issue goes in the run's
-    pending issue. An issue none of whose uploads is held or pending closes.
+    opened for and the issue is still open. A newly held upload goes in the
+    run's held issue, and an upload pending for `PENDING_DAYS` days with no
+    issue goes in the run's pending issue, so an upload whose issue was
+    closed by hand is tracked again. An open issue none of whose uploads is
+    held or pending closes.
 
     Args:
         before: The ledger the run started from.
         after: The ledger the run would write, issue numbers as carried.
         today: The run's date.
+        open_numbers: The open issues by number, or None when `gh` did not
+            run, in which case every carried number is taken as open.
 
     Returns:
         `after` with the issue numbers of open uploads settled (None where a
         new issue is due), and the plan.
     """
+
+    def is_open(number: int) -> bool:
+        """Whether a carried issue number names an issue still open."""
+        return open_numbers is None or number in open_numbers
+
     after = dict(after)
     held: list[UploadKey] = []
     stale: list[UploadKey] = []
@@ -1007,7 +1183,12 @@ def plan_issues(
         if row.status not in OPEN:
             continue
         prev = before.get(key)
-        if prev is not None and prev.status == row.status and prev.issue_number:
+        if (
+            prev is not None
+            and prev.status == row.status
+            and prev.issue_number
+            and is_open(prev.issue_number)
+        ):
             after[key] = row._replace(issue_number=prev.issue_number)
             continue
         after[key] = row._replace(issue_number=None)
@@ -1024,6 +1205,7 @@ def plan_issues(
         if (
             prev.status in OPEN
             and prev.issue_number
+            and is_open(prev.issue_number)
             and prev.issue_number not in still_open
         ):
             close.setdefault(prev.issue_number, []).append(key)
@@ -1038,7 +1220,12 @@ def _pending_days(row: LedgerRow, *, today: date) -> int:
 
 
 def handle_issues(
-    result: Release, plan: IssuePlan, ledger: Ledger, *, dry_run: bool
+    result: Release,
+    plan: IssuePlan,
+    ledger: Ledger,
+    *,
+    open_now: Mapping[int, str],
+    dry_run: bool,
 ) -> Ledger:
     """Open and close the planned issues; record new issue numbers.
 
@@ -1047,14 +1234,18 @@ def handle_issues(
     in a new issue. `gh` runs only inside GitHub Actions and not in a dry
     run, so elsewhere new uploads keep no issue number and a later run opens
     their issue.
+
+    Args:
+        result: The release.
+        plan: From `plan_issues`.
+        ledger: The ledger `plan_issues` settled.
+        open_now: Bodies of the open issues by number; empty when `gh` did
+            not run.
+        dry_run: Open and close nothing.
     """
     ledger = dict(ledger)
     run_url = _run_url()
-    existing = {
-        n: body
-        for n, body in open_issues(dry_run=dry_run).items()
-        if n not in plan.close
-    }
+    existing = {n: body for n, body in open_now.items() if n not in plan.close}
 
     def adopt(
         keys: list[UploadKey], marker: Callable[[UploadKey], str]
@@ -1115,8 +1306,10 @@ def pending_body(rows: Sequence[LedgerRow], *, run_url: str) -> str:
         f"{' '.join(REVIEWERS)}: extraction has failed for {PENDING_DAYS} days "
         "running on the uploads below, through an API error, an answer that "
         "breaks the schema, or a model id other than its pin. The run log "
-        "names the error. Each run tries again. This issue closes itself once "
-        "every upload is extracted.",
+        "names the error. Each run tries again after an API error; a billed "
+        "answer that was unusable is retried a day later, or at once if its "
+        "pin changes or its `.failed.json` record is deleted. This issue "
+        "closes itself once every upload is extracted.",
         "",
         "| Report date | Media id | Modified | First tried |",
         "| --- | --- | --- | --- |",
@@ -1334,18 +1527,25 @@ def summarise_extract(result: Extracted, *, called: bool) -> list[str]:
 
 
 def summarise_release(
-    result: Release, plan: IssuePlan, ledger: Ledger, *, dry_run: bool
+    result: Release, plan: IssuePlan, ledger: Ledger, *, dry_run: bool, gh_ran: bool
 ) -> list[str]:
-    """Lines describing what a release run did, or would do."""
+    """Lines describing what a release run did, or would do.
+
+    `gh_ran` is False when `gh` was skipped outside GitHub Actions. The
+    issues it would have opened and closed are then reported as skipped.
+    """
     counts = {
         s: sum(r.status == s for r in ledger.values())
         for s in ("released", "held", "pending", "superseded")
     }
-    write, open_, close = (
-        ("Would write", "Would open", "Would close")
-        if dry_run
-        else ("Wrote", "Opened", "Closed")
-    )
+    write = "Would write" if dry_run else "Wrote"
+    if dry_run:
+        open_, close = "Would open", "Would close"
+    elif gh_ran:
+        open_, close = "Opened", "Closed"
+    else:
+        open_, close = "Skipped opening", "Skipped closing"
+    skipped = "" if dry_run or gh_ran else " (gh runs only inside GitHub Actions)"
     lines = [
         "Release: " + ", ".join(f"{n} {s}" for s, n in counts.items()),
         f"{write} {result.by_zone.height} by-zone rows and "
@@ -1355,7 +1555,7 @@ def summarise_release(
         dates = ", ".join(str(d) for d in sorted(result.replaced))
         lines.append(
             f"{'Would drop' if dry_run else 'Dropped'} {dates} from the outputs: "
-            "the ministry replaced the upload with a report of another date"
+            "INSP replaced the upload with a report of another date"
         )
     lines += [
         f"{write} review file {_relative(p)} ({len(rows)} cells)"
@@ -1368,8 +1568,8 @@ def summarise_release(
     for keys, what in ((plan.held, "held reports"), (plan.stale, "pending uploads")):
         if keys:
             dates = ", ".join(str(ledger[k].report_date) for k in keys)
-            lines.append(f"{open_} an issue for {len(keys)} {what}: {dates}")
-    lines += [f"{close} issue #{n}" for n in plan.close]
+            lines.append(f"{open_} an issue for {len(keys)} {what}: {dates}{skipped}")
+    lines += [f"{close} issue #{n}{skipped}" for n in plan.close]
     return lines
 
 
@@ -1426,13 +1626,19 @@ def run(
 
     result = release(manifest, ledger, gazetteer=gazetteer, now=now)
     check_outputs(result, previous_dates=previous_dates())
+    open_now = open_issues(dry_run=dry_run)
     after, plan = plan_issues(
-        ledger, result.ledger, today=datetime.fromisoformat(now).date()
+        ledger,
+        result.ledger,
+        today=datetime.fromisoformat(now).date(),
+        open_numbers=open_now,
     )
-    after = handle_issues(result, plan, after, dry_run=dry_run)
+    after = handle_issues(result, plan, after, open_now=open_now or {}, dry_run=dry_run)
     if not dry_run:
         write_release(result, after)
-    return lines + summarise_release(result, plan, after, dry_run=dry_run)
+    return lines + summarise_release(
+        result, plan, after, dry_run=dry_run, gh_ran=open_now is not None
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1476,7 +1682,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             errors = check(base=args.base, repo=args.repo.resolve())
         except subprocess.CalledProcessError as e:
             print(
-                f"git {' '.join(e.cmd[3:])} failed: {e.stderr.strip()}", file=sys.stderr
+                f"git {' '.join(e.cmd[GIT_CMD_PREFIX_LEN:])} failed: {e.stderr.strip()}",
+                file=sys.stderr,
             )
             return 1
         for error in errors:

@@ -6,9 +6,9 @@ Every page of the PDF is rendered to a PNG at 110 dpi and sent in one
 256-colour palette blurs small digits. Gemini returns the extraction as JSON
 text in its first candidate.
 
-Temperature is not sent, because Gemini 3.6 Flash and newer ignore it.
-Repeated calls can differ. The cache and the Mistral cross-check supply determinism.
-The response's `modelVersion` is recorded so a silent model change shows up
+Gemini 3.6 Flash and newer ignore temperature, so none is sent. Repeated
+calls can differ, so the cache fixes the answer used and the Mistral
+cross-check catches a bad one. The response's `modelVersion` is recorded so a silent model change shows up
 against the pin.
 
 The API key is read from `GEMINI_API_KEY` and travels only in the
@@ -28,7 +28,12 @@ import httpx
 import pdfplumber
 
 from ebola_2026_outbreak import fetch
-from ebola_2026_outbreak.drc_2026_sitrep_schema import PROMPT, ModelResult, schema_for
+from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    PROMPT,
+    ModelResult,
+    UnusableAnswer,
+    schema_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +133,10 @@ def extract(
         metadata and the full response body.
 
     Raises:
-        GeminiError: If `GEMINI_API_KEY` is unset, or the response holds no
-            usable extraction.
+        GeminiError: If `GEMINI_API_KEY` is unset.
+        UnusableAnswer: If Gemini answered, billing the call, but the answer
+            holds no usable extraction (see `parse_response`). It carries
+            the response body.
         httpx.HTTPError: If the request fails after retries.
     """
     key = os.environ.get(API_KEY_ENV)
@@ -147,8 +154,14 @@ def extract(
         timeout=TIMEOUT_S,
     )
     body = response.json()
+    try:
+        extraction = parse_response(body)
+    except GeminiError as e:
+        raise UnusableAnswer(
+            str(e), model_id_requested=model, requested_at=requested_at, response=body
+        ) from e
     return ModelResult(
-        extraction_raw=parse_response(body),
+        extraction_raw=extraction,
         model_id_requested=model,
         model_id_returned=body.get("modelVersion"),
         usage=body.get("usageMetadata", {}),

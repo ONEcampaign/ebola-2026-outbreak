@@ -13,6 +13,8 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     HealthZone,
     ModelResult,
     RowKey,
+    canonical_key,
+    is_total,
     load_gazetteer,
     name_key,
     normalise,
@@ -26,6 +28,7 @@ GAZETTEER = load_gazetteer()
 
 
 def zone_row(province: str, zone: str, cases: Any = 12) -> dict[str, Any]:
+    """A zone row in `province` with `cases` confirmed."""
     return {
         "province": province,
         "zone": zone,
@@ -40,6 +43,7 @@ def zone_row(province: str, zone: str, cases: Any = 12) -> dict[str, Any]:
 
 
 def raw(**sections: Any) -> dict[str, Any]:
+    """A raw extraction with empty sections, overridden by `sections`."""
     empty = {
         "kpis": None,
         "provinces": [],
@@ -51,6 +55,7 @@ def raw(**sections: Any) -> dict[str, Any]:
 
 
 def walk_objects(schema: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every object schema nested inside `schema`."""
     found = [schema] if "properties" in schema else []
     children = [*schema.get("properties", {}).values()]
     if "items" in schema:
@@ -259,3 +264,18 @@ def test_cache_round_trip(tmp_path: Path) -> None:
         "gemini.json",
         "words.json",
     ]
+
+
+@pytest.mark.parametrize(
+    "label", ["Total", "TOTAL RDC", "Total général", "Total **", "Total Ituri"]
+)
+def test_total_labels_share_one_rule(label: str) -> None:
+    assert is_total(name_key(label))
+    assert canonical_key(RowKey("provinces", label, ""), GAZETTEER) is None
+    assert canonical_key(RowKey("zones", "Ituri", label), GAZETTEER) is None
+
+
+def test_total_prefix_rule_leaves_totaux_unknown() -> None:
+    printed = RowKey("zone_subtotals", "Totaux", "")
+    assert not is_total(name_key("Totaux"))
+    assert canonical_key(printed, GAZETTEER) == (printed, "unknown_name")

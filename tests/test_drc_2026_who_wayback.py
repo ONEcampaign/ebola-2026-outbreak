@@ -34,6 +34,7 @@ def test_parse_snapshots_stops_at_first_fetch_failure(
     pages = {GOOD: FIXTURE.read_text()}
 
     def load(timestamp: str) -> str:
+        """Serve the pages by timestamp, failing on any other."""
         if timestamp not in pages:
             raise httpx.ConnectError("Connection refused")
         return pages[timestamp]

@@ -4,8 +4,7 @@ Follows `create_expenditure_by_source()` in ONEcampaign/topic_health_financing
 (scripts/analysis/create_data.py) for one country, sourcing GHED through
 `bblocks.data_importers.GHED`. Output is one row per year from 2013 to 2023
 with total current health expenditure in millions of constant 2023 USD and
-each source's
-share of it, in percent: domestic government, external, other private and
+each source's share of it, in percent: domestic government, external, other private and
 out-of-pocket.
 """
 

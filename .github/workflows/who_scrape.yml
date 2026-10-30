@@ -2,16 +2,21 @@ name: WHO scrape
 
 on:
   schedule:
-    # WHO updates its table at no fixed time and not every day, so check
-    # every 2 hours, on the hour, between the sitrep runs at half past.
+    # WHO updates its table on irregular days and hours, so check every 2
+    # hours.
     - cron: "0 */2 * * *"
   workflow_dispatch:
+
+# No dev tool runs here, and uv run would otherwise sync the dev group back in.
+env:
+  UV_NO_DEV: "1"
 
 permissions:
   contents: write
 
-# Outside the daily-scrape group, so a queued sitrep run cannot cancel a
-# capture. WHO shows only the latest figures, so a lost day cannot be recovered.
+# Outside the sitrep scrape's group (daily-scrape), so a queued sitrep run
+# cannot cancel a capture. WHO shows only the latest figures, so a missed
+# capture depends on the Wayback backfill to fill it.
 concurrency:
   group: who-scrape
   cancel-in-progress: false
@@ -29,7 +34,7 @@ jobs:
         run: uv python install '3.13'
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --no-dev
 
       - name: Configure git
         run: |
@@ -39,6 +44,18 @@ jobs:
       - name: Scrape WHO table
         run: uv run python src/ebola_2026_outbreak/drc_2026_who.py
 
+      # The page snapshot sits in gitignored data/raw. Keep it as an artifact so
+      # a capture that fails to parse can be recovered.
+      - name: Upload WHO page snapshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: who-page-snapshot
+          path: data/raw/drc_2026/who/*.html
+          retention-days: 90
+
+      # The chart tables read this CSV. The sitrep scrape rebuilds them, so a
+      # WHO change reaches the charts at its next run.
       - name: Commit WHO table
         run: |
           git add data/processed/drc_2026_who_by_country.csv
@@ -48,22 +65,4 @@ jobs:
           fi
           git commit -m "data: WHO Bundibugyo table $(date -u +%Y-%m-%d)"
           git pull --rebase
-          git push
-
-      # The chart tables read the WHO table, so rebuild them here instead of
-      # waiting for the next daily scrape.
-      - name: Build chart tables
-        run: uv run python src/ebola_2026_outbreak/chart_tables.py
-
-      - name: Commit chart tables
-        run: |
-          git add data/output/*.csv data/output/*.json
-          if git diff --cached --quiet; then
-            echo "No chart table changes"
-            exit 0
-          fi
-          git commit -m "data: chart tables $(date -u +%Y-%m-%d)"
-          # On a conflict, drop the local commit. The tables are a pure
-          # function of committed state, so the next run rebuilds them.
-          git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
           git push

@@ -2,19 +2,22 @@
 
 INSP (https://insp.cd/category/sitrep/) publishes each sitrep first. Its
 site is a WordPress front end whose media API lists every upload, other
-outbreaks' sitreps included, so only files marked "MVEBDB" are kept. Filenames are unreliable, so the report date comes from the PDF header. The
+outbreaks' sitreps included, so only files marked "MVEBDB" are kept.
+
+The report date comes from the PDF header, since filenames are unreliable. The
 header has two dates: the printed report date and the date inside the sitrep
 reference ("SitRep N°150 /MVE-BDBV/11/10/2026"). Usually they agree. When they
 do not, the date that fits the nearest sitrep whose two dates agree, counted
-forward by sitrep number, wins. Printed sitrep numbers are themselves
-occasionally wrong (two files print "N°153"), so they are kept for reference
-only. The manifest keeps one row per media item and flags the file kept for
-each report date.
+forward by sitrep number, wins. If equally near anchors disagree, the run
+fails. A date is resolved once, when its upload is new or replaced, and kept
+after that. Printed sitrep numbers are themselves occasionally wrong (two
+files print "N°153"), so they are kept for reference only. The manifest keeps
+one row per media item and flags the file kept for each report date.
 
-Until 28 October 2026 sitreps also came from the Ministry of Health's media
-API (https://sante.gouv.cd/documents/sitreps), which publishes them a day or
-more later and is no longer read. Its files stay in the manifest, and a date
-that has one keeps it, so no report already processed changes file.
+The manifest also holds files from the Ministry of Health's media API
+(https://sante.gouv.cd/documents/sitreps), which published sitreps a day or
+more after INSP and was last read on 28 October 2026. A date that has a
+ministry file keeps it, so no processed report changes file.
 """
 
 import logging
@@ -166,8 +169,9 @@ def resolve_report_date(
         The report date.
 
     Raises:
-        ValueError: If the header has no date, or its two dates disagree and
-            neither fits the nearest anchor.
+        ValueError: If the header has no date, if its two dates disagree and
+            the nearest anchors expect different dates (anchors follow more
+            than one number-to-date offset), or if neither date fits.
     """
     printed, reference = header.report_date, header.reference_date
     if printed is None or reference is None or printed == reference:
@@ -178,10 +182,20 @@ def resolve_report_date(
     sitrep_number = header.sitrep_number
     if sitrep_number is None or not anchors:
         raise ValueError(f"Header dates disagree and no anchor to settle: {header}")
-    number, anchor_date = min(anchors, key=lambda a: abs(a[0] - sitrep_number))
-    expected = anchor_date + timedelta(days=sitrep_number - number)
+    distance = min(abs(number - sitrep_number) for number, _ in anchors)
+    nearest = [a for a in anchors if abs(a[0] - sitrep_number) == distance]
+    candidates = {
+        anchor_date + timedelta(days=sitrep_number - number)
+        for number, anchor_date in nearest
+    }
+    if len(candidates) > 1:
+        raise ValueError(
+            f"Nearest anchors {sorted(nearest)} expect different dates "
+            f"{sorted(candidates)}: {header}"
+        )
+    expected = candidates.pop()
     if expected not in {printed, reference}:
-        raise ValueError(f"Neither header date fits sitrep #{number}: {header}")
+        raise ValueError(f"Neither header date fits the expected {expected}: {header}")
     logger.warning(
         "Sitrep %s prints report date %s and reference date %s; using %s",
         header.sitrep_number,
@@ -234,20 +248,35 @@ def is_ministry(source_url: str) -> bool:
     return source_url.startswith(MINISTRY_SITE)
 
 
+def local_pdf_name(item: MediaItem) -> str:
+    """Name a media item's local PDF from its id and `modified` stamp.
+
+    Keying on `modified` as well as the id gives an upload replaced in place
+    a new file name, so each version of an upload has its own local copy.
+
+    Raises:
+        ValueError: If `modified` has no letters or digits to name the file by.
+    """
+    stamp = re.sub(r"[^0-9A-Za-z]+", "", item["modified"])
+    if not stamp:
+        raise ValueError(f"Media {item['id']} has no usable modified stamp")
+    return f"{item['id']}_{stamp}.pdf"
+
+
 def download(item: MediaItem, *, refresh: bool = False) -> Path:
     """Download a media item to the sitrep folder unless already present.
 
-    Files are named by media id because source filenames contain "N°" and
-    duplicate each other across uploads.
+    Files are named by media id and `modified` stamp because source filenames
+    contain "N°" and duplicate each other across uploads.
 
     Args:
         item: Media item to fetch.
-        refresh: Download even if a file exists, for an upload replaced in place.
+        refresh: Download even if a file exists.
 
     Returns:
         Path to the local PDF.
     """
-    path = SITREP_DIR / f"{item['id']}.pdf"
+    path = SITREP_DIR / local_pdf_name(item)
     if refresh or not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(get(item["source_url"]).content)
@@ -274,7 +303,15 @@ def manifest_row(item: MediaItem, header: SitrepHeader) -> dict[str, object]:
 
 
 def resolve_report_dates(manifest: pl.DataFrame) -> pl.DataFrame:
-    """Fill `report_date` for every file, using the other files as anchors."""
+    """Fill `report_date` where it is null, using every file as an anchor.
+
+    Only new and replaced uploads have a null date. A stored date is kept, so
+    a new anchor never moves the date of a report already processed. The cost
+    is that a later run leaves a wrong stored date as it is. To fix one, edit
+    `report_date` for that upload in both the manifest and
+    data/processed/drc_2026_sitrep_extraction_status.csv, since release refuses
+    a mismatch between them.
+    """
     headers = [
         SitrepHeader(*row)
         for row in manifest.select(
@@ -282,7 +319,10 @@ def resolve_report_dates(manifest: pl.DataFrame) -> pl.DataFrame:
         ).iter_rows()
     ]
     anchors = find_anchors(headers)
-    resolved = [resolve_report_date(h, anchors=anchors) for h in headers]
+    resolved = [
+        stored if stored is not None else resolve_report_date(h, anchors=anchors)
+        for stored, h in zip(manifest["report_date"], headers, strict=True)
+    ]
     return manifest.with_columns(report_date=pl.Series(resolved, dtype=pl.Date))
 
 
@@ -293,6 +333,13 @@ def flag_latest(manifest: pl.DataFrame) -> pl.DataFrame:
     one, so a processed date keeps its file; among files from the same site,
     the most recently modified wins.
     """
+    no_url = manifest.filter(pl.col("source_url").is_null())
+    if no_url.height:
+        logger.warning(
+            "%d manifest rows have no source_url and rank as non-ministry: %s",
+            no_url.height,
+            no_url["media_id"].to_list(),
+        )
     from_ministry = pl.col("source_url").str.starts_with(MINISTRY_SITE).fill_null(False)
     ranked = manifest.sort(
         from_ministry, "modified", "media_id", descending=True

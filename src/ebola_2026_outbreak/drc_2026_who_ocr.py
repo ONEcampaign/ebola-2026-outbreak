@@ -5,12 +5,12 @@ a PNG. This finds those images in the cached Wayback captures, reads each with
 RapidOCR, rebuilds the table's cell rows from the text positions, and runs them
 through the same parser as the HTML table.
 
-OCR does not detect the "-" cells, so values are placed by column position and
+RapidOCR misses the "-" cells, so values are placed by column position and
 an empty cell reads as "-". A digit OCR misses would look the same, so every
 count indicator, not only confirmed cases and deaths, must sum to the Total
 row, and low-confidence text rejects the image.
 
-Run `drc_2026_who_wayback.py` first; this reads its cached captures.
+Run `drc_2026_who_wayback.py` first. This reads its cached captures.
 Requires the `ocr` dependency group: `uv sync --group ocr`.
 """
 
