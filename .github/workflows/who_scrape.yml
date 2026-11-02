@@ -2,9 +2,10 @@ name: WHO scrape
 
 on:
   schedule:
-    # WHO updates its table on irregular days and hours, so check every 2
-    # hours.
-    - cron: "0 */2 * * *"
+    # WHO updates its table on irregular days, mostly between 09:00 and 13:00
+    # UTC, so check once a day after that. Trigger the workflow by hand for a
+    # later update.
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 # No dev tool runs here, and uv run would otherwise sync the dev group back in.
