@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # Full history gives the release check a merge base.
       - uses: actions/checkout@v7
