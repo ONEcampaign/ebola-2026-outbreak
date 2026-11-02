@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # A queued run builds from the tip of main, whatever SHA queued it.
       - uses: actions/checkout@v7

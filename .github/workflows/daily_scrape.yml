@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   scrape:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # A queued run builds from the tip of main, whatever SHA queued it.
       - uses: actions/checkout@v7
@@ -137,7 +137,7 @@ jobs:
   tables:
     needs: scrape
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # The tip of main includes whatever the scrape job pushed.
       - uses: actions/checkout@v7
