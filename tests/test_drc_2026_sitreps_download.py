@@ -1,5 +1,6 @@
 """Tests for sitrep header parsing and report date resolution."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -200,9 +201,42 @@ def test_list_media_keeps_this_outbreak_only(monkeypatch: pytest.MonkeyPatch) ->
             **_item(24000, "2025-10-16"),
             "source_url": "https://insp.cd/SitRep_MVE_Kasai.pdf",
         },
+        {
+            **_item(25812, "2026-11-02"),
+            "source_url": "https://insp.cd/final_draft_SitRep_MVE_RDC_N_170_31-10-2026.pdf",
+        },
+        {
+            **_item(24500, "2026-08-09"),
+            "source_url": "https://insp.cd/SitRep_MVE_RDC_N_083_05-08-2026.pdf",
+        },
     ]
     monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
-    assert [item["id"] for item in dlm.list_media()] == [25776]
+    assert [item["id"] for item in dlm.list_media()] == [25776, 25812]
+
+
+def test_list_media_warns_about_newer_rejected_upload(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    items = [
+        {
+            **_item(25776, "2026-10-27"),
+            "source_url": "https://insp.cd/SitRep_MVEBDB_164.pdf",
+        },
+        {
+            **_item(24000, "2025-10-16"),
+            "source_url": "https://insp.cd/SitRep_MVE_Kasai.pdf",
+        },
+        {
+            **_item(25900, "2026-11-10"),
+            "source_url": "https://insp.cd/SitRep_Ebola_RDC_N_180.pdf",
+        },
+    ]
+    monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
+    with caplog.at_level(logging.WARNING):
+        dlm.list_media()
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "SitRep_Ebola_RDC_N_180.pdf" in warnings[0]
 
 
 def _item(media_id: int, modified: str) -> dlm.MediaItem:
