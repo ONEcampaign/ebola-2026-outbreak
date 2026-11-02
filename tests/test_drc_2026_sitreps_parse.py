@@ -84,6 +84,7 @@ def test_readings_rejects_leading_zero_group() -> None:
         ("0 316 130 41,1% 7/13 (53,8 %)", ProvinceCounts(0, 316, 130)),
         ("767 157 20,5% 20 sur 36 (55,5 %) 29", ProvinceCounts(29, 767, 157)),
         ("113 48 42,5% 6/13 (46,1 %) ND", ProvinceCounts(None, 113, 48)),
+        ("34 7380 3 769 * 51,1% 28/36 (77,8 %)", ProvinceCounts(34, 7380, 3769)),
     ],
 )
 def test_parse_counts(rest: str, expected: ProvinceCounts) -> None:

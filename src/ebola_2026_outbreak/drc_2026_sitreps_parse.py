@@ -60,8 +60,9 @@ WRAP_HEAD = re.compile(r"^(Sud|Nord|Haut|Bas)-(Ubangi|Kivu|U[ée]l[ée])?\s*([\d
 WRAP_TAIL = re.compile(r"^(Ubangi|Kivu|U[ée]l[ée])?[\s*]*(%?)$")
 NUMBERS_ONLY = re.compile(r"^[\d\s]+\d+(?:,\d+)?\s*%")
 PERCENT = re.compile(r"(\d+(?:,\d+)?)\s*%")
-# Columns that are not counts: "28/36", "(77,8 %)", "20 sur 36", "—".
-NON_COUNT = re.compile(r"\d+\s*(?:/|sur)\s*\d+|\(\s*[\d,]+\s*%\s*\)|—|-")
+# Columns that are not counts: "28/36", "(77,8 %)", "20 sur 36", "—", and
+# footnote markers ("3 769 * 51,1%").
+NON_COUNT = re.compile(r"\d+\s*(?:/|sur)\s*\d+|\(\s*[\d,]+\s*%\s*\)|—|-|\*")
 MISSING = "ND"
 # Non-row lines (footnotes, wrap fragments) tolerated inside one table.
 MAX_GAP_LINES = 3
