@@ -2,7 +2,8 @@
 
 INSP (https://insp.cd/category/sitrep/) publishes each sitrep first. Its
 site is a WordPress front end whose media API lists every upload, other
-outbreaks' sitreps included, so only files marked "MVEBDB" are kept.
+outbreaks' sitreps included, so only files marked "MVEBDB", or "MVE_RDC" from
+sitrep 169 on, are kept.
 
 The report date comes from the PDF header, since filenames are unreliable. The
 header has two dates: the printed report date and the date inside the sitrep
@@ -44,6 +45,11 @@ HTTP_NOT_FOUND = 404
 # INSP's library also holds other outbreaks' sitreps; this outbreak's carry
 # "MVEBDB" in the file name.
 INSP_FILE_MARKER = "MVEBDB"
+# From sitrep 169 (30 October 2026) INSP names files "MVE_RDC" instead. Its
+# uploads before August used that name too, and the ministry's files already
+# cover those dates, so the marker counts only from the first renamed upload.
+INSP_RENAMED_MARKER = "MVE_RDC"
+INSP_RENAMED_FIRST_MEDIA_ID = 25808
 MEDIA_QUERY = "?search=SitRep&per_page=100&_fields=id,modified,source_url,mime_type"
 SITREP_DIR = ROOT / "data" / "raw" / OUTBREAK / "sitreps"
 MANIFEST_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_sitrep_manifest.csv"
@@ -228,19 +234,44 @@ def list_api_pdfs(api: str) -> list[MediaItem]:
     return [item for item in items if item["mime_type"] == PDF_MIME]
 
 
+def is_this_outbreak(item: MediaItem) -> bool:
+    """Whether a media item is one of this outbreak's sitreps, by its file name."""
+    url = item["source_url"].upper()
+    return INSP_FILE_MARKER in url or (
+        INSP_RENAMED_MARKER in url and item["id"] >= INSP_RENAMED_FIRST_MEDIA_ID
+    )
+
+
 def list_media() -> list[MediaItem]:
     """List this outbreak's sitrep PDFs in INSP's media library.
 
     Returns:
         Media items with id, modified, source_url and mime_type.
     """
-    items = [
-        item
-        for item in list_api_pdfs(INSP_MEDIA_API)
-        if INSP_FILE_MARKER in item["source_url"].upper()
-    ]
+    listed = list_api_pdfs(INSP_MEDIA_API)
+    items = [item for item in listed if is_this_outbreak(item)]
     logger.info("INSP media API lists %d sitrep PDFs", len(items))
+    warn_newer_rejected(listed, kept=items)
     return items
+
+
+def warn_newer_rejected(listed: list[MediaItem], *, kept: list[MediaItem]) -> None:
+    """Warn about sitrep PDFs uploaded after the newest kept one but filtered out.
+
+    INSP has renamed its files before. A rename makes the filter drop every
+    new sitrep while the run still succeeds, so newer rejected uploads are
+    logged for a person to check.
+    """
+    newest_kept = max((item["id"] for item in kept), default=0)
+    for item in listed:
+        if item["id"] > newest_kept and item not in kept:
+            logger.warning(
+                "INSP media %s is newer than every kept sitrep but its name "
+                "does not match this outbreak; check whether INSP renamed its "
+                "files: %s",
+                item["id"],
+                item["source_url"],
+            )
 
 
 def is_ministry(source_url: str) -> bool:
