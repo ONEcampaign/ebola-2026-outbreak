@@ -31,8 +31,9 @@ TOTAL_LABEL = "Total"
 DATE_ROW = re.compile(r"Data as of\s*(\d{1,2} \w+ \d{4})")
 DATE_FORMAT = "%d %B %Y"
 MISSING = "-"
-# Footnote markers WHO appends to country names, e.g. "France ***", "Kenya#".
-FOOTNOTE_MARKERS = re.compile(r"[\s*#†]+$")
+# Footnote markers WHO appends to country names, e.g. "France ***", "Kenya#",
+# "Nigeria $". Any trailing symbol is a marker, so a new one cannot split a country.
+FOOTNOTE_MARKERS = re.compile(r"[^\w)]+$")
 
 # Labels other modules select on. A rename here reaches them all.
 DRC_COUNTRY = "Democratic Republic of the Congo"

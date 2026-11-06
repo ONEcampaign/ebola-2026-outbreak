@@ -6,7 +6,12 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from ebola_2026_outbreak.drc_2026_who import parse_value, parse_who_table, upsert
+from ebola_2026_outbreak.drc_2026_who import (
+    FOOTNOTE_MARKERS,
+    parse_value,
+    parse_who_table,
+    upsert,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "who_bundibugyo_2026-10-20.html"
 RETRIEVED_AT = datetime(2026, 10, 20, 12, tzinfo=UTC)
@@ -31,6 +36,20 @@ def _value(df: pl.DataFrame, country: str, indicator: str) -> float | None:
 )
 def test_parse_value(text: str, expected: float | None) -> None:
     assert parse_value(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("cell", "expected"),
+    [
+        ("France ***", "France"),
+        ("Kenya#", "Kenya"),
+        ("Nigeria $", "Nigeria"),
+        ("Uganda †", "Uganda"),
+        ("Democratic Republic of the Congo", "Democratic Republic of the Congo"),
+    ],
+)
+def test_footnote_markers_stripped(cell: str, expected: str) -> None:
+    assert FOOTNOTE_MARKERS.sub("", cell) == expected
 
 
 def test_parse_value_rejects_text() -> None:
