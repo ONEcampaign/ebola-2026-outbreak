@@ -411,15 +411,34 @@ def _one(words: Iterable[Word]) -> Word | None:
     return found[0] if len(found) == 1 else None
 
 
-def _phrase(word: Word, words: list[Word]) -> tuple[float, float]:
+def _stacked(word: Word, others: Collection[Word]) -> bool:
+    """Whether `word` shares x extent with any of `others`."""
+    return any(word.x0 < o.x1 and o.x0 < word.x1 for o in others)
+
+
+def _phrase(
+    word: Word, words: list[Word], stops: Collection[Word] = ()
+) -> tuple[float, float]:
     """x extent of the phrase holding `word` on its line of `words`, which run
     left to right: the words joined to it by gaps of at most `CELL_GAP`
-    ("Total décès confirmés")."""
+    ("Total décès confirmés").
+
+    The phrase ends before a word stacked over one of `stops`, the other
+    columns' header words, since a tightly set header can leave less than
+    `CELL_GAP` between columns ("Nouv. Cas" then "Décès communautaires"
+    over "(Swab+)").
+    """
     line = [w for w in words if abs(w.top - word.top) <= TOL]
     lo = hi = line.index(word)
-    while lo > 0 and line[lo].x0 - line[lo - 1].x1 <= CELL_GAP:
+
+    def joins(left: Word, right: Word, new: Word) -> bool:
+        """Whether `new`, one of the adjacent `left` and `right`, extends
+        the phrase."""
+        return right.x0 - left.x1 <= CELL_GAP and not _stacked(new, stops)
+
+    while lo > 0 and joins(line[lo - 1], line[lo], line[lo - 1]):
         lo -= 1
-    while hi + 1 < len(line) and line[hi + 1].x0 - line[hi].x1 <= CELL_GAP:
+    while hi + 1 < len(line) and joins(line[hi], line[hi + 1], line[hi + 1]):
         hi += 1
     return line[lo].x0, line[hi].x1
 
@@ -436,7 +455,8 @@ def _columns(
     for column, word in markers.items():
         if word is None:
             return None
-        columns.append((column, *_phrase(word, header)))
+        others = [w for w in markers.values() if w is not None and w is not word]
+        columns.append((column, *_phrase(word, header, others)))
     columns.sort(key=lambda c: c[1])
     if tuple(c for c, _, _ in columns) not in layouts:
         return None
