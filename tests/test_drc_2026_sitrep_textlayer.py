@@ -268,6 +268,32 @@ def test_province_table_layouts(
         assert sums == total
 
 
+ZONE_TABLES = FIXTURES / "zone_tables"
+
+
+def test_tightly_set_zone_header() -> None:
+    """SitRep 177 sets "Nouv. Cas", "Décès communautaires" and "Décès
+    confirmés" within `CELL_GAP` of each other on one header line; each
+    still heads its own column."""
+    rows = read_rows(ZONE_TABLES / "SitRep_177.json", GAZETTEER)
+    zone_rows = {
+        k: r
+        for k, r in rows.items()
+        if k.section in ("zones", "zone_subtotals", "zone_total") and r.located
+    }
+
+    assert len(zone_rows) > 60
+    assert all(r.cells is not None for r in zone_rows.values())
+    subtotal = rows[RowKey("zone_subtotals", "Nord-Kivu", "")].cells
+    assert subtotal is not None
+    assert (
+        subtotal["new_confirmed"],
+        subtotal["community_deaths"],
+        subtotal["cte_deaths"],
+        subtotal["total_deaths_day"],
+    ) == ("12", "6", "3", "9")
+
+
 def _zone_table(tmp_path: Path, cte_top: float) -> Path:
     """A zone table whose Mambasa row prints its CTE death at `cte_top`;
     the Mahagi row above it, at 145, has no CTE value."""
