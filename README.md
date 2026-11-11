@@ -45,6 +45,11 @@ Files are prefixed by outbreak so historical and current data stay apart:
     [INSP](https://insp.cd/category/sitrep/), which publishes them first.
     Files taken from the Ministry of Health's site before 28 October 2026
     stay in the manifest. PDFs are saved to `data/raw/drc_2026/sitreps/`.
+    INSP renames its files often, so a PDF attached to a post in its SitRep
+    category is kept whatever its name. After each scrape,
+    `drc_2026_sitreps_download.py check` compares the newest sitrep number in
+    those post titles with the manifest and fails the run if the manifest is
+    behind.
   - `drc_2026_sitrep_by_province.csv`: new, cumulative confirmed cases and
     cumulative confirmed deaths by province from each sitrep's province
     table, built by `drc_2026_sitreps_parse.py`.

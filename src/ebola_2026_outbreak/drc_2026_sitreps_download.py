@@ -3,7 +3,14 @@
 INSP (https://insp.cd/category/sitrep/) publishes each sitrep first. Its
 site is a WordPress front end whose media API lists every upload, other
 outbreaks' sitreps included, so only files marked "MVEBDB", or "MVE_RDC" from
-sitrep 169 on, are kept.
+sitrep 169 on, are kept. INSP renames its files often (sitrep 179 dropped
+"MVE_RDC"), so a PDF attached to a post in INSP's SitRep category is kept
+whatever its name.
+
+Those posts are also the check that nothing was missed. Each is titled with
+the sitrep's reference ("SitRep N°179/MVE-BDBV/09/11/2026"), so `check`
+compares the newest posted sitrep number with the newest in the manifest and
+fails when the manifest is behind.
 
 The report date comes from the PDF header, since filenames are unreliable. The
 header has two dates: the printed report date and the date inside the sitrep
@@ -21,11 +28,14 @@ more after INSP and was last read on 28 October 2026. A date that has a
 ministry file keeps it, so no processed report changes file.
 """
 
+import argparse
+import html
 import logging
 import re
-from datetime import date, timedelta
+import sys
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import NamedTuple, TypedDict
+from typing import NamedTuple, NotRequired, TypedDict, cast
 from urllib.parse import unquote
 
 import httpx
@@ -39,6 +49,15 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 OUTBREAK = "drc_2026"
 INSP_MEDIA_API = "https://insp.cd/wp-json/wp/v2/media"
+INSP_POSTS_API = "https://insp.cd/wp-json/wp/v2/posts"
+# INSP's "SitRep" post category; every post in it is one of this outbreak's.
+INSP_SITREP_CATEGORY_ID = 308
+POSTS_QUERY = (
+    f"?categories={INSP_SITREP_CATEGORY_ID}&per_page=100&_fields=id,date_gmt,title"
+)
+# INSP sometimes posts a sitrep shortly before or after attaching its PDF, so a
+# post younger than this does not fail the check; the next run catches it.
+POST_GRACE = timedelta(hours=3)
 # Host of the ministry files kept from before INSP became the only source.
 MINISTRY_SITE = "https://administration.sante.gouv.cd/"
 HTTP_NOT_FOUND = 404
@@ -47,10 +66,13 @@ HTTP_NOT_FOUND = 404
 INSP_FILE_MARKER = "MVEBDB"
 # From sitrep 169 (30 October 2026) INSP names files "MVE_RDC" instead. Its
 # uploads before August used that name too, and the ministry's files already
-# cover those dates, so the marker counts only from the first renamed upload.
+# cover those dates, so the marker, and attachment to a SitRep post, count
+# only from the first renamed upload.
 INSP_RENAMED_MARKER = "MVE_RDC"
 INSP_RENAMED_FIRST_MEDIA_ID = 25808
-MEDIA_QUERY = "?search=SitRep&per_page=100&_fields=id,modified,source_url,mime_type"
+MEDIA_QUERY = (
+    "?search=SitRep&per_page=100&_fields=id,modified,source_url,mime_type,post"
+)
 SITREP_DIR = ROOT / "data" / "raw" / OUTBREAK / "sitreps"
 MANIFEST_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_sitrep_manifest.csv"
 
@@ -106,6 +128,18 @@ class MediaItem(TypedDict):
     modified: str
     source_url: str
     mime_type: str
+    # The post the file is attached to; None when unattached. Absent from
+    # items rebuilt from manifest rows, which only need the file.
+    post: NotRequired[int | None]
+
+
+class SitrepPost(NamedTuple):
+    """A post in INSP's SitRep category, with the sitrep number in its title."""
+
+    post_id: int
+    sitrep_number: int
+    title: str
+    published: datetime
 
 
 class SitrepHeader(NamedTuple):
@@ -218,38 +252,89 @@ def read_first_page(path: Path) -> str:
         return pdf.pages[0].extract_text() or ""
 
 
+def list_wordpress(url: str) -> list[dict[str, object]]:
+    """Fetch every page of a WordPress REST listing.
+
+    Args:
+        url: Listing URL with its query string, without `page`.
+
+    Returns:
+        The items of all pages, in the API's order.
+    """
+    items: list[dict[str, object]] = []
+    page, total_pages = 1, 1
+    while page <= total_pages:
+        response = get(f"{url}&page={page}")
+        total_pages = int(response.headers["X-WP-TotalPages"])
+        items.extend(response.json())
+        page += 1
+    return items
+
+
 def list_api_pdfs(api: str) -> list[MediaItem]:
     """List every sitrep PDF in one WordPress media library.
 
     Returns:
-        Media items with id, modified, source_url and mime_type.
+        Media items with id, modified, source_url, mime_type and post.
     """
-    items: list[MediaItem] = []
-    page, total_pages = 1, 1
-    while page <= total_pages:
-        response = get(f"{api}{MEDIA_QUERY}&page={page}")
-        total_pages = int(response.headers["X-WP-TotalPages"])
-        items.extend(response.json())
-        page += 1
+    items = cast(list[MediaItem], list_wordpress(f"{api}{MEDIA_QUERY}"))
     return [item for item in items if item["mime_type"] == PDF_MIME]
 
 
-def is_this_outbreak(item: MediaItem) -> bool:
-    """Whether a media item is one of this outbreak's sitreps, by its file name."""
-    url = item["source_url"].upper()
-    return INSP_FILE_MARKER in url or (
-        INSP_RENAMED_MARKER in url and item["id"] >= INSP_RENAMED_FIRST_MEDIA_ID
-    )
-
-
-def list_media() -> list[MediaItem]:
-    """List this outbreak's sitrep PDFs in INSP's media library.
+def parse_post(raw: dict[str, object]) -> SitrepPost | None:
+    """Read a SitRep post's id, sitrep number and publication time.
 
     Returns:
-        Media items with id, modified, source_url and mime_type.
+        The post, or None (logged) when its title has no sitrep number.
+    """
+    title_field = raw["title"]
+    if not isinstance(title_field, dict):
+        raise ValueError(f"Post {raw['id']} has no rendered title: {raw!r}")
+    title = html.unescape(str(title_field["rendered"])).strip()
+    match = SITREP_REF.search(title)
+    if match is None:
+        logger.warning("INSP post %s has no sitrep number: %r", raw["id"], title)
+        return None
+    published = datetime.fromisoformat(str(raw["date_gmt"])).replace(tzinfo=UTC)
+    return SitrepPost(int(str(raw["id"])), int(match.group(1)), title, published)
+
+
+def list_sitrep_posts() -> list[SitrepPost]:
+    """List the posts in INSP's SitRep category that name a sitrep number."""
+    raw = list_wordpress(f"{INSP_POSTS_API}{POSTS_QUERY}")
+    posts = [post for item in raw if (post := parse_post(item)) is not None]
+    logger.info("INSP lists %d SitRep posts", len(posts))
+    return posts
+
+
+def is_this_outbreak(item: MediaItem, *, sitrep_post_ids: set[int]) -> bool:
+    """Whether a media item is one of this outbreak's sitreps.
+
+    It is when its name carries "MVEBDB" or, from INSP_RENAMED_FIRST_MEDIA_ID
+    on, when its name carries "MVE_RDC" or it is attached to a SitRep post.
+    """
+    url = item["source_url"].upper()
+    if INSP_FILE_MARKER in url:
+        return True
+    if item["id"] < INSP_RENAMED_FIRST_MEDIA_ID:
+        return False
+    return INSP_RENAMED_MARKER in url or item.get("post") in sitrep_post_ids
+
+
+def list_media(posts: list[SitrepPost]) -> list[MediaItem]:
+    """List this outbreak's sitrep PDFs in INSP's media library.
+
+    Args:
+        posts: INSP's SitRep posts; a PDF attached to one is kept by any name.
+
+    Returns:
+        Media items with id, modified, source_url, mime_type and post.
     """
     listed = list_api_pdfs(INSP_MEDIA_API)
-    items = [item for item in listed if is_this_outbreak(item)]
+    post_ids = {post.post_id for post in posts}
+    items = [
+        item for item in listed if is_this_outbreak(item, sitrep_post_ids=post_ids)
+    ]
     logger.info("INSP media API lists %d sitrep PDFs", len(items))
     warn_newer_rejected(listed, kept=items)
     return items
@@ -258,9 +343,9 @@ def list_media() -> list[MediaItem]:
 def warn_newer_rejected(listed: list[MediaItem], *, kept: list[MediaItem]) -> None:
     """Warn about sitrep PDFs uploaded after the newest kept one but filtered out.
 
-    INSP has renamed its files before. A rename makes the filter drop every
-    new sitrep while the run still succeeds, so newer rejected uploads are
-    logged for a person to check.
+    INSP has renamed its files before. A renamed sitrep attached to its post is
+    kept, but an unattached one would be dropped, so newer rejected uploads are
+    logged for a person to check. `check` fails the run in that case.
     """
     newest_kept = max((item["id"] for item in kept), default=0)
     for item in listed:
@@ -404,7 +489,9 @@ def log_gaps(manifest: pl.DataFrame) -> None:
     )
 
 
-def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
+def build_manifest(
+    previous: pl.DataFrame | None, *, posts: list[SitrepPost]
+) -> pl.DataFrame:
     """Build the manifest, downloading only media items that are new or changed.
 
     Rows for media the API no longer lists, and the ministry's files, are
@@ -413,6 +500,7 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
 
     Args:
         previous: The existing manifest, or None on a first run.
+        posts: INSP's SitRep posts, whose attached PDFs are kept by any name.
 
     Returns:
         One row per sitrep PDF with `is_latest` flagged per report date.
@@ -428,7 +516,7 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
         r["media_id"] for r in previous_rows if is_ministry(r["source_url"])
     }
 
-    items = list_media()
+    items = list_media(posts)
     clashes = {item["id"] for item in items} & ministry_ids
     if clashes:
         raise ValueError(f"INSP media ids clash with ministry ids: {sorted(clashes)}")
@@ -466,14 +554,79 @@ def build_manifest(previous: pl.DataFrame | None) -> pl.DataFrame:
     return flag_latest(resolve_report_dates(manifest))
 
 
-def main() -> None:
+def find_unscraped_latest(
+    manifest: pl.DataFrame, posts: list[SitrepPost], *, now: datetime
+) -> SitrepPost | None:
+    """Return INSP's newest posted sitrep if the manifest lacks it.
+
+    Posts younger than POST_GRACE are ignored, since INSP may attach the PDF
+    after posting. Printed sitrep numbers are occasionally wrong, so a failure
+    can also mean a misnumbered PDF; the message names both to check.
+
+    Args:
+        manifest: The sitrep manifest.
+        posts: INSP's SitRep posts.
+        now: Current time, timezone-aware.
+
+    Returns:
+        The newest settled post when its number is above every manifest
+        sitrep number, else None.
+
+    Raises:
+        ValueError: If there is no settled post or the manifest has no numbers.
+    """
+    settled = [post for post in posts if now - post.published >= POST_GRACE]
+    if not settled:
+        raise ValueError("INSP lists no SitRep post older than the grace period")
+    latest_post = max(settled, key=lambda post: post.sitrep_number)
+    numbers = [n for n in manifest["sitrep_number"].to_list() if n is not None]
+    if not numbers:
+        raise ValueError("The manifest has no sitrep numbers")
+    latest_scraped: int = max(numbers)
+    logger.info(
+        "Latest posted sitrep %d (%s); latest scraped %d",
+        latest_post.sitrep_number,
+        latest_post.title,
+        latest_scraped,
+    )
+    return latest_post if latest_post.sitrep_number > latest_scraped else None
+
+
+def check_latest() -> int:
+    """Compare INSP's newest posted sitrep with the manifest.
+
+    Returns:
+        0 when the manifest has it, 1 when it does not.
+    """
+    manifest = pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA)
+    missing = find_unscraped_latest(
+        manifest, list_sitrep_posts(), now=datetime.now(UTC)
+    )
+    if missing is None:
+        return 0
+    latest_scraped = manifest.filter(
+        pl.col("sitrep_number") == pl.col("sitrep_number").max()
+    ).row(0, named=True)
+    # A GitHub Actions error annotation, so the run summary shows it.
+    print(
+        f"::error::INSP posted sitrep {missing.sitrep_number} ({missing.title}, "
+        f"post {missing.post_id}) but the newest in the manifest is "
+        f"{latest_scraped['sitrep_number']} ({latest_scraped['file_name']}). "
+        "Its PDF is not attached to the post or was filtered out; see the "
+        "download step's warnings.",
+        flush=True,
+    )
+    return 1
+
+
+def download_all() -> None:
     """Refresh the sitrep manifest and download any new PDFs."""
     previous = (
         pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA)
         if MANIFEST_PATH.exists()
         else None
     )
-    manifest = build_manifest(previous)
+    manifest = build_manifest(previous, posts=list_sitrep_posts())
     log_gaps(manifest.filter("is_latest"))
     manifest.write_csv(MANIFEST_PATH)
     logger.info(
@@ -484,6 +637,24 @@ def main() -> None:
     )
 
 
+def main(argv: list[str] | None = None) -> int:
+    """Run the command line; return 1 when the check finds a missed sitrep."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("download", "check"),
+        default="download",
+        help="download (default) refreshes the manifest; check fails when INSP "
+        "has posted a newer sitrep than the manifest holds",
+    )
+    args = parser.parse_args(argv)
+    if args.command == "check":
+        return check_latest()
+    download_all()
+    return 0
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    main()
+    sys.exit(main())
