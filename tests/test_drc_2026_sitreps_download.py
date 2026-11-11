@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import polars as pl
@@ -211,7 +211,39 @@ def test_list_media_keeps_this_outbreak_only(monkeypatch: pytest.MonkeyPatch) ->
         },
     ]
     monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
-    assert [item["id"] for item in dlm.list_media()] == [25776, 25812]
+    assert [item["id"] for item in dlm.list_media([])] == [25776, 25812]
+
+
+def test_list_media_keeps_renamed_upload_attached_to_sitrep_post(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    items = [
+        {
+            **_item(26108, "2026-11-10"),
+            "source_url": "https://insp.cd/MVE_RDC_N178.pdf",
+        },
+        {
+            **_item(26090, "2026-11-06"),
+            "source_url": "https://insp.cd/SGI_Rougeole.pdf",
+        },
+        {
+            **_item(26131, "2026-11-10"),
+            "source_url": "https://insp.cd/SitRep_N179_09-11-2026_corrige.pdf",
+            "post": 26130,
+        },
+        # Attached, but from before INSP was the only source.
+        {
+            **_item(25269, "2026-08-04"),
+            "source_url": "https://insp.cd/N_081.pdf",
+            "post": 25268,
+        },
+    ]
+    monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
+    posts = [
+        _post(26130, 179, "2026-11-10T21:52:09"),
+        _post(25268, 81, "2026-08-04T20:30:00"),
+    ]
+    assert [item["id"] for item in dlm.list_media(posts)] == [26108, 26131]
 
 
 def test_list_media_warns_about_newer_rejected_upload(
@@ -233,10 +265,82 @@ def test_list_media_warns_about_newer_rejected_upload(
     ]
     monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
     with caplog.at_level(logging.WARNING):
-        dlm.list_media()
+        dlm.list_media([])
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
     assert "SitRep_Ebola_RDC_N_180.pdf" in warnings[0]
+
+
+@pytest.mark.parametrize(
+    ("title", "number"),
+    [
+        ("SitRep N°179/MVE-BDBV/09/11/2026", 179),
+        ("SitRep N°0100/MVEBDB/22/08/2026", 100),
+        (" SITREP N°059 ", 59),
+        ("SitRep MVE N° 014/2026", 14),
+        ("SitRep N&#176;180/MVE-BDBV/10/11/2026", 180),
+    ],
+)
+def test_parse_post_reads_sitrep_number(title: str, number: int) -> None:
+    raw = {"id": 1, "date_gmt": "2026-11-10T21:52:09", "title": {"rendered": title}}
+    post = dlm.parse_post(raw)
+    assert post is not None
+    assert post.sitrep_number == number
+    assert post.published == datetime(2026, 11, 10, 21, 52, 9, tzinfo=UTC)
+
+
+def test_parse_post_skips_title_without_number() -> None:
+    raw = {"id": 1, "date_gmt": "2026-11-10T21:52:09", "title": {"rendered": "Note"}}
+    assert dlm.parse_post(raw) is None
+
+
+def _post(post_id: int, number: int, published: str) -> dlm.SitrepPost:
+    """SitRep post stub; `published` is a UTC ISO timestamp."""
+    return dlm.SitrepPost(
+        post_id,
+        number,
+        f"SitRep N°{number}",
+        datetime.fromisoformat(published).replace(tzinfo=UTC),
+    )
+
+
+def _numbered_manifest(*numbers: int) -> pl.DataFrame:
+    """Manifest holding only the given sitrep numbers."""
+    return pl.DataFrame(
+        {"sitrep_number": list(numbers)}, schema={"sitrep_number": pl.Int64}
+    )
+
+
+NOW = datetime(2026, 11, 11, 12, 0, tzinfo=UTC)
+
+
+def test_find_unscraped_latest_flags_posted_sitrep_missing_from_manifest() -> None:
+    posts = [
+        _post(26107, 178, "2026-11-10T07:57"),
+        _post(26130, 179, "2026-11-10T21:52"),
+    ]
+    missing = dlm.find_unscraped_latest(_numbered_manifest(177, 178), posts, now=NOW)
+    assert missing is not None
+    assert missing.post_id == 26130
+
+
+def test_find_unscraped_latest_passes_when_manifest_is_current() -> None:
+    posts = [_post(26130, 179, "2026-11-10T21:52")]
+    assert dlm.find_unscraped_latest(_numbered_manifest(179), posts, now=NOW) is None
+
+
+def test_find_unscraped_latest_ignores_post_within_grace() -> None:
+    posts = [
+        _post(26130, 179, "2026-11-10T21:52"),
+        _post(26140, 180, "2026-11-11T11:00"),
+    ]
+    assert dlm.find_unscraped_latest(_numbered_manifest(179), posts, now=NOW) is None
+
+
+def test_find_unscraped_latest_rejects_no_settled_post() -> None:
+    posts = [_post(26140, 180, "2026-11-11T11:00")]
+    with pytest.raises(ValueError, match="grace"):
+        dlm.find_unscraped_latest(_numbered_manifest(179), posts, now=NOW)
 
 
 def _item(media_id: int, modified: str) -> dlm.MediaItem:
@@ -246,6 +350,7 @@ def _item(media_id: int, modified: str) -> dlm.MediaItem:
         "modified": modified,
         "source_url": f"https://example.org/{media_id}.pdf",
         "mime_type": "application/pdf",
+        "post": None,
     }
 
 
@@ -267,7 +372,7 @@ def fake_api(monkeypatch: pytest.MonkeyPatch) -> FakeApi:
         api.downloads.append((item["id"], refresh))
         return Path(f"{item['id']}.pdf")
 
-    monkeypatch.setattr(dlm, "list_media", lambda: api.items)
+    monkeypatch.setattr(dlm, "list_media", lambda posts: api.items)
     monkeypatch.setattr(dlm, "download", download)
     monkeypatch.setattr(dlm, "read_first_page", lambda path: HEADER_OCT)
     return api
@@ -275,9 +380,9 @@ def fake_api(monkeypatch: pytest.MonkeyPatch) -> FakeApi:
 
 def test_build_manifest_keeps_media_dropped_by_api(fake_api: FakeApi) -> None:
     fake_api.items = [_item(710, "2026-10-20")]
-    first = dlm.build_manifest(None)
+    first = dlm.build_manifest(None, posts=[])
     fake_api.items = []
-    second = dlm.build_manifest(first)
+    second = dlm.build_manifest(first, posts=[])
     assert second.select("media_id", "in_api", "is_latest").rows() == [
         (710, False, True)
     ]
@@ -285,16 +390,16 @@ def test_build_manifest_keeps_media_dropped_by_api(fake_api: FakeApi) -> None:
 
 def test_build_manifest_refreshes_replaced_upload(fake_api: FakeApi) -> None:
     fake_api.items = [_item(710, "2026-10-20")]
-    first = dlm.build_manifest(None)
+    first = dlm.build_manifest(None, posts=[])
     fake_api.items = [_item(710, "2026-10-21")]
-    second = dlm.build_manifest(first)
+    second = dlm.build_manifest(first, posts=[])
     assert fake_api.downloads == [(710, False), (710, True)]
     assert second["modified"].to_list() == ["2026-10-21"]
 
 
 def test_build_manifest_reuses_unchanged_media(fake_api: FakeApi) -> None:
     fake_api.items = [_item(710, "2026-10-20")]
-    dlm.build_manifest(dlm.build_manifest(None))
+    dlm.build_manifest(dlm.build_manifest(None, posts=[]), posts=[])
     assert fake_api.downloads == [(710, False)]
 
 
@@ -332,11 +437,11 @@ def test_local_pdf_name_rejects_empty_modified() -> None:
 def test_build_manifest_keeps_ministry_files_unlisted(fake_api: FakeApi) -> None:
     ministry = {**_item(710, "2026-10-20"), "source_url": f"{dlm.MINISTRY_SITE}157.pdf"}
     fake_api.items = [ministry]
-    first = dlm.build_manifest(None)
+    first = dlm.build_manifest(None, posts=[])
     fake_api.items = [
         {**_item(25746, "2026-10-21"), "source_url": "https://insp.cd/157.pdf"}
     ]
-    second = dlm.build_manifest(first)
+    second = dlm.build_manifest(first, posts=[])
     assert second.select("media_id", "in_api", "is_latest").rows() == [
         (710, False, True),
         (25746, True, False),
@@ -347,9 +452,9 @@ def test_build_manifest_rejects_insp_id_of_a_ministry_file(fake_api: FakeApi) ->
     fake_api.items = [
         {**_item(710, "2026-10-20"), "source_url": f"{dlm.MINISTRY_SITE}a.pdf"}
     ]
-    first = dlm.build_manifest(None)
+    first = dlm.build_manifest(None, posts=[])
     fake_api.items = [
         {**_item(710, "2026-10-28"), "source_url": "https://insp.cd/b.pdf"}
     ]
     with pytest.raises(ValueError, match="clash"):
-        dlm.build_manifest(first)
+        dlm.build_manifest(first, posts=[])
