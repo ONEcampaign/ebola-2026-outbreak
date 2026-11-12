@@ -578,10 +578,81 @@ def canonical_key(
     return key, "wrong_province" if candidates else "unknown_name"
 
 
+def _zone_in(
+    name: str, province: str | None, gazetteer: Gazetteer
+) -> HealthZone | None:
+    """The gazetteer zone of `province` that `name` names, if any."""
+    return next(
+        (z for z in gazetteer.get(name_key(name), ()) if z.province == province), None
+    )
+
+
+def _wrapped_zone(
+    first: tuple[str, str, Values],
+    second: tuple[str, str, Values],
+    gazetteer: Gazetteer,
+) -> tuple[str, str, Values] | None:
+    """Two zone rows that are one label wrapped onto two lines, as one row.
+
+    A model may read a wrapped label ("Boma" over "Mangbetu") as two rows,
+    one carrying the values and the other empty. They are one row when they
+    share a province, the joined name is a zone of that province, neither
+    half names a different zone there, and at least one half is all nulls.
+
+    Returns:
+        The joined row with the values of the half that has them, or None.
+    """
+    (label, zone_a, values_a), (label_b, zone_b, values_b) = first, second
+    province = _province(label)
+    if label != label_b or province is None:
+        return None
+    joined = f"{zone_a.strip()} {zone_b.strip()}"
+    zone = _zone_in(joined, province, gazetteer)
+    if zone is None or any(
+        _zone_in(half, province, gazetteer) not in (None, zone)
+        for half in (zone_a, zone_b)
+    ):
+        return None
+    empty_a, empty_b = (
+        all(v is None for v in vs.values()) for vs in (values_a, values_b)
+    )
+    if not (empty_a or empty_b):
+        return None
+    return label, joined, values_a if empty_b else values_b
+
+
+def _join_wrapped_zones(
+    rows: list[tuple[str, str, Values]], gazetteer: Gazetteer
+) -> list[tuple[str, str, Values]]:
+    """Zone rows in table order, with each wrapped label rejoined (`_wrapped_zone`)."""
+    joined: list[tuple[str, str, Values]] = []
+    i = 0
+    while i < len(rows):
+        merged = (
+            _wrapped_zone(rows[i], rows[i + 1], gazetteer)
+            if i + 1 < len(rows)
+            else None
+        )
+        if merged is None:
+            joined.append(rows[i])
+            i += 1
+            continue
+        logger.info(
+            "Joining zone rows %r and %r in %s: one wrapped label",
+            rows[i][1],
+            rows[i + 1][1],
+            rows[i][0],
+        )
+        joined.append(merged)
+        i += 2
+    return joined
+
+
 def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     """Key a model's raw extraction on canonical names.
 
-    Each row is keyed by `canonical_key`. A name it flags, and a row
+    Zone rows that are one label wrapped onto two lines are first joined
+    (`_wrapped_zone`). Each row is keyed by `canonical_key`. A name it flags, and a row
     repeated under one key, each flag every field of the row. The first of
     repeated rows is kept. A Total row filed among provinces, subtotals or
     zones is dropped, since the prompt excludes it and `zone_total` carries
@@ -623,9 +694,16 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
             label = _name(row, section, "province")
             add(RowKey(section, label, ""), _values(row, section))
 
-    for row in _list(raw, "zones"):
-        label, zone = _name(row, "zones", "province"), _name(row, "zones", "zone")
-        add(RowKey("zones", label, zone), _values(row, "zones"))
+    zones = [
+        (
+            _name(row, "zones", "province"),
+            _name(row, "zones", "zone"),
+            _values(row, "zones"),
+        )
+        for row in _list(raw, "zones")
+    ]
+    for label, zone, values in _join_wrapped_zones(zones, gazetteer):
+        add(RowKey("zones", label, zone), values)
 
     extraction = Extraction(
         _get(raw, "extraction", "sitrep_no"),
