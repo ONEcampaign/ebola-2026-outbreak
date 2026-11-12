@@ -189,6 +189,73 @@ def test_normalise_flags_every_field_of_a_doubtful_row(
     assert result.extraction.rows[key]["cum_confirmed"] == 12
 
 
+def empty_zone_row(province: str, zone: str) -> dict[str, Any]:
+    """A zone row in `province` with every value null."""
+    return {**zone_row(province, zone), **dict.fromkeys(FIELDS["zones"])}
+
+
+BOMA_MANGBETU = RowKey("zones", "Haut-Uélé", "Boma Mangbetu")
+
+
+@pytest.mark.parametrize(
+    ("zones", "expected"),
+    [
+        (
+            [zone_row("Haut-Uélé", "Boma"), empty_zone_row("Haut-Uélé", "Mangbetu")],
+            {"Boma Mangbetu"},
+        ),
+        (
+            [empty_zone_row("Haut-Uélé", "Boma"), zone_row("Haut-Uélé", "Mangbetu")],
+            {"Boma Mangbetu"},
+        ),
+        (
+            [
+                zone_row("Haut-Uélé", "Wamba", cases=3),
+                zone_row("Haut-Uélé", "Boma"),
+                empty_zone_row("Haut-Uélé", "Mangbetu"),
+                zone_row("Haut-Uélé", "Dungu", cases=5),
+            ],
+            {"Wamba", "Boma Mangbetu", "Dungu"},
+        ),
+    ],
+    ids=["values-on-first-line", "values-on-second-line", "between-zones"],
+)
+def test_normalise_joins_a_wrapped_zone_label(
+    zones: list[dict[str, Any]], expected: set[str]
+) -> None:
+    result = normalise(raw(zones=zones), GAZETTEER)
+    assert result.name_flags == []
+    rows = result.extraction.rows
+    assert rows[BOMA_MANGBETU]["cum_confirmed"] == 12
+    assert {k.zone for k in rows} == expected
+
+
+@pytest.mark.parametrize(
+    "zones",
+    [
+        [zone_row("Haut-Uélé", "Boma"), zone_row("Haut-Uélé", "Mangbetu")],
+        [zone_row("Haut-Uélé", "Boma"), empty_zone_row("Ituri", "Mangbetu")],
+        [zone_row("Haut-Uélé", "Mangbetu"), empty_zone_row("Haut-Uélé", "Boma")],
+    ],
+    ids=["both-valued", "provinces-differ", "wrong-order"],
+)
+def test_normalise_keeps_rows_that_are_not_one_label(
+    zones: list[dict[str, Any]],
+) -> None:
+    result = normalise(raw(zones=zones), GAZETTEER)
+    assert BOMA_MANGBETU not in result.extraction.rows
+    assert {f.reason for f in result.name_flags} == {"unknown_name"}
+
+
+def test_normalise_keeps_a_real_zone_beside_an_empty_one() -> None:
+    zones = [zone_row("Haut-Uélé", "Dungu"), empty_zone_row("Haut-Uélé", "Isiro")]
+    rows = normalise(raw(zones=zones), GAZETTEER).extraction.rows
+    assert set(rows) == {
+        RowKey("zones", "Haut-Uélé", "Dungu"),
+        RowKey("zones", "Haut-Uélé", "Isiro"),
+    }
+
+
 def test_normalise_unknown_province() -> None:
     row = {"province": "Kinshasa", **dict.fromkeys(FIELDS["zone_subtotals"], 0)}
     result = normalise(raw(zone_subtotals=[row]), GAZETTEER)
