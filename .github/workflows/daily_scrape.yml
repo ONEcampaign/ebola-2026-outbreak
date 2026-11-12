@@ -137,9 +137,9 @@ jobs:
           echo "::error::Zone release or its commit failed; see the Release zone data and Commit zone data steps"
           exit 1
 
-  # The only writer of data/output. The tables read the sitrep series and the
-  # WHO table, so they rebuild even when the scrape job fails, and new WHO
-  # figures still reach the charts.
+  # Writes data/output, as sitrep_release does. The tables read the sitrep
+  # series and the WHO table, so they rebuild even when the scrape job fails
+  # and new WHO figures reach the charts.
   tables:
     needs: scrape
     if: ${{ !cancelled() }}

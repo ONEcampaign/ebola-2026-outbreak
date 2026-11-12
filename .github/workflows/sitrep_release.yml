@@ -63,3 +63,21 @@ jobs:
           git commit -m "data: release reviewed DRC 2026 sitreps $(date -u +%Y-%m-%d)"
           git pull --rebase
           git push
+
+      # A release changes the zone table, so rebuild the charts here without
+      # waiting for the next scrape. Runs even when no zone data changed.
+      - name: Build chart tables
+        run: uv run python src/ebola_2026_outbreak/chart_tables.py
+
+      - name: Commit chart tables
+        run: |
+          git add data/output/*.csv data/output/*.json
+          if git diff --cached --quiet; then
+            echo "No chart table changes"
+            exit 0
+          fi
+          git commit -m "data: chart tables $(date -u +%Y-%m-%d)"
+          # On a conflict, drop the local commit. The tables are a pure
+          # function of committed state, so the next run rebuilds them.
+          git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
+          git push
