@@ -123,10 +123,10 @@ jobs:
           git pull --rebase || { git rebase --abort; git reset --hard '@{u}'; exit 1; }
           git push
 
-      # INSP titles each SitRep post with its sitrep number, whatever the PDF is
-      # called. Fails the run when the manifest lacks the newest one, after the
-      # data above is pushed.
-      - name: Check latest sitrep was scraped
+      # Fails the run when a SitRep post on INSP has no attached PDF in the
+      # manifest, or a day between the first and last report date has no
+      # sitrep, after the data above is pushed.
+      - name: Check every sitrep was scraped
         run: uv run python src/ebola_2026_outbreak/drc_2026_sitreps_download.py check
 
       # continue-on-error hides a zone failure from the job result. This step

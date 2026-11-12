@@ -45,11 +45,15 @@ Files are prefixed by outbreak so historical and current data stay apart:
     [INSP](https://insp.cd/category/sitrep/), which publishes them first.
     Files taken from the Ministry of Health's site before 28 October 2026
     stay in the manifest. PDFs are saved to `data/raw/drc_2026/sitreps/`.
-    INSP renames its files often, so a PDF attached to a post in its SitRep
-    category is kept whatever its name. After each scrape,
-    `drc_2026_sitreps_download.py check` compares the newest sitrep number in
-    those post titles with the manifest and fails the run if the manifest is
-    behind.
+    Every PDF in INSP's media library is listed, and one is kept when its
+    name carries "MVEBDB", "MVE_RDC" or "MVE-Ituri" (INSP's first sitreps) or
+    it is attached to a post in INSP's SitRep category. INSP renames its files
+    often, so attachment keeps a file whatever its name. After each scrape,
+    `drc_2026_sitreps_download.py check` fails the run when a SitRep post has
+    no attached PDF in the manifest, or when a day between the first and last
+    report date has no sitrep. Posts INSP left without a PDF
+    (`POSTS_WITHOUT_PDF`) and days it published no sitrep (`KNOWN_GAPS`) are
+    listed in the module with the reason for each.
   - `drc_2026_sitrep_by_province.csv`: new, cumulative confirmed cases and
     cumulative confirmed deaths by province from each sitrep's province
     table, built by `drc_2026_sitreps_parse.py`.
@@ -64,7 +68,8 @@ Files are prefixed by outbreak so historical and current data stay apart:
     provinces, in the same shape and with the same final indicator label as
     the West Africa files. Built by `drc_2026_final.py`. No chart reads them.
     They serve as reference and cross-check outputs. Dates with no parsed
-    sitrep, including most of 16 June to 5 August, come from the INRB series.
+    sitrep, because INSP published none or its province table could not be
+    read, come from the INRB series.
     The intermediate's `source` column says which.
 
 ### Zone-level sitreps

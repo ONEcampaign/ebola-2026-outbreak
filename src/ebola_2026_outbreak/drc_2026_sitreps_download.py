@@ -2,15 +2,18 @@
 
 INSP (https://insp.cd/category/sitrep/) publishes each sitrep first. Its
 site is a WordPress front end whose media API lists every upload, other
-outbreaks' sitreps included, so only files marked "MVEBDB", or "MVE_RDC" from
-sitrep 169 on, are kept. INSP renames its files often (sitrep 179 dropped
-"MVE_RDC"), so a PDF attached to a post in INSP's SitRep category is kept
-whatever its name.
+outbreaks' sitreps included. Every PDF is listed and a file is kept when its
+name carries "MVEBDB", "MVE_RDC" or "MVE-Ituri", or when it is attached to a
+post in INSP's SitRep category. INSP renames its files often (sitrep 179
+dropped "MVE_RDC"), so attachment to a SitRep post keeps a file whatever its
+name.
 
-Those posts are also the check that nothing was missed. Each is titled with
-the sitrep's reference ("SitRep N°179/MVE-BDBV/09/11/2026"), so `check`
-compares the newest posted sitrep number with the newest in the manifest and
-fails when the manifest is behind.
+Those posts are also the check that nothing was missed. `check` fails when a
+settled SitRep post has no attached PDF in the manifest (POSTS_WITHOUT_PDF
+lists the posts INSP left without one), and when a day between the first and
+last report date has no sitrep (KNOWN_GAPS lists the days INSP published
+none). The second part catches sitreps posted outside the category or left
+unattached.
 
 The report date comes from the PDF header, since filenames are unreliable. The
 header has two dates: the printed report date and the date inside the sitrep
@@ -58,25 +61,52 @@ POSTS_QUERY = (
 # INSP sometimes posts a sitrep shortly before or after attaching its PDF, so a
 # post younger than this does not fail the check; the next run catches it.
 POST_GRACE = timedelta(hours=3)
+# SitRep posts INSP left without an attached PDF, by post id, with the reason
+# `check` lets each pass.
+POSTS_WITHOUT_PDF: dict[int, str] = {
+    24781: "Sitrep 1 (14 May): no attached file. It is unattached media 24659, "
+    "kept by its MVE-Ituri name.",
+    24783: "Sitrep 2 (17 May): no attached file. It is unattached media 24706, "
+    "kept by its MVE-Ituri name.",
+    24785: "Sitrep 4 (19 May): no attached file. It is unattached media 24710, "
+    "kept by its MVE-Ituri name.",
+    24789: "Sitrep 5 (19 May): no attached file. It is unattached media 24714, "
+    "kept by its MVE_RDC name.",
+    24791: "Sitrep 6 (20 May): no attached file. It is unattached media 24728, "
+    "kept by its MVE_RDC name.",
+    24759: "Sitrep 6 (20 May), posted twice: no attached file. It is unattached "
+    "media 24728, kept by its MVE_RDC name.",
+}
+# Days between the first and last report date with no sitrep, with the reason.
+# For each, INSP has no post numbered for that day in any category and no file
+# for it in its media library, and the ministry files do not cover it.
+KNOWN_GAPS: dict[date, str] = {
+    date(2026, 5, 15): "INSP published no sitrep: sitrep 1 is 14 May, sitrep 2 17 May",
+    date(2026, 5, 16): "INSP published no sitrep: sitrep 1 is 14 May, sitrep 2 17 May",
+    date(2026, 5, 18): "INSP published no sitrep 3",
+    date(2026, 6, 12): "INSP published no sitrep 29",
+    date(2026, 6, 26): "INSP published no sitrep 43",
+    date(2026, 6, 28): "INSP published no sitrep 45",
+    date(2026, 7, 28): "INSP published no sitrep 75",
+    date(2026, 7, 29): "INSP published no sitrep 76",
+    date(2026, 11, 2): "INSP published no sitrep 172",
+}
 # Host of the ministry files kept from before INSP became the only source.
 MINISTRY_SITE = "https://administration.sante.gouv.cd/"
 HTTP_NOT_FOUND = 404
-# INSP's library also holds other outbreaks' sitreps; this outbreak's carry
-# "MVEBDB" in the file name.
-INSP_FILE_MARKER = "MVEBDB"
-# From sitrep 169 (30 October 2026) INSP names files "MVE_RDC" instead. Its
-# uploads before August used that name too, and the ministry's files already
-# cover those dates, so the marker, and attachment to a SitRep post, count
-# only from the first renamed upload.
-INSP_RENAMED_MARKER = "MVE_RDC"
-INSP_RENAMED_FIRST_MEDIA_ID = 25808
+# INSP's library also holds other outbreaks' sitreps. This outbreak's carry
+# "MVEBDB" (August to October) or "MVE_RDC" (May to August, and from sitrep
+# 169) in the file name. Every MVE_RDC file on INSP is this outbreak's. INSP's
+# first sitreps (1, 2 and 4) are named "MVE-Ituri". The 2025 outbreak's files
+# are named "MVE16" and match no marker.
+INSP_FILE_MARKERS = ("MVEBDB", "MVE_RDC", "MVE-ITURI")
+PDF_MIME = "application/pdf"
+# Listed by MIME type, since a filename search misses renamed uploads.
 MEDIA_QUERY = (
-    "?search=SitRep&per_page=100&_fields=id,modified,source_url,mime_type,post"
+    f"?mime_type={PDF_MIME}&per_page=100&_fields=id,modified,source_url,mime_type,post"
 )
 SITREP_DIR = ROOT / "data" / "raw" / OUTBREAK / "sitreps"
 MANIFEST_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_sitrep_manifest.csv"
-
-PDF_MIME = "application/pdf"
 
 FRENCH_MONTHS = {
     "janvier": 1,
@@ -310,15 +340,13 @@ def list_sitrep_posts() -> list[SitrepPost]:
 def is_this_outbreak(item: MediaItem, *, sitrep_post_ids: set[int]) -> bool:
     """Whether a media item is one of this outbreak's sitreps.
 
-    It is when its name carries "MVEBDB" or, from INSP_RENAMED_FIRST_MEDIA_ID
-    on, when its name carries "MVE_RDC" or it is attached to a SitRep post.
+    It is when its name carries one of INSP_FILE_MARKERS or it is attached to
+    a SitRep post.
     """
     url = item["source_url"].upper()
-    if INSP_FILE_MARKER in url:
+    if any(marker in url for marker in INSP_FILE_MARKERS):
         return True
-    if item["id"] < INSP_RENAMED_FIRST_MEDIA_ID:
-        return False
-    return INSP_RENAMED_MARKER in url or item.get("post") in sitrep_post_ids
+    return item.get("post") in sitrep_post_ids
 
 
 def list_media(posts: list[SitrepPost]) -> list[MediaItem]:
@@ -341,19 +369,25 @@ def list_media(posts: list[SitrepPost]) -> list[MediaItem]:
 
 
 def warn_newer_rejected(listed: list[MediaItem], *, kept: list[MediaItem]) -> None:
-    """Warn about sitrep PDFs uploaded after the newest kept one but filtered out.
+    """Warn about SitRep-named PDFs newer than the newest kept one but rejected.
 
-    INSP has renamed its files before. A renamed sitrep attached to its post is
-    kept, but an unattached one would be dropped, so newer rejected uploads are
-    logged for a person to check. `check` fails the run in that case.
+    The listing covers every PDF on INSP, so only rejected files with "SITREP"
+    in the URL (any case) are logged. A renamed sitrep attached to its post is
+    kept, but an unattached one is dropped, so a person should check the logged
+    files. The warning does not fail the run. `check` fails it when the
+    sitrep's post has no PDF in the manifest or its day has no sitrep.
     """
     newest_kept = max((item["id"] for item in kept), default=0)
     for item in listed:
-        if item["id"] > newest_kept and item not in kept:
+        if (
+            item["id"] > newest_kept
+            and item not in kept
+            and "SITREP" in item["source_url"].upper()
+        ):
             logger.warning(
-                "INSP media %s is newer than every kept sitrep but its name "
-                "does not match this outbreak; check whether INSP renamed its "
-                "files: %s",
+                "INSP media %s is newer than every kept sitrep but is neither "
+                "named nor attached as this outbreak's; check whether it is a "
+                "renamed sitrep: %s",
                 item["id"],
                 item["source_url"],
             )
@@ -471,24 +505,6 @@ def flag_latest(manifest: pl.DataFrame) -> pl.DataFrame:
     return flagged
 
 
-def log_gaps(manifest: pl.DataFrame) -> None:
-    """Log report dates with no sitrep between the first and last available."""
-    dates = set(manifest["report_date"].to_list())
-    first, last = min(dates), max(dates)
-    missing = [
-        first + timedelta(days=i)
-        for i in range((last - first).days + 1)
-        if first + timedelta(days=i) not in dates
-    ]
-    logger.warning(
-        "%d of %d days between %s and %s have no sitrep",
-        len(missing),
-        (last - first).days + 1,
-        first,
-        last,
-    )
-
-
 def build_manifest(
     previous: pl.DataFrame | None, *, posts: list[SitrepPost]
 ) -> pl.DataFrame:
@@ -554,69 +570,110 @@ def build_manifest(
     return flag_latest(resolve_report_dates(manifest))
 
 
-def find_unscraped_latest(
-    manifest: pl.DataFrame, posts: list[SitrepPost], *, now: datetime
-) -> SitrepPost | None:
-    """Return INSP's newest posted sitrep if the manifest lacks it.
+def find_posts_without_pdf(
+    posts: list[SitrepPost],
+    media: list[MediaItem],
+    *,
+    manifest_ids: set[int],
+    now: datetime,
+) -> list[SitrepPost]:
+    """Return settled SitRep posts with no attached PDF in the manifest.
 
-    Posts younger than POST_GRACE are ignored, since INSP may attach the PDF
-    after posting. Printed sitrep numbers are occasionally wrong, so a failure
-    can also mean a misnumbered PDF; the message names both to check.
+    Posts younger than POST_GRACE are skipped, since INSP may attach the PDF
+    after posting. So are posts in POSTS_WITHOUT_PDF, and one with a PDF in the
+    manifest is logged so its entry can be removed.
 
     Args:
-        manifest: The sitrep manifest.
         posts: INSP's SitRep posts.
+        media: Every PDF in INSP's media library, with the post it is attached to.
+        manifest_ids: Media ids in the manifest.
         now: Current time, timezone-aware.
 
     Returns:
-        The newest settled post when its number is above every manifest
-        sitrep number, else None.
+        The failing posts, ordered by sitrep number.
 
     Raises:
-        ValueError: If there is no settled post or the manifest has no numbers.
+        ValueError: If no post is older than the grace period.
     """
     settled = [post for post in posts if now - post.published >= POST_GRACE]
     if not settled:
         raise ValueError("INSP lists no SitRep post older than the grace period")
-    latest_post = max(settled, key=lambda post: post.sitrep_number)
-    numbers = [n for n in manifest["sitrep_number"].to_list() if n is not None]
-    if not numbers:
-        raise ValueError("The manifest has no sitrep numbers")
-    latest_scraped: int = max(numbers)
-    logger.info(
-        "Latest posted sitrep %d (%s); latest scraped %d",
-        latest_post.sitrep_number,
-        latest_post.title,
-        latest_scraped,
-    )
-    return latest_post if latest_post.sitrep_number > latest_scraped else None
+    attached: dict[int, set[int]] = {}
+    for item in media:
+        if (post_id := item.get("post")) is not None:
+            attached.setdefault(post_id, set()).add(item["id"])
+    missing = []
+    for post in settled:
+        has_pdf = bool(attached.get(post.post_id, set()) & manifest_ids)
+        if post.post_id not in POSTS_WITHOUT_PDF:
+            if not has_pdf:
+                missing.append(post)
+        elif has_pdf:
+            logger.warning(
+                "POSTS_WITHOUT_PDF lists post %d but it now has an attached PDF",
+                post.post_id,
+            )
+    return sorted(missing, key=lambda post: (post.sitrep_number, post.post_id))
 
 
-def check_latest() -> int:
-    """Compare INSP's newest posted sitrep with the manifest.
+def find_gaps(report_dates: set[date]) -> list[date]:
+    """Return days between the first and last report date with no sitrep.
+
+    Days in KNOWN_GAPS are skipped. One with a sitrep is logged so its entry
+    can be removed.
+
+    Raises:
+        ValueError: If there are no report dates.
+    """
+    if not report_dates:
+        raise ValueError("The manifest has no report dates")
+    for day in sorted(KNOWN_GAPS.keys() & report_dates):
+        logger.warning("KNOWN_GAPS lists %s but it now has a sitrep", day)
+    first, last = min(report_dates), max(report_dates)
+    days = (first + timedelta(days=i) for i in range((last - first).days + 1))
+    return [d for d in days if d not in report_dates and d not in KNOWN_GAPS]
+
+
+def check_complete() -> int:
+    """Check that the manifest holds every sitrep INSP has published.
+
+    Prints a GitHub Actions error annotation, so the run summary shows it, for
+    each SitRep post with no PDF in the manifest and each day with no sitrep.
 
     Returns:
-        0 when the manifest has it, 1 when it does not.
+        0 when nothing is missing, 1 otherwise.
     """
     manifest = pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA)
-    missing = find_unscraped_latest(
-        manifest, list_sitrep_posts(), now=datetime.now(UTC)
+    posts = list_sitrep_posts()
+    missing_posts = find_posts_without_pdf(
+        posts,
+        list_api_pdfs(INSP_MEDIA_API),
+        manifest_ids=set(manifest["media_id"].to_list()),
+        now=datetime.now(UTC),
     )
-    if missing is None:
-        return 0
-    latest_scraped = manifest.filter(
-        pl.col("sitrep_number") == pl.col("sitrep_number").max()
-    ).row(0, named=True)
-    # A GitHub Actions error annotation, so the run summary shows it.
-    print(
-        f"::error::INSP posted sitrep {missing.sitrep_number} ({missing.title}, "
-        f"post {missing.post_id}) but the newest in the manifest is "
-        f"{latest_scraped['sitrep_number']} ({latest_scraped['file_name']}). "
-        "Its PDF is not attached to the post or was filtered out; see the "
-        "download step's warnings.",
-        flush=True,
+    gaps = find_gaps(set(manifest.filter("is_latest")["report_date"].to_list()))
+    for post in missing_posts:
+        print(
+            f"::error::INSP post {post.post_id} (sitrep {post.sitrep_number}, "
+            f"{post.title}) has no attached PDF in the manifest. Its PDF is not "
+            "attached, was filtered out or failed to download; see the download "
+            "step's warnings.",
+            flush=True,
+        )
+    for day in gaps:
+        print(
+            f"::error::No sitrep in the manifest for {day}. Look for it on INSP "
+            "(posted outside the SitRep category or left unattached), or add the "
+            "day to KNOWN_GAPS with the reason.",
+            flush=True,
+        )
+    logger.info(
+        "%d SitRep posts, %d without a PDF in the manifest; %d days without a sitrep",
+        len(posts),
+        len(missing_posts),
+        len(gaps),
     )
-    return 1
+    return 1 if missing_posts or gaps else 0
 
 
 def download_all() -> None:
@@ -627,7 +684,6 @@ def download_all() -> None:
         else None
     )
     manifest = build_manifest(previous, posts=list_sitrep_posts())
-    log_gaps(manifest.filter("is_latest"))
     manifest.write_csv(MANIFEST_PATH)
     logger.info(
         "Wrote %d files (%d report dates) to %s",
@@ -638,19 +694,19 @@ def download_all() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the command line; return 1 when the check finds a missed sitrep."""
+    """Run the command line; return 1 when the check finds a missing sitrep."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "command",
         nargs="?",
         choices=("download", "check"),
         default="download",
-        help="download (default) refreshes the manifest; check fails when INSP "
-        "has posted a newer sitrep than the manifest holds",
+        help="download (default) refreshes the manifest; check fails when a "
+        "SitRep post has no PDF in the manifest or a day has no sitrep",
     )
     args = parser.parse_args(argv)
     if args.command == "check":
-        return check_latest()
+        return check_complete()
     download_all()
     return 0
 

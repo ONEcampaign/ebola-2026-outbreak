@@ -9,11 +9,13 @@ order, headers, wrapped province names), so rows are found by province name.
 Numbers use a space as thousands separator, which makes "44 5 659 2 583"
 ambiguous. The row's printed case fatality rate (deaths / cases) settles the
 reading. Province rows must sum to the Total row, otherwise parsing raises.
+Uploads known not to parse are listed in `PROVINCE_TABLE_EXCEPTIONS`.
 """
 
 import logging
 import re
 from datetime import date
+from enum import StrEnum
 from itertools import pairwise
 from pathlib import Path
 from typing import NamedTuple
@@ -84,11 +86,162 @@ INDICATORS = {
     "cases": "Cumulative confirmed cases",
     "deaths": "Cumulative confirmed deaths",
 }
-# Early sitreps without a province table of cumulative counts.
-NO_PROVINCE_TABLE = {
-    date(2026, 5, 19): "alerts summary only",
-    date(2026, 5, 21): "new counts by health zone only",
-    date(2026, 8, 14): "one-off layout with no CFR or Total row to validate",
+
+
+class SkipCategory(StrEnum):
+    """Why an upload's province table is not parsed."""
+
+    NO_TABLE = "no_table"  # no province table of cumulative counts to validate
+    PARSER_MISREAD = "parser_misread"  # the table is there, the parser misreads it
+    PUBLISHER_ERROR = "publisher_error"  # the printed table does not add up
+
+
+class TableException(NamedTuple):
+    """An upload whose province table is skipped, and why."""
+
+    report_date: date
+    category: SkipCategory
+    reason: str
+
+
+# Uploads skipped by parse, keyed by (media_id, modified). A new `modified` for
+# an excepted media id fails the run until the entry is reviewed and rekeyed.
+PROVINCE_TABLE_EXCEPTIONS: dict[tuple[int, str], TableException] = {
+    (24659, "2026-05-16T12:26:49"): TableException(
+        date(2026, 5, 14),
+        SkipCategory.NO_TABLE,
+        "first sitrep, Ituri narrative only",
+    ),
+    (24706, "2026-05-20T17:15:42"): TableException(
+        date(2026, 5, 17),
+        SkipCategory.NO_TABLE,
+        "alerts by health zone only",
+    ),
+    (428, "2026-05-22T23:40:37"): TableException(
+        date(2026, 5, 19),
+        SkipCategory.NO_TABLE,
+        "alerts summary only",
+    ),
+    (24728, "2026-05-21T13:42:07"): TableException(
+        date(2026, 5, 20),
+        SkipCategory.NO_TABLE,
+        "new counts by health zone only",
+    ),
+    (429, "2026-05-22T23:40:43"): TableException(
+        date(2026, 5, 21),
+        SkipCategory.NO_TABLE,
+        "new counts by health zone only",
+    ),
+    (24821, "2026-05-23T12:32:28"): TableException(
+        date(2026, 5, 22),
+        SkipCategory.NO_TABLE,
+        "new counts by health zone only",
+    ),
+    (24848, "2026-05-24T10:54:14"): TableException(
+        date(2026, 5, 23),
+        SkipCategory.NO_TABLE,
+        "new counts by health zone only",
+    ),
+    (24853, "2026-05-25T17:20:48"): TableException(
+        date(2026, 5, 24),
+        SkipCategory.NO_TABLE,
+        "counts by health zone only, no CFR",
+    ),
+    (24874, "2026-05-27T04:58:29"): TableException(
+        date(2026, 5, 25),
+        SkipCategory.NO_TABLE,
+        "counts by health zone only, no CFR",
+    ),
+    (24880, "2026-05-27T12:11:28"): TableException(
+        date(2026, 5, 26),
+        SkipCategory.NO_TABLE,
+        "province counts in the narrative only",
+    ),
+    (24892, "2026-05-28T18:16:59"): TableException(
+        date(2026, 5, 27),
+        SkipCategory.NO_TABLE,
+        "counts by health zone with province subtotals, no CFR",
+    ),
+    (24895, "2026-05-30T14:03:03"): TableException(
+        date(2026, 5, 28),
+        SkipCategory.NO_TABLE,
+        "no case table",
+    ),
+    (24901, "2026-05-31T09:07:00"): TableException(
+        date(2026, 5, 29),
+        SkipCategory.NO_TABLE,
+        "counts by health zone with province subtotals",
+    ),
+    (24912, "2026-05-31T20:25:01"): TableException(
+        date(2026, 5, 30),
+        SkipCategory.NO_TABLE,
+        "province counts in the narrative only",
+    ),
+    (24994, "2026-06-12T18:14:15"): TableException(
+        date(2026, 6, 11),
+        SkipCategory.PARSER_MISREAD,
+        'footnote mark in "Nord-Kivu1" hides the row: provinces sum to 649 cases, Total row says 689',
+    ),
+    (25024, "2026-06-18T12:27:44"): TableException(
+        date(2026, 6, 16),
+        SkipCategory.PARSER_MISREAD,
+        'footnote mark in "Nord-Kivu1" hides the row: provinces sum to 802 cases, Total row says 875',
+    ),
+    (25028, "2026-06-18T19:14:38"): TableException(
+        date(2026, 6, 17),
+        SkipCategory.PARSER_MISREAD,
+        "Total CFR printed 26,3 % for 232/896 (25.9 %): parser reads the contacts follow-up table instead (Ituri 4 659 / 3 297)",
+    ),
+    (25077, "2026-07-03T06:22:09"): TableException(
+        date(2026, 7, 1),
+        SkipCategory.PARSER_MISREAD,
+        "Total CFR printed 30,9 % for 452/1460 (30.96 %): parser reads the contacts follow-up table instead (Ituri 8 376 / 6 973)",
+    ),
+    (25105, "2026-07-07T23:43:04"): TableException(
+        date(2026, 7, 6),
+        SkipCategory.PARSER_MISREAD,
+        "Ituri CFR printed 31,5 % for 491/1556 (31.55 %) drops the row: provinces sum to 152 cases, Total row says 1708",
+    ),
+    (25133, "2026-07-12T11:09:42"): TableException(
+        date(2026, 7, 10),
+        SkipCategory.PUBLISHER_ERROR,
+        "Total row leaves out Haut-Uélé and Tshopo: provinces sum to 1878 cases, Total row says 1873",
+    ),
+    (25144, "2026-07-14T07:14:55"): TableException(
+        date(2026, 7, 12),
+        SkipCategory.PUBLISHER_ERROR,
+        "provinces sum to 719 deaths, Total row says 718",
+    ),
+    (25185, "2026-07-22T23:56:33"): TableException(
+        date(2026, 7, 21),
+        SkipCategory.PUBLISHER_ERROR,
+        "Total row says 2 531 cases, provinces and the CFR give 2 536: no province table found",
+    ),
+    (25216, "2026-07-28T03:22:20"): TableException(
+        date(2026, 7, 26),
+        SkipCategory.PUBLISHER_ERROR,
+        "Haut-Uélé CFR printed 52,6 % for 21/38; provinces sum to 3261 cases, Total row says 3262",
+    ),
+    (25219, "2026-07-29T06:55:06"): TableException(
+        date(2026, 7, 27),
+        SkipCategory.PARSER_MISREAD,
+        "Haut-Uélé CFR printed 52,6 % for 21/39 drops the row (counts sum): provinces sum to 8 cases, Total row says 3360",
+    ),
+    (25269, "2026-08-04T20:34:24"): TableException(
+        date(2026, 8, 3),
+        SkipCategory.PARSER_MISREAD,
+        "Total CFR printed 45,1 % for 1751/3874 (45.20 %): parser reads the contacts follow-up table instead (Ituri 11 544 / 9 255)",
+    ),
+    (528, "2026-08-17T00:16:19"): TableException(
+        date(2026, 8, 14),
+        SkipCategory.NO_TABLE,
+        "one-off layout with no CFR or Total row to validate",
+    ),
+    (25373, "2026-08-23T19:05:07"): TableException(
+        date(2026, 8, 21),
+        SkipCategory.PARSER_MISREAD,
+        'Total row wraps "(37,7 %)" over two lines: no province table found',
+    ),
 }
 
 SCHEMA = pl.Schema(
@@ -395,10 +548,43 @@ def ensure_pdf(*, media_id: int, modified: str, source_url: str) -> Path:
     return download(item)
 
 
+def stale_exception_note(*, media_id: int, modified: str) -> str:
+    """Name any exception for the same upload under a different `modified`.
+
+    INSP sometimes touches `modified` on old files without changing them, which
+    moves an excepted upload out of its exception.
+    """
+    stale = [
+        f"{key_modified} ({skip.category}: {skip.reason})"
+        for (key_id, key_modified), skip in PROVINCE_TABLE_EXCEPTIONS.items()
+        if key_id == media_id and key_modified != modified
+    ]
+    if not stale:
+        return ""
+    return (
+        f"; media {media_id} has an exception for modified {', '.join(stale)},"
+        f" but the manifest says {modified}"
+    )
+
+
+def warn_stale_exceptions(manifest: pl.DataFrame) -> None:
+    """Log any exception whose upload is not a latest sitrep in the manifest."""
+    latest = set(manifest.select("media_id", "modified").iter_rows())
+    for key, skip in PROVINCE_TABLE_EXCEPTIONS.items():
+        if key not in latest:
+            logger.warning(
+                "Exception for media %d modified %s (%s) matches no latest sitrep",
+                *key,
+                skip.report_date,
+            )
+
+
 def main() -> None:
     """Parse every kept sitrep not yet in the output and update the CSV.
 
-    Writes nothing if any sitrep fails, so a partial run cannot drop dates.
+    Uploads in `PROVINCE_TABLE_EXCEPTIONS` are skipped. One whose media id is
+    excepted under a different `modified` fails without being parsed. Writes
+    nothing if any sitrep fails, so a partial run cannot drop dates.
     """
     manifest = pl.read_csv(MANIFEST_PATH, schema=MANIFEST_SCHEMA).filter("is_latest")
     existing = (
@@ -409,14 +595,31 @@ def main() -> None:
     # Keyed on `modified` too, so an upload replaced in place is parsed again.
     done = set(existing.select("date", "media_id", "modified").unique().iter_rows())
 
+    warn_stale_exceptions(manifest)
+
     frames = [existing]
     failures: dict[date, str] = {}
     for row in manifest.sort("report_date").iter_rows(named=True):
         report_date = row["report_date"]
         if (report_date, row["media_id"], row["modified"]) in done:
             continue
-        if report_date in NO_PROVINCE_TABLE:
-            logger.info("Skipping %s: %s", report_date, NO_PROVINCE_TABLE[report_date])
+        key = (row["media_id"], row["modified"])
+        # Some excepted uploads parse "successfully" from the wrong table, so one
+        # with a touched `modified` fails whatever the parser does.
+        if key not in PROVINCE_TABLE_EXCEPTIONS and (
+            note := stale_exception_note(media_id=key[0], modified=key[1])
+        ):
+            failures[report_date] = f"not parsed{note}"
+            continue
+        if key in PROVINCE_TABLE_EXCEPTIONS:
+            skip = PROVINCE_TABLE_EXCEPTIONS[key]
+            logger.info(
+                "Skipping %s (media %d, %s): %s",
+                report_date,
+                row["media_id"],
+                skip.category,
+                skip.reason,
+            )
             continue
         try:
             frames.append(
@@ -435,7 +638,9 @@ def main() -> None:
                 )
             )
         except ValueError as e:
-            failures[report_date] = str(e)
+            failures[report_date] = str(e) + stale_exception_note(
+                media_id=row["media_id"], modified=row["modified"]
+            )
 
     if failures:
         for report_date, reason in failures.items():
