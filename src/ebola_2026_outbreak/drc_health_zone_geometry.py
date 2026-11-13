@@ -1,15 +1,17 @@
-"""DR Congo health zone shapes for a zone-level map, from OCHA's COD-AB.
+"""DR Congo health zone shapes and P-codes for a zone-level map, from OCHA's COD-AB.
 
 COD-AB's admin level 3 holds the 519 health zones (zones de santé), with
 boundaries from September 2019. The shapes are simplified as one coverage, so
 neighbouring zones keep a shared border, and written with each zone's P-code
-as `Code` to `data/output/drc_health_zones_geometry.csv`. The sitrep
-gazetteer's zones are matched to those codes by province and name, and the
-matches are written to `data/reference/drc_2026_health_zone_codes.csv`. Zones
-COD-AB spells differently are listed in `COD_SPELLINGS`, and health areas the
-sitreps report as zones take their zone's code in `HEALTH_AREA_ZONES`. A
-sitrep zone with no shape keeps an empty code. Run it by hand when the
-gazetteer gains a zone.
+as `Code` to `data/output/drc_health_zones_geometry.csv`. Each zone's province,
+name and P-code go to `data/reference/cod_ab_health_zones.csv`. Run it by hand
+only to refresh COD-AB.
+
+`zone_codes` matches the sitrep gazetteer's zones to those P-codes by province
+and name when the chart tables are built. Zones COD-AB spells differently are
+listed in `COD_SPELLINGS` or as gazetteer aliases, health areas the sitreps
+report as zones take their zone's code in `HEALTH_AREA_ZONES`, and rows that
+are not zones are in `NOT_MAPPED`.
 """
 
 import io
@@ -22,14 +24,14 @@ import polars as pl
 import shapely
 from shapely.geometry import mapping, shape
 
-from ebola_2026_outbreak.drc_2026_sitrep_schema import GAZETTEER_PATH, name_key
+from ebola_2026_outbreak.drc_2026_sitrep_schema import name_key
 from ebola_2026_outbreak.fetch import get
 
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 GEOMETRY_PATH = ROOT / "data" / "output" / "drc_health_zones_geometry.csv"
-CODES_PATH = ROOT / "data" / "reference" / "drc_2026_health_zone_codes.csv"
+COD_AB_PATH = ROOT / "data" / "reference" / "cod_ab_health_zones.csv"
 
 COD_AB_URL = (
     "https://data.humdata.org/dataset/f42132b9-8cc6-4201-b020-9259c56e8868"
@@ -51,6 +53,9 @@ COD_SPELLINGS = {"Mongbwalu": "Mongbalu", "Nyankunde": "Nyakunde"}
 # holding them, under which their cases are mapped. Dakwa is a health area of
 # Ango in GRID3's health areas v9.0; neither COD-AB nor GRID3 has it as a zone.
 HEALTH_AREA_ZONES = {"Dakwa": "Ango"}
+# Gazetteer (province, zone) rows that are not zones, so have no map shape.
+# "A ventiler" holds cases not yet assigned to a zone.
+NOT_MAPPED = frozenset({("Ituri", "A ventiler")})
 
 GEOMETRY, CODE, NAME = "Geometry", "Code", "Name"
 
@@ -113,19 +118,39 @@ def geometry_table(features: list[dict]) -> pl.DataFrame:
     ).sort(CODE)
 
 
-def zone_codes(features: list[dict], gazetteer: pl.DataFrame) -> pl.DataFrame:
+def cod_ab_table(features: list[dict]) -> pl.DataFrame:
+    """One row per COD-AB zone: `province`, `zone` and P-code `code`."""
+    return pl.DataFrame(
+        [
+            {
+                "province": p["adm1_name"],
+                "zone": p["adm3_name"],
+                "code": p["adm3_pcode"],
+            }
+            for p in (f["properties"] for f in features)
+        ],
+        schema={"province": pl.String, "zone": pl.String, "code": pl.String},
+    ).sort("code")
+
+
+def zone_codes(cod_ab: pl.DataFrame, gazetteer: pl.DataFrame) -> pl.DataFrame:
     """The COD-AB P-code of each gazetteer zone, matched by province and name.
 
+    A zone matches on its own name, its `COD_SPELLINGS` or `HEALTH_AREA_ZONES`
+    entry, or any of its gazetteer aliases, all by `name_key`.
+
     Args:
-        features: COD-AB admin 3 features.
+        cod_ab: COD-AB zones with `province`, `zone` and `code` (see
+            `cod_ab_table`).
         gazetteer: Sitrep zones with `province`, `zone` and `aliases`.
 
     Returns:
-        `province`, `zone` and `code`, null where COD-AB has no such zone.
+        `province`, `zone` and `code`, one row per gazetteer zone, null where
+        COD-AB has no such zone. Such zones not in `NOT_MAPPED` are logged.
     """
     cod = {
-        (name_key(p["adm1_name"]), name_key(p["adm3_name"])): p["adm3_pcode"]
-        for p in (f["properties"] for f in features)
+        (name_key(province), name_key(zone)): code
+        for province, zone, code in cod_ab.select("province", "zone", "code").rows()
     }
     codes = []
     for province, zone, aliases in gazetteer.select(
@@ -141,7 +166,7 @@ def zone_codes(features: list[dict], gazetteer: pl.DataFrame) -> pl.DataFrame:
             ),
             None,
         )
-        if code is None:
+        if code is None and (province, zone) not in NOT_MAPPED:
             logger.warning("No COD-AB zone for %s / %s", province, zone)
         codes.append(code)
     return gazetteer.select("province", "zone").with_columns(
@@ -150,7 +175,7 @@ def zone_codes(features: list[dict], gazetteer: pl.DataFrame) -> pl.DataFrame:
 
 
 def main() -> None:
-    """Write the zone shapes and the gazetteer's zone codes."""
+    """Write the zone shapes and the COD-AB zone table."""
     features = load_admin3()
 
     shapes = geometry_table(features)
@@ -162,15 +187,9 @@ def main() -> None:
         GEOMETRY_PATH.name,
     )
 
-    gazetteer = pl.read_csv(GAZETTEER_PATH, infer_schema=False)
-    codes = zone_codes(features, gazetteer)
-    codes.write_csv(CODES_PATH)
-    logger.info(
-        "Wrote %d zones, %d with a code, to %s",
-        codes.height,
-        codes["code"].is_not_null().sum(),
-        CODES_PATH.name,
-    )
+    zones = cod_ab_table(features)
+    zones.write_csv(COD_AB_PATH)
+    logger.info("Wrote %d zones to %s", zones.height, COD_AB_PATH.name)
 
 
 if __name__ == "__main__":

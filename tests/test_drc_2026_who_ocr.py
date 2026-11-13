@@ -6,7 +6,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from ebola_2026_outbreak.drc_2026_who import parse_rows
+from ebola_2026_outbreak.drc_2026_who import DRC_COUNTRY, parse_rows
 from ebola_2026_outbreak.drc_2026_who_ocr import (
     OCR_STRICT_INDICATORS,
     OcrToken,
@@ -52,7 +52,7 @@ def standard_table() -> list[OcrToken]:
         tok(400, 160, "Data as of 30 July 2026"),
         *row(
             190,
-            ["Democratic Republic", "*"],
+            [DRC_COUNTRY, "*"],
             ["374", "3 605", "1 587", None, None, "44%", "651"],
         ),
         tok(400, 220, "Data as of 6 July 2026"),
@@ -75,7 +75,7 @@ def test_tokens_to_rows_standard_layout() -> None:
     ]
     assert rows[1] == ["Data as of 30 July 2026"]
     assert rows[2] == [
-        "Democratic Republic",
+        DRC_COUNTRY,
         "374",
         "3 605",
         "1 587",
@@ -148,7 +148,7 @@ def test_real_image() -> None:
         source_url="https://cdn.who.int/x.png",
         strict_indicators=OCR_STRICT_INDICATORS,
     )
-    drc = df.filter(pl.col("country") == "Democratic Republic of the Congo")
+    drc = df.filter(pl.col("country") == DRC_COUNTRY)
     values = dict(drc.select("indicator", "value").iter_rows())
     assert values["Confirmed cases"] == 3605
     assert values["Confirmed deaths"] == 1587
@@ -169,5 +169,5 @@ def test_date_row_without_space() -> None:
         source_url="https://cdn.who.int/x.png",
         strict_indicators=OCR_STRICT_INDICATORS,
     )
-    drc = df.filter(pl.col("country") == "Democratic Republic")
+    drc = df.filter(pl.col("country") == DRC_COUNTRY)
     assert drc["date"].unique().to_list() == [datetime(2026, 7, 30).date()]

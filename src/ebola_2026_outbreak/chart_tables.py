@@ -7,10 +7,16 @@ Outputs, in data/output/, with display column names for charting tools:
     - 2026_outbreak_drc_cases_by_province.csv: latest sitrep confirmed cases
       for every DRC province, empty where the sitrep reports none, keyed to
       the map's OBJECTIDs.
-    - 2026_outbreak_drc_cases_by_zone.csv: latest sitrep confirmed cases for
-      every DRC health zone, empty where the sitrep reports none, keyed to the
-      COD-AB P-codes of drc_health_zones_geometry.csv (see
-      `drc_health_zone_geometry`).
+    - 2026_outbreak_drc_cases_by_zone.csv: confirmed cases from the latest
+      released sitrep zone table for every DRC health zone, empty where the
+      sitrep reports none, keyed to the COD-AB P-codes of
+      drc_health_zones_geometry.csv. Each sitrep zone's code is matched from
+      the gazetteer and COD-AB's zones at build time (see
+      `drc_health_zone_geometry.zone_codes`). A zone with cases and no code
+      stops the build. Released zone tables can lag the parsed province
+      series, so this map's date is in the headline figures. On that date the
+      zone table's province subtotals must match the parsed province figures,
+      or no table is written.
     - outbreak_comparison_weekly.csv: cumulative confirmed cases by week since
       each outbreak's first confirmed case. West Africa uses OCHA ROWCA counts
       before 29 August 2014 and WHO/HDX counts from then on. The 2026 series
@@ -19,8 +25,10 @@ Outputs, in data/output/, with display column names for charting tools:
     - 2026_outbreak_headline_figures.json: outbreak-wide confirmed cases,
       confirmed deaths and case fatality rate (percent) from the country
       summary's Total row, dated by the DRC row's date (DRC holds over 99% of
-      cases), and the number of DRC provinces with confirmed cases from the
-      latest sitrep, dated by that sitrep. Dates are in prose ("18 October").
+      cases), the number of DRC provinces with confirmed cases from the
+      latest sitrep, dated by that sitrep, and the number of health zones with
+      confirmed cases on the zone map, dated by its zone table. Dates are in
+      prose ("18 October").
 """
 
 import json
@@ -33,7 +41,13 @@ from typing import TypedDict
 import polars as pl
 
 from ebola_2026_outbreak.aggregate import forward_fill_cumulative
-from ebola_2026_outbreak.drc_2026_sitreps_extract import BY_ZONE_PATH, BY_ZONE_SCHEMA
+from ebola_2026_outbreak.drc_2026_sitrep_schema import GAZETTEER_PATH, name_key
+from ebola_2026_outbreak.drc_2026_sitreps_extract import (
+    BY_ZONE_PATH,
+    BY_ZONE_SCHEMA,
+    STATUS_PATH,
+    STATUS_SCHEMA,
+)
 from ebola_2026_outbreak.drc_2026_sitreps_parse import INDICATORS as SITREP_INDICATORS
 from ebola_2026_outbreak.drc_2026_sitreps_parse import OUTPUT_PATH as PROVINCE_PATH
 from ebola_2026_outbreak.drc_2026_sitreps_parse import SCHEMA as PROVINCE_SCHEMA
@@ -43,7 +57,12 @@ from ebola_2026_outbreak.drc_2026_who import DRC_COUNTRY as WHO_DRC
 from ebola_2026_outbreak.drc_2026_who import OUTPUT_PATH as WHO_PATH
 from ebola_2026_outbreak.drc_2026_who import RECOVERED as WHO_RECOVERED
 from ebola_2026_outbreak.drc_2026_who import SCHEMA as WHO_SCHEMA
-from ebola_2026_outbreak.drc_health_zone_geometry import CODES_PATH, GEOMETRY_PATH
+from ebola_2026_outbreak.drc_health_zone_geometry import (
+    COD_AB_PATH,
+    GEOMETRY_PATH,
+    NOT_MAPPED,
+    zone_codes,
+)
 from ebola_2026_outbreak.west_africa_2014_16 import FINAL_PATH as WEST_AFRICA_PATH
 from ebola_2026_outbreak.west_africa_2014_16_early import (
     OUTPUT_PATH as WEST_AFRICA_EARLY_PATH,
@@ -181,48 +200,71 @@ def province_map(provinces: pl.DataFrame, lookup: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def zone_cases(by_zone: pl.DataFrame) -> pl.DataFrame:
+    """Zone-level cumulative confirmed case rows from the sitrep zone table.
+
+    Raises:
+        ValueError: If the table has no zone case rows, as when the indicator
+            label changes.
+    """
+    cases = by_zone.filter(
+        pl.col("level") == "zone",
+        pl.col("indicator") == SITREP_INDICATORS["cases"],
+    )
+    if cases.is_empty():
+        raise ValueError(f"No zone rows for {SITREP_INDICATORS['cases']!r}")
+    return cases
+
+
+def zone_map_date(by_zone: pl.DataFrame) -> date:
+    """Date of the zone table the zone map shows: its latest zone case date."""
+    return latest_date(zone_cases(by_zone)["date"])
+
+
 def zone_map(
-    by_zone: pl.DataFrame, codes: pl.DataFrame, shapes: pl.DataFrame
+    by_zone: pl.DataFrame, codes: pl.DataFrame, shapes: pl.DataFrame, *, as_of: date
 ) -> pl.DataFrame:
-    """Latest cumulative confirmed cases for every map zone, by P-code.
+    """Cumulative confirmed cases on `as_of` for every map zone, by P-code.
 
     Zones the sitrep does not list, or lists with 0 cases, get an empty
     count. Rows sharing a P-code (a health area the sitrep lists as a zone,
-    and the zone holding it) are summed. A zone with cases but no P-code (not
-    a mapped zone, such as "A ventiler") is logged with its cases, which the
-    map then leaves out. So is
-    a zone the gazetteer gained after `drc_health_zone_geometry` last wrote
-    the codes, which re-running that script settles.
+    and the zone holding it) are summed. A zone in `NOT_MAPPED` (such as
+    "A ventiler") has no P-code. Its cases are logged and left off the map.
 
     Args:
         by_zone: Sitrep zone rows (see `drc_2026_sitreps_extract.BY_ZONE_SCHEMA`).
-        codes: `province`, `zone` and `code` per sitrep zone.
+        codes: `province`, `zone` and `code` per sitrep zone (see
+            `drc_health_zone_geometry.zone_codes`).
         shapes: Map zones with `Code` and `Name`.
+        as_of: Date of the zone table to map (see `zone_map_date`).
 
     Returns:
         `Code`, `Name` and `Confirmed cases`, one row per `shapes` zone,
         sorted by cases then name, zones without cases last.
 
     Raises:
-        ValueError: If a code is not a map zone.
+        ValueError: If `by_zone` has no zone case rows, a code is not a map
+            zone, or a zone with cases has no code and is not in `NOT_MAPPED`.
     """
-    cases = by_zone.filter(
-        pl.col("level") == "zone",
-        pl.col("indicator") == SITREP_INDICATORS["cases"],
-        pl.col("date") == pl.col("date").max(),
-    )
-    logger.info("Zone cases as of %s", cases["date"].max())
+    cases = zone_cases(by_zone).filter(pl.col("date") == as_of)
+    logger.info("Zone cases as of %s", as_of)
 
     joined = cases.join(codes, on=["province", "zone"], how="left", coalesce=True)
-    unknown = joined.join(codes, on=["province", "zone"], how="anti")
-    for province, zone in unknown.select("province", "zone").rows():
-        logger.warning("%s / %s is missing from %s", province, zone, CODES_PATH.name)
     stray = set(codes["code"].drop_nulls()) - set(shapes[CODE])
     if stray:
         raise ValueError(f"Zone codes with no map shape: {sorted(stray)}")
     unmapped = joined.filter(pl.col("code").is_null(), pl.col("value") > 0)
+    missing = []
     for province, zone, value in unmapped.select("province", "zone", "value").rows():
-        logger.warning("%s / %s: %d cases with no map zone", province, zone, value)
+        if (province, zone) in NOT_MAPPED:
+            logger.warning("%s / %s: %d cases with no map zone", province, zone, value)
+        else:
+            missing.append(f"{province} / {zone} ({value} cases)")
+    if missing:
+        raise ValueError(
+            f"Zones with cases but no COD-AB code: {missing}. Add the zone's "
+            f"COD-AB spelling (see {COD_AB_PATH.name}) as a gazetteer alias."
+        )
 
     # Summed by code, since a health area listed as a zone shares its zone's.
     with_cases = (
@@ -235,6 +277,108 @@ def zone_map(
         .join(with_cases, on=CODE, how="left")
         .sort([CASES, NAME], descending=[True, False], nulls_last=True)
     )
+
+
+def _cumulative_on(frame: pl.DataFrame, day: date) -> pl.DataFrame:
+    """Cumulative cases and deaths on `day`, keyed by province `name_key`."""
+    return frame.filter(
+        pl.col("date") == day,
+        pl.col("indicator").is_in(
+            [SITREP_INDICATORS["cases"], SITREP_INDICATORS["deaths"]]
+        ),
+    ).with_columns(
+        key=pl.col("province").map_elements(name_key, return_dtype=pl.String)
+    )
+
+
+def check_province_agreement(
+    provinces: pl.DataFrame,
+    by_zone: pl.DataFrame,
+    status: pl.DataFrame,
+    *,
+    as_of: date,
+) -> None:
+    """Check the zone table's province subtotals against the parsed provinces.
+
+    Compares cumulative confirmed cases and deaths on `as_of`, the zone map's
+    date (`zone_map_date`). Provinces match by `name_key`, and a province in
+    only one table is a mismatch. The check is skipped, with a warning, when
+    the parsed provinces have no rows on that date (a parse failure fails its
+    own workflow step), when the two come from different uploads (a `media_id`
+    and `modified` pair, as INSP can replace an upload in place), or when the
+    zone table's upload was released with publisher discrepancies (its
+    subtotals then knowingly differ from the printed province table).
+
+    Args:
+        provinces: Sitrep province rows (see `drc_2026_sitreps_parse.SCHEMA`).
+        by_zone: Sitrep zone rows (see `drc_2026_sitreps_extract.BY_ZONE_SCHEMA`).
+        status: Extraction ledger (see `drc_2026_sitreps_extract.STATUS_SCHEMA`).
+        as_of: Date to compare (see `zone_map_date`).
+
+    Raises:
+        ValueError: If the zone table's upload has no ledger row, or any
+            province figure differs.
+    """
+    parsed = _cumulative_on(provinces, as_of)
+    if parsed.is_empty():
+        logger.warning(
+            "%s: parsed provinces have no rows for the zone map's date; "
+            "skipping the province agreement check",
+            as_of,
+        )
+        return
+    subtotals = _cumulative_on(by_zone.filter(pl.col("level") == "province"), as_of)
+
+    parsed_uploads = sorted(parsed.select("media_id", "modified").unique().rows())
+    zone_uploads = sorted(subtotals.select("media_id", "modified").unique().rows())
+    if parsed_uploads != zone_uploads:
+        logger.warning(
+            "%s: parsed provinces from uploads %s, zone table from uploads %s; "
+            "skipping the province agreement check",
+            as_of,
+            parsed_uploads,
+            zone_uploads,
+        )
+        return
+
+    uploads = subtotals.select("media_id", "modified").unique()
+    ledger = uploads.join(status, on=["media_id", "modified"], how="left")
+    if ledger["status"].null_count():
+        raise ValueError(f"{as_of}: zone table upload {zone_uploads} not in ledger")
+    discrepancies = ledger["discrepancies"].sum()
+    if discrepancies > 0:
+        logger.warning(
+            "%s: zone table upload %s released with %d publisher discrepancies; "
+            "skipping the province agreement check",
+            as_of,
+            zone_uploads,
+            discrepancies,
+        )
+        return
+
+    joined = parsed.select("key", "province", "indicator", "value").join(
+        subtotals.select("key", "province", "indicator", "value"),
+        on=["key", "indicator"],
+        how="full",
+        coalesce=True,
+        suffix="_zone",
+    )
+    mismatched = joined.filter(pl.col("value").ne_missing(pl.col("value_zone")))
+    if not mismatched.is_empty():
+        lines = [
+            f"{province or zone_province} {indicator}: parsed {parsed_value}, "
+            f"zone table {zone_value}"
+            for province, zone_province, indicator, parsed_value, zone_value in (
+                mismatched.sort("key", "indicator")
+                .select("province", "province_zone", "indicator", "value", "value_zone")
+                .rows()
+            )
+        ]
+        raise ValueError(
+            f"{as_of}: zone table province subtotals disagree with the parsed "
+            f"provinces: " + "; ".join(lines)
+        )
+    logger.info("%s: zone table province subtotals match the parsed provinces", as_of)
 
 
 def latest_date(dates: pl.Series) -> date:
@@ -360,6 +504,8 @@ def headline_figures(
     summary_as_of: date,
     mapped: pl.DataFrame,
     sitrep_as_of: date,
+    zones: pl.DataFrame,
+    zone_as_of: date,
 ) -> dict[str, HeadlineFigure]:
     """Headline outbreak figures with their update dates.
 
@@ -368,10 +514,14 @@ def headline_figures(
         summary_as_of: Date for the Total row's figures (see `summary_date`).
         mapped: Output of `province_map`, one row per map province.
         sitrep_as_of: Date of the sitrep `mapped` comes from.
+        zones: Output of `zone_map`, one row per map zone.
+        zone_as_of: Date of the zone table `zones` comes from (see
+            `zone_map_date`).
 
     Returns:
         `total_confirmed_cases`, `total_deaths` (confirmed), `death_rate`
-        (confirmed case fatality rate in percent) and `provinces_affected`.
+        (confirmed case fatality rate in percent), `provinces_affected` and
+        `zones_affected`.
 
     Raises:
         ValueError: If the Total row is missing or any of its figures is null.
@@ -392,6 +542,10 @@ def headline_figures(
         "provinces_affected": {
             "value": mapped.filter(pl.col(CASES) > 0).height,
             "update_date": sitrep_date,
+        },
+        "zones_affected": {
+            "value": zones.filter(pl.col(CASES) > 0).height,
+            "update_date": prose_date(zone_as_of),
         },
     }
 
@@ -488,28 +642,38 @@ def weekly_comparison(west_africa: pl.DataFrame, drc: pl.DataFrame) -> pl.DataFr
 
 
 def main() -> None:
-    """Write the chart tables and headline figures."""
-    who = pl.read_csv(WHO_PATH, schema=WHO_SCHEMA)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    """Build and check every chart table, then write them all.
 
+    Nothing is written if any table fails to build or the province check
+    fails, so data/output never mixes tables from two builds.
+    """
+    who = pl.read_csv(WHO_PATH, schema=WHO_SCHEMA)
     provinces = pl.read_csv(PROVINCE_PATH, schema=PROVINCE_SCHEMA)
+    by_zone = pl.read_csv(BY_ZONE_PATH, schema=BY_ZONE_SCHEMA)
+
     latest = with_newer_sitrep(who, provinces)
     summary = country_summary(latest)
-    summary.write_csv(COUNTRY_SUMMARY_PATH)
-    logger.info("Wrote %d rows to %s", summary.height, COUNTRY_SUMMARY_PATH.name)
 
     lookup = pl.read_csv(OBJECTID_PATH, schema={NAME: pl.String, OBJECTID: pl.Int64})
     mapped = province_map(provinces, lookup)
-    mapped.write_csv(PROVINCE_MAP_PATH)
-    logger.info("Wrote %d rows to %s", mapped.height, PROVINCE_MAP_PATH.name)
 
-    zones = zone_map(
-        pl.read_csv(BY_ZONE_PATH, schema=BY_ZONE_SCHEMA),
-        pl.read_csv(CODES_PATH, infer_schema=False),
-        pl.read_csv(GEOMETRY_PATH, columns=[CODE, NAME], infer_schema=False),
+    zone_as_of = zone_map_date(by_zone)
+    check_province_agreement(
+        provinces,
+        by_zone,
+        pl.read_csv(STATUS_PATH, schema=STATUS_SCHEMA),
+        as_of=zone_as_of,
     )
-    zones.write_csv(ZONE_MAP_PATH)
-    logger.info("Wrote %d rows to %s", zones.height, ZONE_MAP_PATH.name)
+    codes = zone_codes(
+        pl.read_csv(COD_AB_PATH, infer_schema=False),
+        pl.read_csv(GAZETTEER_PATH, infer_schema=False),
+    )
+    zones = zone_map(
+        by_zone,
+        codes,
+        pl.read_csv(GEOMETRY_PATH, columns=[CODE, NAME], infer_schema=False),
+        as_of=zone_as_of,
+    )
 
     west_africa = west_africa_series(
         pl.read_csv(WEST_AFRICA_EARLY_PATH, try_parse_dates=True).select(
@@ -518,8 +682,6 @@ def main() -> None:
         pl.read_csv(WEST_AFRICA_PATH, try_parse_dates=True).select("date", "value"),
     )
     comparison = weekly_comparison(west_africa, drc_outbreak_series(latest))
-    comparison.write_csv(COMPARISON_PATH)
-    logger.info("Wrote %d rows to %s", comparison.height, COMPARISON_PATH.name)
 
     sitrep_cases = provinces.filter(pl.col("indicator") == SITREP_INDICATORS["cases"])
     headline = headline_figures(
@@ -527,7 +689,19 @@ def main() -> None:
         summary_as_of=summary_date(latest),
         mapped=mapped,
         sitrep_as_of=latest_date(sitrep_cases["date"]),
+        zones=zones,
+        zone_as_of=zone_as_of,
     )
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    for table, path in (
+        (summary, COUNTRY_SUMMARY_PATH),
+        (mapped, PROVINCE_MAP_PATH),
+        (zones, ZONE_MAP_PATH),
+        (comparison, COMPARISON_PATH),
+    ):
+        table.write_csv(path)
+        logger.info("Wrote %d rows to %s", table.height, path.name)
     HEADLINE_PATH.write_text(json.dumps(headline, indent=2) + "\n")
     logger.info("Wrote %d figures to %s", len(headline), HEADLINE_PATH.name)
 
