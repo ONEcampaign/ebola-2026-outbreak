@@ -12,6 +12,8 @@ from ebola_2026_outbreak.drc_2026_sitreps_download import MANIFEST_SCHEMA
 from ebola_2026_outbreak.drc_2026_sitreps_parse import (
     TOTAL,
     ProvinceCounts,
+    SkipCategory,
+    TableException,
     check_monotonic,
     find_province_table,
     parse_counts,
@@ -111,17 +113,33 @@ def test_no_table_raises() -> None:
         find_province_table("Ituri (85), au Nord-Kivu (19).\nAucun tableau.")
 
 
-def test_main_writes_nothing_when_a_sitrep_fails(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+REPORT_DATE = date(2026, 10, 18)
+MEDIA_ID = 710
+OLD_MODIFIED, NEW_MODIFIED = "2026-10-19T09:00:00", "2026-10-20T14:41:10"
+FIXTURE_TEXT = (FIXTURES / "2026-10-18.txt").read_text()
+
+
+def run_main(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    modified: str,
+    text: str,
+    exceptions: dict[tuple[int, str], TableException],
+) -> Path:
+    """Run `main` on a one-row manifest with stubbed PDF text and exceptions.
+
+    Returns:
+        The output path, which exists only if `main` wrote it.
+    """
     manifest = pl.DataFrame(
         [
             {
-                "report_date": date(2026, 10, 18),
+                "report_date": REPORT_DATE,
                 "is_latest": True,
-                "media_id": 710,
-                "modified": "2026-10-20T14:41:10",
-                "source_url": "https://example.org/710.pdf",
+                "media_id": MEDIA_ID,
+                "modified": modified,
+                "source_url": f"https://example.org/{MEDIA_ID}.pdf",
             }
         ]
     )
@@ -133,12 +151,106 @@ def test_main_writes_nothing_when_a_sitrep_fails(
     manifest.write_csv(manifest_path)
     monkeypatch.setattr(parse_module, "MANIFEST_PATH", manifest_path)
     monkeypatch.setattr(parse_module, "OUTPUT_PATH", output_path)
+    monkeypatch.setattr(parse_module, "PROVINCE_TABLE_EXCEPTIONS", exceptions)
     monkeypatch.setattr(parse_module, "ensure_pdf", lambda **_: Path("710.pdf"))
-    monkeypatch.setattr(parse_module, "read_text", lambda _: "no table here")
+    monkeypatch.setattr(parse_module, "read_text", lambda _: text)
+    parse_module.main()
+    return output_path
 
+
+def excepted(modified: str) -> dict[tuple[int, str], TableException]:
+    """One exception for the test upload under `modified`."""
+    return {
+        (MEDIA_ID, modified): TableException(
+            REPORT_DATE, SkipCategory.NO_TABLE, "alerts summary only"
+        )
+    }
+
+
+def test_main_writes_nothing_when_a_sitrep_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     with pytest.raises(ValueError, match="1 sitreps could not be parsed"):
-        parse_module.main()
-    assert not output_path.exists()
+        run_main(
+            monkeypatch, tmp_path, modified=NEW_MODIFIED, text="no table", exceptions={}
+        )
+    assert not (tmp_path / "out.csv").exists()
+
+
+def test_main_skips_excepted_upload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_path = run_main(
+        monkeypatch,
+        tmp_path,
+        modified=OLD_MODIFIED,
+        text="no table",
+        exceptions=excepted(OLD_MODIFIED),
+    )
+    assert pl.read_csv(output_path).height == 0
+
+
+def test_main_failure_names_exception_with_other_modified(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with pytest.raises(ValueError, match="1 sitreps could not be parsed"):
+        run_main(
+            monkeypatch,
+            tmp_path,
+            modified=NEW_MODIFIED,
+            text="no table",
+            exceptions=excepted(OLD_MODIFIED),
+        )
+    assert (
+        f"media {MEDIA_ID} has an exception for modified {OLD_MODIFIED}" in caplog.text
+    )
+    assert f"the manifest says {NEW_MODIFIED}" in caplog.text
+
+
+def test_main_fails_on_excepted_upload_that_would_parse(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # The text parses cleanly, so only the exception check can stop the run.
+    with pytest.raises(ValueError, match="1 sitreps could not be parsed"):
+        run_main(
+            monkeypatch,
+            tmp_path,
+            modified=NEW_MODIFIED,
+            text=FIXTURE_TEXT,
+            exceptions=excepted(OLD_MODIFIED),
+        )
+    assert not (tmp_path / "out.csv").exists()
+    assert f"the manifest says {NEW_MODIFIED}" in caplog.text
+
+
+def test_main_warns_on_exception_matching_no_latest_upload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    exceptions = {
+        **excepted(OLD_MODIFIED),
+        (999, OLD_MODIFIED): TableException(
+            date(2026, 5, 1), SkipCategory.NO_TABLE, "gone"
+        ),
+    }
+    with caplog.at_level(logging.WARNING):
+        run_main(
+            monkeypatch,
+            tmp_path,
+            modified=OLD_MODIFIED,
+            text="no table",
+            exceptions=exceptions,
+        )
+    assert (
+        f"Exception for media 999 modified {OLD_MODIFIED} (2026-05-01) matches no"
+        in caplog.text
+    )
+    assert f"media {MEDIA_ID} modified" not in caplog.text
 
 
 def test_check_monotonic_logs_province_fall(caplog: pytest.LogCaptureFixture) -> None:

@@ -191,7 +191,9 @@ def test_flag_latest_prefers_ministry_over_newer_insp() -> None:
     }
 
 
-def test_list_media_keeps_this_outbreak_only(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_media_keeps_marked_files_whatever_their_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     items = [
         {
             **_item(25776, "2026-10-27"),
@@ -205,13 +207,25 @@ def test_list_media_keeps_this_outbreak_only(monkeypatch: pytest.MonkeyPatch) ->
             **_item(25812, "2026-11-02"),
             "source_url": "https://insp.cd/final_draft_SitRep_MVE_RDC_N_170_31-10-2026.pdf",
         },
+        # Unattached, from before the MVEBDB names.
         {
-            **_item(24500, "2026-08-09"),
-            "source_url": "https://insp.cd/SitRep_MVE_RDC_N_083_05-08-2026.pdf",
+            **_item(24728, "2026-05-21"),
+            "source_url": "https://insp.cd/SitRep_MVE_RDC_20260521_editing-FV.pdf",
+        },
+        # Unattached, one of INSP's first sitreps.
+        {
+            **_item(24706, "2026-05-20"),
+            "source_url": "https://insp.cd/Sitrep_MVE-Ituri_N°-002_18-mai-2026.pdf",
+        },
+        # The 2025 outbreak's sitreps.
+        {
+            **_item(24111, "2025-10-16"),
+            "source_url": "https://insp.cd/SITREP40_MVE16-B.pdf",
         },
     ]
     monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
-    assert [item["id"] for item in dlm.list_media([])] == [25776, 25812]
+    kept = [item["id"] for item in dlm.list_media([])]
+    assert kept == [25776, 25812, 24728, 24706]
 
 
 def test_list_media_keeps_renamed_upload_attached_to_sitrep_post(
@@ -231,19 +245,25 @@ def test_list_media_keeps_renamed_upload_attached_to_sitrep_post(
             "source_url": "https://insp.cd/SitRep_N179_09-11-2026_corrige.pdf",
             "post": 26130,
         },
-        # Attached, but from before INSP was the only source.
+        # Attached with a low id and no marker.
         {
-            **_item(25269, "2026-08-04"),
-            "source_url": "https://insp.cd/N_081.pdf",
-            "post": 25268,
+            **_item(25321, "2026-08-13"),
+            "source_url": "https://insp.cd/85.pdf",
+            "post": 25302,
+        },
+        # Attached to a post outside the SitRep category.
+        {
+            **_item(25230, "2026-07-31"),
+            "source_url": "https://insp.cd/Bulletin-Ebola.pdf",
+            "post": 25229,
         },
     ]
     monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
     posts = [
         _post(26130, 179, "2026-11-10T21:52:09"),
-        _post(25268, 81, "2026-08-04T20:30:00"),
+        _post(25302, 85, "2026-08-09T18:36:00"),
     ]
-    assert [item["id"] for item in dlm.list_media(posts)] == [26108, 26131]
+    assert [item["id"] for item in dlm.list_media(posts)] == [26108, 26131, 25321]
 
 
 def test_list_media_warns_about_newer_rejected_upload(
@@ -260,7 +280,11 @@ def test_list_media_warns_about_newer_rejected_upload(
         },
         {
             **_item(25900, "2026-11-10"),
-            "source_url": "https://insp.cd/SitRep_Ebola_RDC_N_180.pdf",
+            "source_url": "https://insp.cd/sitrep_Ebola_RDC_N_180.pdf",
+        },
+        {
+            **_item(25950, "2026-11-11"),
+            "source_url": "https://insp.cd/Communique_Presse.pdf",
         },
     ]
     monkeypatch.setattr(dlm, "list_api_pdfs", lambda api: items)
@@ -268,7 +292,7 @@ def test_list_media_warns_about_newer_rejected_upload(
         dlm.list_media([])
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
-    assert "SitRep_Ebola_RDC_N_180.pdf" in warnings[0]
+    assert "sitrep_Ebola_RDC_N_180.pdf" in warnings[0]
 
 
 @pytest.mark.parametrize(
@@ -304,43 +328,96 @@ def _post(post_id: int, number: int, published: str) -> dlm.SitrepPost:
     )
 
 
-def _numbered_manifest(*numbers: int) -> pl.DataFrame:
-    """Manifest holding only the given sitrep numbers."""
-    return pl.DataFrame(
-        {"sitrep_number": list(numbers)}, schema={"sitrep_number": pl.Int64}
-    )
-
-
 NOW = datetime(2026, 11, 11, 12, 0, tzinfo=UTC)
 
 
-def test_find_unscraped_latest_flags_posted_sitrep_missing_from_manifest() -> None:
+def _attached(media_id: int, post_id: int) -> dlm.MediaItem:
+    """Media item stub attached to a post."""
+    return {**_item(media_id, "2026-11-10"), "post": post_id}
+
+
+def test_find_posts_without_pdf_flags_gap_below_newest_number() -> None:
     posts = [
+        _post(26097, 177, "2026-11-08T08:00"),
         _post(26107, 178, "2026-11-10T07:57"),
         _post(26130, 179, "2026-11-10T21:52"),
     ]
-    missing = dlm.find_unscraped_latest(_numbered_manifest(177, 178), posts, now=NOW)
-    assert missing is not None
-    assert missing.post_id == 26130
+    media = [_attached(26098, 26097), _attached(26108, 26107), _attached(26131, 26130)]
+    missing = dlm.find_posts_without_pdf(
+        posts, media, manifest_ids={26098, 26131}, now=NOW
+    )
+    assert [post.post_id for post in missing] == [26107]
 
 
-def test_find_unscraped_latest_passes_when_manifest_is_current() -> None:
-    posts = [_post(26130, 179, "2026-11-10T21:52")]
-    assert dlm.find_unscraped_latest(_numbered_manifest(179), posts, now=NOW) is None
+def test_find_posts_without_pdf_passes_when_one_attached_pdf_is_kept() -> None:
+    posts = [_post(25296, 83, "2026-08-09T18:31")]
+    # 25297 returned 404. Its re-upload 25325 is in the manifest.
+    media = [_attached(25297, 25296), _attached(25325, 25296)]
+    assert dlm.find_posts_without_pdf(posts, media, manifest_ids={25325}, now=NOW) == []
 
 
-def test_find_unscraped_latest_ignores_post_within_grace() -> None:
+def test_find_posts_without_pdf_skips_exempt_posts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(dlm, "POSTS_WITHOUT_PDF", {24781: "no file"})
+    posts = [_post(24781, 1, "2026-05-20T10:00"), _post(26130, 179, "2026-11-10")]
+    missing = dlm.find_posts_without_pdf(
+        posts, [_attached(26131, 26130)], manifest_ids={26131}, now=NOW
+    )
+    assert missing == []
+
+
+def test_find_posts_without_pdf_warns_when_exempt_post_now_has_pdf(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(dlm, "POSTS_WITHOUT_PDF", {24781: "no file"})
+    posts = [_post(24781, 1, "2026-05-20T10:00"), _post(26130, 179, "2026-11-10")]
+    media = [_attached(24659, 24781), _attached(26131, 26130)]
+    with caplog.at_level(logging.WARNING):
+        missing = dlm.find_posts_without_pdf(
+            posts, media, manifest_ids={24659, 26131}, now=NOW
+        )
+    assert missing == []
+    assert "POSTS_WITHOUT_PDF lists post 24781" in caplog.text
+    assert "26130" not in caplog.text
+
+
+def test_find_posts_without_pdf_ignores_post_within_grace() -> None:
     posts = [
         _post(26130, 179, "2026-11-10T21:52"),
         _post(26140, 180, "2026-11-11T11:00"),
     ]
-    assert dlm.find_unscraped_latest(_numbered_manifest(179), posts, now=NOW) is None
+    missing = dlm.find_posts_without_pdf(
+        posts, [_attached(26131, 26130)], manifest_ids={26131}, now=NOW
+    )
+    assert missing == []
 
 
-def test_find_unscraped_latest_rejects_no_settled_post() -> None:
+def test_find_posts_without_pdf_rejects_no_settled_post() -> None:
     posts = [_post(26140, 180, "2026-11-11T11:00")]
     with pytest.raises(ValueError, match="grace"):
-        dlm.find_unscraped_latest(_numbered_manifest(179), posts, now=NOW)
+        dlm.find_posts_without_pdf(posts, [], manifest_ids=set(), now=NOW)
+
+
+def test_find_gaps_flags_missing_day(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dlm, "KNOWN_GAPS", {})
+    dates = {date(2026, 7, 15), date(2026, 7, 17)}
+    assert dlm.find_gaps(dates) == [date(2026, 7, 16)]
+
+
+def test_find_gaps_skips_known_gaps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dlm, "KNOWN_GAPS", {date(2026, 7, 28): "none published"})
+    dates = {date(2026, 7, 27), date(2026, 7, 29)}
+    assert dlm.find_gaps(dates) == []
+
+
+def test_find_gaps_warns_about_filled_known_gap(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(dlm, "KNOWN_GAPS", {date(2026, 7, 28): "none published"})
+    with caplog.at_level(logging.WARNING):
+        dlm.find_gaps({date(2026, 7, 27), date(2026, 7, 28)})
+    assert "2026-07-28" in caplog.text
 
 
 def _item(media_id: int, modified: str) -> dlm.MediaItem:
