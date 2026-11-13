@@ -100,9 +100,14 @@ def _halves(index: int) -> str:
 # "Sud-" / "0 1 1 100,0 % 1/16 —" / "Ubangi**"
 # "Sud- 100,0" / "0 1 1 1/16 —" / "Ubangi** %"
 # "Sud-Ubangi 100,0" / "0 1 1 1/16 —" / "** %"
-# Any two-part name of `PROVINCES` may wrap so.
-WRAP_HEAD = re.compile(rf"^({_halves(0)})-({_halves(1)})?\s*([\d,]*)$")
+# Any two-part name of `PROVINCES` may wrap so, at its hyphen or its space
+# ("Kasaï" / "0 1 1 100,0 % 1/16 —" / "Central**").
+WRAP_HEAD = re.compile(rf"^({_halves(0)})(?:[- ]({_halves(1)})?\s*([\d,]*))?$")
 WRAP_TAIL = re.compile(rf"^({_halves(1)})?[\s*]*(%?)$")
+# A province row wrapped over two lines at the space of its name, the numbers
+# on the first: "Kasaï 0 1 1 100,0 % 1/16 —" / "Central**". Read whole, the
+# first line is a row of Kasaï, another province (see `join_split_rows`).
+WRAPPED_NAME_LINES = 2
 NUMBERS_ONLY = re.compile(r"^[\d\s]+\d+(?:,\d+)?\s*%")
 PERCENT = re.compile(r"(\d+(?:,\d+)?)\s*%")
 # Columns that are not counts: "28/36", "(77,8 %)", "20 sur 36", "—", and
@@ -316,9 +321,9 @@ def canonical_province(label: str) -> str:
 def join_split_rows(lines: list[str]) -> list[str]:
     """Rejoin rows that PDF extraction split across lines.
 
-    Handles a wrapped province name (see `WRAP_HEAD`) and a
-    Total row whose numbers sit on the line above ("86 6 843 ... 48,4%" /
-    "Total 61/151").
+    Handles a wrapped province name (see `WRAP_HEAD` and
+    `WRAPPED_NAME_LINES`) and a Total row whose numbers sit on the line above
+    ("86 6 843 ... 48,4%" / "Total 61/151").
     """
     out: list[str] = []
     i = 0
@@ -328,8 +333,13 @@ def join_split_rows(lines: list[str]) -> list[str]:
         tail = WRAP_TAIL.match(lines[i + 2]) if i + 2 < len(lines) else None
         if head and tail and bool(head.group(2)) != bool(tail.group(1)):
             name = f"{head.group(1)}-{head.group(2) or tail.group(1)}"
-            out.append(f"{name} {lines[i + 1]} {head.group(3)} {tail.group(2)}")
+            cfr = head.group(3) or ""
+            out.append(f"{name} {lines[i + 1]} {cfr} {tail.group(2)}")
             i += WRAPPED_ROW_LINES
+            continue
+        if i + 1 < len(lines) and (joined := _wrapped_name(line, lines[i + 1])):
+            out.append(joined)
+            i += WRAPPED_NAME_LINES
             continue
         if (
             NUMBERS_ONLY.match(line)
@@ -343,6 +353,20 @@ def join_split_rows(lines: list[str]) -> list[str]:
         out.append(line)
         i += 1
     return out
+
+
+def _wrapped_name(line: str, next_line: str) -> str | None:
+    """A province row whose name wraps at its space onto the next line, as
+    one row ("Kasaï 0 1 1 100,0 % 1/16" / "Central" -> "Kasaï-Central 0 1 1
+    100,0 % 1/16"); None for any other line."""
+    label = LABEL.match(line)
+    tail = WRAP_TAIL.match(next_line)
+    if label is None or tail is None or not tail.group(1):
+        return None
+    name = f"{label.group('label')}-{tail.group(1)}"
+    if not any(re.fullmatch(pattern, name, re.I) for pattern in PROVINCES):
+        return None
+    return f"{name} {label.group('rest')} {tail.group(2)}".rstrip()
 
 
 def readings(tokens: list[str]) -> list[list[int]]:

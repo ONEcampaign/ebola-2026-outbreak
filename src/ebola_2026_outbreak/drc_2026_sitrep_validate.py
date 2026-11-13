@@ -22,13 +22,16 @@ of holding the report, provided its province is canonical and every zone row
 the text layer locates there came back from a model under its canonical
 name. A name both models give, or one the page prints, is kept: an unknown
 name is flagged `unknown_name`, so it reaches a reviewer, and a COD-AB zone
-is reconciled as any other zone row, so a zone's first cases do not hold the
-report. A located zone neither model returned may have the misread as its
-only copy, so the misread is held. That also catches a zone printing nothing
-but zeros and blanks, which no sum check would. A dropped row for a zone the
-text layer did not locate leaves its province's zones short of the subtotal
-row, and the first sum check below flags the subtotal unless that zone too
-prints only zeros and blanks.
+the text layer locates is reconciled as any other zone row, so a zone's
+first cases do not hold the report. A COD-AB zone it does not locate is
+flagged `unknown_name` too, so a reviewer can dismiss a misread that spells
+a real zone by typing `absent`, as for any unknown name. A located zone
+neither model returned may have the misread as its only copy, so the misread
+is held. That also catches a zone printing nothing but zeros and blanks,
+which no sum check would. A dropped row for a zone the text layer did not
+locate leaves its province's zones short of the subtotal row, and the first
+sum check below flags the subtotal unless that zone too prints only zeros
+and blanks.
 
 Model agreement is exact, percentages included: 48.3 and 48.30000001
 disagree. Only the matcher compares a printed CFR within 0.05. The matcher
@@ -131,8 +134,9 @@ def reconcile(
     Returns:
         The accepted values and one flag per held value, in row key order.
         Name flags from either model's `normalise` carry through, with the
-        row's page added. A misread zone row (see the module docstring) is
-        left out of both.
+        row's page added. A new zone row the text layer does not locate is
+        flagged `unknown_name`. A misread zone row (see the module docstring)
+        is left out of both.
     """
     misread = _misreads(gemini, mistral, text_rows, printed_labels)
     for key in sorted(misread):
@@ -146,6 +150,7 @@ def reconcile(
         if flag.field is not None and flag.key not in misread:
             name_reasons.setdefault((flag.key, flag.field), flag.reason)
     in_doubt = {key for key, _ in name_reasons}
+    new_zones = gemini.new_zones | mistral.new_zones
 
     accepted: dict[RowKey, Values] = {}
     flags: list[Flag] = []
@@ -165,6 +170,7 @@ def reconcile(
                 gemini_rows.get(key),
                 mistral_rows.get(key),
                 text,
+                new_zone=key in new_zones,
                 match=match,
                 arbitration=arbitration,
             )
@@ -217,12 +223,16 @@ def _reconcile_row(
     mistral: Values | None,
     text: TextRow | None,
     *,
+    new_zone: bool,
     match: Matcher,
     arbitration: bool,
 ) -> tuple[Values, dict[str, FlagReason]]:
     """Accepted values and flag reasons by field for one row.
 
-    A row only one model returned disagrees on every field.
+    A row only one model returned disagrees on every field. A row the text
+    layer did not locate is held whole: as `unknown_name` when it is keyed on
+    a zone no sitrep has yet shown (`new_zone`), so a reviewer can dismiss a
+    misread that spells a real zone as `absent`, else as `row_not_located`.
     """
     fields = FIELDS[key.section]
     if gemini is None or mistral is None:
@@ -235,7 +245,9 @@ def _reconcile_row(
     if key.section == "kpis":
         return agreed, dict.fromkeys(disputed, "models_disagree")
     if text is None or not text.located or text.printed is None:
-        return {}, dict.fromkeys(fields, "row_not_located")
+        return {}, dict.fromkeys(
+            fields, "unknown_name" if new_zone else "row_not_located"
+        )
 
     matching = [
         values

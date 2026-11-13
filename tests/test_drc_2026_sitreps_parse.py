@@ -127,6 +127,10 @@ def test_canonical_province(label: str, name: str) -> None:
         (["Kasaï-", "0 1 1 100,0 % 1/16 —", "Central**"], "Kasaï-Central"),
         (["Kongo- 100,0", "0 1 1 1/16 —", "Central %"], "Kongo-Central"),
         (["Maï-Ndombe 100,0", "0 1 1 1/16 —", "** %"], "Maï-Ndombe"),
+        (["Kasaï", "0 1 1 100,0 % 1/16 —", "Oriental**"], "Kasaï-Oriental"),
+        (["Kasai 100,0", "0 1 1 1/16 —", "Central %"], "Kasaï-Central"),
+        (["Kasaï 0 1 1 100,0 % 1/16 —", "Central**"], "Kasaï-Central"),
+        (["Kasaï 0 1 1 100,0", "Oriental %"], "Kasaï-Oriental"),
     ],
 )
 def test_new_wrapped_province_is_rejoined(lines: list[str], name: str) -> None:
@@ -147,6 +151,23 @@ def test_province_row_of_a_new_province_parses() -> None:
     validate_table(table)
     assert table["Kasaï-Central"] == ProvinceCounts(1, 2, 1)
     assert table["Kasaï"] == ProvinceCounts(0, 4, 1)
+
+
+def test_province_wrapped_at_its_space_is_not_kasai() -> None:
+    # Read line by line, the Kasaï-Central row is a Kasaï row that still
+    # balances against Total.
+    text = "\n".join(
+        [
+            "Ituri 0 10 5 50,0 % 1/36",
+            "Kasaï 1 2 1 50,0 % 1/26",
+            "Central**",
+            "Total 1 12 6 50,0 %",
+        ]
+    )
+    table = find_province_table(text)
+    validate_table(table)
+    assert table["Kasaï-Central"] == ProvinceCounts(1, 2, 1)
+    assert "Kasaï" not in table
 
 
 def test_readings_groups_thousands() -> None:
