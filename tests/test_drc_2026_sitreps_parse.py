@@ -23,6 +23,7 @@ from ebola_2026_outbreak.drc_2026_sitreps_parse import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sitrep_tables"
+FIXTURE_TEXT_1018 = (FIXTURES / "2026-10-18.txt").read_text()
 
 # Total row per fixture, one per layout or wrap variant seen in the sitreps.
 EXPECTED_TOTALS = {
@@ -108,6 +109,110 @@ def test_validate_table_rejects_bad_sum() -> None:
         validate_table(table)
 
 
+# Sitreps with a misprinted Total CFR and a contacts table by province after the
+# case table. Contacts captions differ: "Tableau 4.", "Tableau 2 :", "TABLEAU 4 —".
+MISPRINTED_TOTALS = {
+    "2026-06-17": (ProvinceCounts(21, 896, 232), "26,3 %", "25.89 %"),
+    "2026-07-01": (ProvinceCounts(54, 1460, 452), "30,9 %", "30.96 %"),
+    "2026-08-03": (ProvinceCounts(72, 3874, 1751), "45,1 %", "45.20 %"),
+}
+
+# A contacts table whose rates are exact, so its rows pass the CFR check.
+CONTACTS_TABLE = """Tableau 4. Suivi des contacts des cas confirmés
+Province Contacts sous suivi (n) Contacts vus (n) Taux de suivi (%)
+Ituri 4 659 3 297 70,8%
+Nord-Kivu 1 628 1 148 70,5%
+Sud-Kivu 80 80 100,0%
+Total 6 367 4 525 71,1%
+"""
+
+CASE_ROWS = """Ituri 10 5 50,0% 1
+Tshopo 4 1 25,0% 0
+"""
+
+
+@pytest.mark.parametrize(
+    ("name", "expected", "printed", "computed"),
+    [(name, *values) for name, values in MISPRINTED_TOTALS.items()],
+)
+def test_misprinted_total_cfr_read_from_province_sums(
+    name: str,
+    expected: ProvinceCounts,
+    printed: str,
+    computed: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    text = (FIXTURES / f"{name}.txt").read_text()
+    with caplog.at_level(logging.WARNING):
+        table = find_province_table(text, source=f"{name} (media 1)")
+    validate_table(table)
+    assert table[TOTAL] == expected
+    assert table["Ituri"].cases < expected.cases  # the case table
+    assert f"{name} (media 1): Total row CFR printed {printed}" in caplog.text
+    assert f"is {computed}" in caplog.text
+
+
+def test_misprinted_total_warning_names_sitrep(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        parse_sitrep(
+            (FIXTURES / "2026-06-17.txt").read_text(),
+            report_date=date(2026, 6, 17),
+            sitrep_number=None,
+            media_id=901,
+            modified="2026-06-18T10:00:00",
+        )
+    assert "2026-06-17 (media 901): Total row CFR printed 26,3 %" in caplog.text
+
+
+def test_unreadable_total_stops_search() -> None:
+    # Total says 15 cases and provinces sum to 14. The search stops there and
+    # does not return the contacts table below.
+    text = CASE_ROWS + "Total 15 6 41,0% 1\n" + CONTACTS_TABLE
+    with pytest.raises(ValueError, match="Total row unreadable"):
+        find_province_table(text)
+
+
+def test_total_from_sums_checks_new_cases() -> None:
+    # Cases and deaths equal the sums, but new cases (2) do not (1).
+    with pytest.raises(ValueError, match="Total row unreadable"):
+        find_province_table(CASE_ROWS + "Total 14 6 40,0% 2\n")
+
+
+def test_contacts_table_before_case_table_is_skipped() -> None:
+    text = CONTACTS_TABLE + "\n" + FIXTURE_TEXT_1018
+    table = find_province_table(text)
+    assert table[TOTAL] == EXPECTED_TOTALS["2026-10-18"]
+
+
+def test_contacts_table_with_misprinted_total_is_skipped() -> None:
+    # A contacts Total that fails its rate check must not stop the search.
+    contacts = CONTACTS_TABLE.replace("71,1%", "71,9%")
+    table = find_province_table(contacts + "\n" + FIXTURE_TEXT_1018)
+    assert table[TOTAL] == EXPECTED_TOTALS["2026-10-18"]
+
+
+def test_contacts_table_with_failed_first_row_is_skipped() -> None:
+    # The failed first row must not move the table start below the header.
+    contacts = CONTACTS_TABLE.replace("70,8%", "70,1%")
+    with pytest.raises(ValueError, match="readings match CFR"):
+        parse_counts("4 659 3 297 70,1%")
+    table = find_province_table(contacts + "\n" + FIXTURE_TEXT_1018)
+    assert table[TOTAL] == EXPECTED_TOTALS["2026-10-18"]
+
+
+def test_headingless_case_table_parses() -> None:
+    table = find_province_table(CASE_ROWS + "Total 14 6 42,9% 1\n")
+    assert table[TOTAL] == ProvinceCounts(1, 14, 6)
+
+
+def test_contacts_header_above_an_earlier_table_is_ignored() -> None:
+    # The contacts header belongs to the table above it.
+    text = CONTACTS_TABLE.replace("71,1%", "71,9%") + CASE_ROWS + "Total 14 6 42,9% 1\n"
+    assert find_province_table(text)[TOTAL] == ProvinceCounts(1, 14, 6)
+
+
 def test_no_table_raises() -> None:
     with pytest.raises(ValueError, match="No province table"):
         find_province_table("Ituri (85), au Nord-Kivu (19).\nAucun tableau.")
@@ -116,7 +221,7 @@ def test_no_table_raises() -> None:
 REPORT_DATE = date(2026, 10, 18)
 MEDIA_ID = 710
 OLD_MODIFIED, NEW_MODIFIED = "2026-10-19T09:00:00", "2026-10-20T14:41:10"
-FIXTURE_TEXT = (FIXTURES / "2026-10-18.txt").read_text()
+FIXTURE_TEXT = FIXTURE_TEXT_1018
 
 
 def run_main(

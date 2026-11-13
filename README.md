@@ -59,7 +59,11 @@ Files are prefixed by outbreak so historical and current data stay apart:
     listed in the module with the reason for each.
   - `drc_2026_sitrep_by_province.csv`: new, cumulative confirmed cases and
     cumulative confirmed deaths by province from each sitrep's province
-    table, built by `drc_2026_sitreps_parse.py`.
+    table, built by `drc_2026_sitreps_parse.py`. A province table whose
+    Total row misprints the CFR is accepted when its cases and deaths equal
+    the province sums and every province row matches its own CFR, and the run
+    logs a warning naming the printed and computed rates (17 June, 1 July and
+    3 August 2026).
   - `drc_2026_inrb_national.csv`: national cumulative confirmed cases and
     deaths from INSP sitreps, as digitised by INRB and the Kraemer Lab
     (Oxford) in [BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data).

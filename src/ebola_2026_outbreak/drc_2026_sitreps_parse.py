@@ -10,6 +10,15 @@ Numbers use a space as thousands separator, which makes "44 5 659 2 583"
 ambiguous. The row's printed case fatality rate (deaths / cases) settles the
 reading. Province rows must sum to the Total row, otherwise parsing raises.
 Uploads known not to parse are listed in `PROVINCE_TABLE_EXCEPTIONS`.
+
+Other tables by province (contacts followed, vaccination, alerts) have the
+same shape (a count, a count and a rate) and pass the CFR check when their
+rate is printed exactly. Two rules keep the search on the case table. A
+table under a contacts header is skipped, and once province rows are read, a
+Total row that does not parse ends the search. Such a Total row is accepted
+only when its printed CFR is its one fault, meaning its counts have exactly
+one reading equal to the province sums. A warning then names the printed and
+computed rates.
 """
 
 import logging
@@ -68,6 +77,15 @@ NON_COUNT = re.compile(r"\d+\s*(?:/|sur)\s*\d+|\(\s*[\d,]+\s*%\s*\)|—|-|\*")
 MISSING = "ND"
 # Non-row lines (footnotes, wrap fragments) tolerated inside one table.
 MAX_GAP_LINES = 3
+# Lines above a table's first row read as its caption and column header.
+# Contacts tables print "contacts" 1-2 lines above their first row; the
+# nearest mention above any case table is 8 lines up (narrative).
+HEADER_LINES = 3
+# A column header or caption naming contacts: "Contacts sous suivi (n)",
+# "TABLEAU 4 — SUIVI DES CONTACTS".
+CONTACTS_HEADER = re.compile(r"contact", re.I)
+# Names the text in warnings when the caller gives no report date or media id.
+UNNAMED_SOURCE = "unnamed sitrep"
 # A wrapped province row spans this many lines (see `WRAP_HEAD`).
 WRAPPED_ROW_LINES = 3
 # Digits in a thousands group: "5 659" is 5 and 659.
@@ -187,16 +205,6 @@ PROVINCE_TABLE_EXCEPTIONS: dict[tuple[int, str], TableException] = {
         SkipCategory.PARSER_MISREAD,
         'footnote mark in "Nord-Kivu1" hides the row: provinces sum to 802 cases, Total row says 875',
     ),
-    (25028, "2026-06-18T19:14:38"): TableException(
-        date(2026, 6, 17),
-        SkipCategory.PARSER_MISREAD,
-        "Total CFR printed 26,3 % for 232/896 (25.9 %): parser reads the contacts follow-up table instead (Ituri 4 659 / 3 297)",
-    ),
-    (25077, "2026-07-03T06:22:09"): TableException(
-        date(2026, 7, 1),
-        SkipCategory.PARSER_MISREAD,
-        "Total CFR printed 30,9 % for 452/1460 (30.96 %): parser reads the contacts follow-up table instead (Ituri 8 376 / 6 973)",
-    ),
     (25105, "2026-07-07T23:43:04"): TableException(
         date(2026, 7, 6),
         SkipCategory.PARSER_MISREAD,
@@ -215,7 +223,7 @@ PROVINCE_TABLE_EXCEPTIONS: dict[tuple[int, str], TableException] = {
     (25185, "2026-07-22T23:56:33"): TableException(
         date(2026, 7, 21),
         SkipCategory.PUBLISHER_ERROR,
-        "Total row says 2 531 cases, provinces and the CFR give 2 536: no province table found",
+        "Total row says 2 531 cases, provinces and the CFR give 2 536: Total row unreadable",
     ),
     (25216, "2026-07-28T03:22:20"): TableException(
         date(2026, 7, 26),
@@ -227,11 +235,6 @@ PROVINCE_TABLE_EXCEPTIONS: dict[tuple[int, str], TableException] = {
         SkipCategory.PARSER_MISREAD,
         "Haut-Uélé CFR printed 52,6 % for 21/39 drops the row (counts sum): provinces sum to 8 cases, Total row says 3360",
     ),
-    (25269, "2026-08-04T20:34:24"): TableException(
-        date(2026, 8, 3),
-        SkipCategory.PARSER_MISREAD,
-        "Total CFR printed 45,1 % for 1751/3874 (45.20 %): parser reads the contacts follow-up table instead (Ituri 11 544 / 9 255)",
-    ),
     (528, "2026-08-17T00:16:19"): TableException(
         date(2026, 8, 14),
         SkipCategory.NO_TABLE,
@@ -240,7 +243,7 @@ PROVINCE_TABLE_EXCEPTIONS: dict[tuple[int, str], TableException] = {
     (25373, "2026-08-23T19:05:07"): TableException(
         date(2026, 8, 21),
         SkipCategory.PARSER_MISREAD,
-        'Total row wraps "(37,7 %)" over two lines: no province table found',
+        'Total row wraps "(37,7 %)" over two lines: Total row unreadable',
     ),
 }
 
@@ -335,14 +338,17 @@ def cfr_matches(cases: int, deaths: int, cfr: float) -> bool:
     return cases > 0 and abs(deaths / cases * 100 - cfr) <= CFR_TOLERANCE
 
 
-def parse_counts(rest: str) -> ProvinceCounts:
-    """Read new cases, cumulative cases and deaths from a row's text.
+def count_readings(rest: str) -> tuple[float, set[ProvinceCounts]]:
+    """List every way to read a row's counts, with its printed CFR.
 
     Handles both layouts: new cases before the cumulative columns, or as the
     last column after the CFR and health-zone fractions.
 
+    Returns:
+        The printed CFR in percent and every reading of the counts.
+
     Raises:
-        ValueError: If the row has no CFR or no single consistent reading.
+        ValueError: If the row has no CFR or non-numeric tokens before it.
     """
     cfr_match = PERCENT.search(rest)
     if cfr_match is None:
@@ -365,31 +371,126 @@ def parse_counts(rest: str) -> ProvinceCounts:
             new = int(after[0]) if after and after[0].isdigit() else None
         else:
             continue
-        if cfr_matches(cases, deaths, cfr):
-            candidates.add(ProvinceCounts(new, cases, deaths))
-
-    if len(candidates) != 1:
-        raise ValueError(f"{len(candidates)} readings match CFR {cfr}: {rest!r}")
-    return candidates.pop()
+        candidates.add(ProvinceCounts(new, cases, deaths))
+    return cfr, candidates
 
 
-def find_province_table(text: str) -> dict[str, ProvinceCounts]:
-    """Find the first run of province rows that ends in a parseable Total row.
+def parse_counts(rest: str) -> ProvinceCounts:
+    """Read new cases, cumulative cases and deaths from a row's text.
+
+    Raises:
+        ValueError: If the row has no CFR or no single reading matching it.
+    """
+    cfr, candidates = count_readings(rest)
+    matching = {c for c in candidates if cfr_matches(c.cases, c.deaths, cfr)}
+    if len(matching) != 1:
+        raise ValueError(f"{len(matching)} readings match CFR {cfr}: {rest!r}")
+    return matching.pop()
+
+
+def parse_total_from_sums(
+    rest: str, provinces: list[ProvinceCounts], *, source: str
+) -> ProvinceCounts:
+    """Read a Total row whose printed CFR is wrong, using the province sums.
+
+    The counts are accepted only if exactly one reading equals the province
+    sums of cases and deaths, and of new cases when the Total prints them
+    and every province reports them. Logs a warning naming the sitrep and the
+    printed and computed CFR.
+
+    Args:
+        rest: The Total row's text after its label.
+        provinces: The province rows already read, each matching its own CFR.
+        source: The sitrep, as named in the warning.
+
+    Raises:
+        ValueError: If the row has no CFR or no single reading equals the sums.
+    """
+    try:
+        cfr, candidates = count_readings(rest)
+    except ValueError as e:
+        raise ValueError(f"province table Total row unreadable: {e}") from e
+    cases = sum(p.cases for p in provinces)
+    deaths = sum(p.deaths for p in provinces)
+    new = [p.new_cases for p in provinces if p.new_cases is not None]
+    new_sum = sum(new) if len(new) == len(provinces) else None
+    matching = {
+        c
+        for c in candidates
+        if c.cases == cases
+        and c.deaths == deaths
+        and (c.new_cases is None or new_sum is None or c.new_cases == new_sum)
+    }
+    if len(matching) != 1:
+        raise ValueError(
+            f"province table Total row unreadable: {len(matching)} readings "
+            f"equal the province sums ({cases} cases, {deaths} deaths) and "
+            f"none match CFR {cfr}: {rest!r}"
+        )
+    total = matching.pop()
+    logger.warning(
+        "%s: Total row CFR printed %s %% but %d deaths / %d cases is %.2f %%;"
+        " accepting the counts, which equal the province sums",
+        source,
+        f"{cfr:.1f}".replace(".", ","),
+        deaths,
+        cases,
+        deaths / cases * 100,
+    )
+    return total
+
+
+def is_table_row(line: str) -> bool:
+    """Check a line starts with a province or Total label followed by a digit."""
+    match = LABEL.match(line)
+    return match is not None and match.group("rest")[:1].isdigit()
+
+
+def names_contacts(lines: list[str], start: int) -> bool:
+    """Check the header above a table's first row names contacts.
+
+    Reads up to `HEADER_LINES` lines above `lines[start]`, stopping at a
+    table row so that a header belongs to this table, not one above it.
+    """
+    for line in reversed(lines[max(0, start - HEADER_LINES) : start]):
+        if is_table_row(line):
+            return False
+        if CONTACTS_HEADER.search(line):
+            return True
+    return False
+
+
+def find_province_table(
+    text: str, *, source: str = UNNAMED_SOURCE
+) -> dict[str, ProvinceCounts]:
+    """Find the first run of province rows that ends in a Total row.
+
+    Tables under a contacts header are skipped. Once a run of province rows
+    is read, a Total row that fails its CFR check is read from the province
+    sums (see `parse_total_from_sums`) or the search stops.
 
     Args:
         text: Extracted text of the whole sitrep.
+        source: The sitrep, as named in warnings.
 
     Returns:
         {province or "Total": counts}, in table order.
 
     Raises:
-        ValueError: If no such table is found.
+        ValueError: If no such table is found, or the first one's Total row
+            is unreadable.
     """
     lines = join_split_rows([line.strip() for line in text.splitlines()])
     errors: list[str] = []
     block: dict[str, ProvinceCounts] = {}
+    # A table starts at a table-looking row after a Total row, a repeated
+    # province or more than MAX_GAP_LINES other lines. A failed row does not
+    # move it, so the contacts check holds for the whole table.
+    table_start = 0
+    prev_row: int | None = None
+    prev_name = ""
     gap = 0
-    for line in lines:
+    for i, line in enumerate(lines):
         match = LABEL.match(line)
         if match is None:
             gap += 1
@@ -397,21 +498,39 @@ def find_province_table(text: str) -> dict[str, ProvinceCounts]:
                 block = {}
             continue
         gap = 0
+        name = canonical_province(match.group("label"))
+        rest = match.group("rest")
+        if rest[:1].isdigit():
+            if (
+                prev_row is None
+                or prev_name == TOTAL
+                or name in block
+                or i - prev_row - 1 > MAX_GAP_LINES
+            ):
+                table_start = i
+            prev_row, prev_name = i, name
+        if name in block:
+            block = {}
         try:
-            name = canonical_province(match.group("label"))
-            counts = parse_counts(match.group("rest"))
+            counts = parse_counts(rest)
         except ValueError as e:
             # Narrative sentences also start with province names; only rows
             # that look tabular are worth reporting.
-            if match.group("rest")[:1].isdigit():
-                errors.append(str(e))
+            if not rest[:1].isdigit():
+                block = {}
+                continue
+            if name == TOTAL and block and not names_contacts(lines, table_start):
+                total = parse_total_from_sums(rest, [*block.values()], source=source)
+                return block | {TOTAL: total}
+            errors.append(str(e))
             block = {}
             continue
-        if name in block:
-            block = {}
         block[name] = counts
         if name == TOTAL and len(block) > 1:
-            return block
+            if not names_contacts(lines, table_start):
+                return block
+            errors.append(f"skipped contacts table at line {table_start + 1}")
+            block = {}
     raise ValueError(
         f"No province table found; row errors: {errors[:MAX_ERRORS_SHOWN]}"
     )
@@ -489,7 +608,7 @@ def parse_sitrep(
     Raises:
         ValueError: If the table is missing, unreadable or does not sum.
     """
-    table = find_province_table(text)
+    table = find_province_table(text, source=f"{report_date} (media {media_id})")
     validate_table(table)
     return table_to_frame(
         table,
