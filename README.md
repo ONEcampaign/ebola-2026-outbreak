@@ -36,6 +36,9 @@ Files are prefixed by outbreak so historical and current data stay apart:
     `uv run python src/ebola_2026_outbreak/drc_2026_who.py` adds to the history.
     The "WHO scrape" workflow (`who_scrape.yml`) runs it daily at 14:00 UTC
     and commits only the WHO table. Run it by hand to pick up a later update.
+    Countries are matched to `data/reference/who_countries.csv`, so a country
+    not listed there, by name or alias, fails the WHO scrape until a row or
+    alias is added. The run keeps the page snapshot as an artifact.
     `drc_2026_who_wayback.py` backfills it from Wayback Machine captures.
     Until early September 2026 WHO published the table as an image.
     `drc_2026_who_ocr.py` reads those images from the cached captures (run
@@ -107,7 +110,14 @@ issue that tags the reviewers. To review a held report:
 1. Type the printed value in `reviewed_value`, either a number or `blank` for
    an empty cell. Type `absent` where a flagged zone name is a misreading and the
    table has no such row. If a zone name is unknown, add it or its spelling to
-   `aliases` in `data/reference/drc_2026_health_zones.csv`.
+   `aliases` in `data/reference/drc_2026_health_zones.csv`. A new zone also
+   needs a match in `data/reference/cod_ab_health_zones.csv` for the zone map.
+   If the tests fail on the review pull request, add the zone's COD-AB spelling
+   to its `aliases`.
+   When COD-AB has no such zone at all (a health area the sitrep lists as a
+   zone, or a zone created after COD-AB's 2019 boundaries), a maintainer adds
+   it to `HEALTH_AREA_ZONES` (under its parent zone) or `NOT_MAPPED` in
+   `src/ebola_2026_outbreak/drc_health_zone_geometry.py`.
 1. Open a pull request that says `Refs #N` for the issue. The review check runs
    `drc_2026_sitreps_extract.py check` and passes when the report would be
    released. The check runs the base branch's code against the pull request's
@@ -123,7 +133,9 @@ Raw model answers are cached in `data/interim/drc_2026_sitrep_extractions/`, so
 
 `uv run python src/ebola_2026_outbreak/chart_tables.py` writes display-ready
 tables to `data/output/`. The tables job of the sitrep scrape workflow rebuilds
-them every 2 hours:
+them every 2 hours, and the release workflow rebuilds them after a reviewed
+sitrep is merged. Nothing is written unless every table builds and passes its
+checks:
 
 - `2026_outbreak_country_summary.csv`: latest WHO confirmed cases, deaths,
   case fatality rate and recoveries per country, with a Total row. When the
@@ -132,21 +144,31 @@ them every 2 hours:
 - `2026_outbreak_drc_cases_by_province.csv`: latest sitrep confirmed cases for
   every province, empty where the sitrep reports none, keyed to the map
   OBJECTIDs in `data/reference/drc_provinces_objectid.csv`.
-- `2026_outbreak_drc_cases_by_zone.csv`: latest sitrep confirmed cases for
-  every health zone, empty where the sitrep reports none, keyed by `Code` to
-  `drc_health_zones_geometry.csv` (see below).
+- `2026_outbreak_drc_cases_by_zone.csv`: confirmed cases for every health zone
+  from the latest released zone table, empty where it reports none, keyed by
+  `Code` to `drc_health_zones_geometry.csv` (see Health zone map). Released
+  zone tables can lag the province series, so this map can be older than the
+  province map. On the zone map's date, the zone table's province subtotals of
+  cumulative cases and deaths must equal the parsed province figures, or the
+  build fails. The check is skipped, with a warning, when the parsed provinces
+  have no rows for that date, when the zone table and the parsed provinces
+  come from different uploads (a different media ID, or the same one with a
+  different `modified` time), or
+  when the zone table was released with publisher discrepancies.
 - `outbreak_comparison_weekly.csv`: cumulative confirmed cases by week since
   each outbreak's first confirmed case (22 March 2014 and 15 May 2026). West
   Africa uses ROWCA counts before 29 August 2014 and WHO counts after. The
   2026 series sums WHO's country figures, with DRC from the latest sitrep when
   it is newer.
-- `2026_outbreak_headline_figures.json`: four figures, each with `value` and
+- `2026_outbreak_headline_figures.json`: five figures, each with `value` and
   `update_date`, written as day and month ("18 October").
   `total_confirmed_cases`, `total_deaths` (confirmed) and
   `death_rate` (confirmed case fatality rate, in percent) come from the
   country summary's Total row across all affected countries, dated by the DRC
   row's date (WHO's or a newer sitrep's). `provinces_affected` counts DRC
   provinces with confirmed cases in the latest sitrep, dated by that sitrep.
+  `zones_affected` counts health zones with confirmed cases on the zone map,
+  dated by its zone table.
 
 ### Health zone map
 
@@ -155,10 +177,16 @@ them every 2 hours:
 [COD-AB](https://data.humdata.org/dataset/cod-ab-cod) (admin level 3,
 boundaries of September 2019) with `Geometry` (GeoJSON), `Code` (P-code) and
 `Name`. Shapes are simplified to about 550 m, keeping shared borders. It also
-writes `data/reference/drc_2026_health_zone_codes.csv`, the P-code of each
-sitrep zone. Re-run it when the gazetteer gains a zone. Dakwa (Bas-Uélé), which
-the sitreps list as a zone, is a health area of Ango, so its cases are mapped
-under Ango. "A ventiler" is not a zone and is not mapped.
+writes `data/reference/cod_ab_health_zones.csv`, the province, name and P-code
+of every COD-AB zone. Run it only to refresh COD-AB.
+
+The chart tables match each gazetteer zone to a P-code by province and name,
+using the gazetteer's aliases. A zone with cases and no code stops the build,
+and a test fails a pull request that adds such a zone to the gazetteer. Add the
+COD-AB spelling to the zone's `aliases` in
+`data/reference/drc_2026_health_zones.csv`. Dakwa (Bas-Uélé), which the
+sitreps list as a zone, is a health area of Ango, so its cases are mapped under
+Ango. "A ventiler" is not a zone and is not mapped.
 
 ### Health expenditure
 

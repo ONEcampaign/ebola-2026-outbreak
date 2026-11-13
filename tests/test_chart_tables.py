@@ -15,6 +15,7 @@ from ebola_2026_outbreak.chart_tables import (
     WEEK,
     WEST_AFRICA,
     WEST_AFRICA_FIRST_CONFIRMED,
+    check_province_agreement,
     country_summary,
     drc_outbreak_series,
     headline_figures,
@@ -27,7 +28,10 @@ from ebola_2026_outbreak.chart_tables import (
     west_africa_series,
     with_newer_sitrep,
     zone_map,
+    zone_map_date,
 )
+from ebola_2026_outbreak.drc_2026_sitrep_schema import GAZETTEER_PATH
+from ebola_2026_outbreak.drc_health_zone_geometry import COD_AB_PATH, zone_codes
 
 D1, D2 = date(2026, 10, 17), date(2026, 10, 18)
 
@@ -174,16 +178,27 @@ def test_west_africa_series_rejects_overlap() -> None:
         west_africa_series(early, who)
 
 
+ZONES = pl.DataFrame(
+    {"Code": ["CD1", "CD2", "CD3"], "Name": ["Bunia", "Aru", "Mambasa"]}
+).with_columns(pl.Series(CASES, [9, 0, None], dtype=pl.Int64))
+
+
 def test_headline_figures(who: pl.DataFrame) -> None:
     mapped = province_map(provinces([("Ituri", 10), ("Haut-Uélé", 5)]), LOOKUP)
     figures = headline_figures(
-        summary=country_summary(who), summary_as_of=D2, mapped=mapped, sitrep_as_of=D1
+        summary=country_summary(who),
+        summary_as_of=D2,
+        mapped=mapped,
+        sitrep_as_of=D1,
+        zones=ZONES,
+        zone_as_of=date(2026, 10, 16),
     )
     assert figures == {
         "total_confirmed_cases": {"value": 1009, "update_date": "18 October"},
         "total_deaths": {"value": 483, "update_date": "18 October"},
         "death_rate": {"value": 47.9, "update_date": "18 October"},
         "provinces_affected": {"value": 2, "update_date": "17 October"},
+        "zones_affected": {"value": 1, "update_date": "16 October"},
     }
 
 
@@ -191,7 +206,12 @@ def test_headline_figures_rejects_missing_total(who: pl.DataFrame) -> None:
     summary = country_summary(who).filter(pl.col("Country") != "Total")
     with pytest.raises(ValueError, match="one 'Total' row"):
         headline_figures(
-            summary=summary, summary_as_of=D2, mapped=LOOKUP, sitrep_as_of=D2
+            summary=summary,
+            summary_as_of=D2,
+            mapped=LOOKUP,
+            sitrep_as_of=D2,
+            zones=ZONES,
+            zone_as_of=D2,
         )
 
 
@@ -333,23 +353,46 @@ def test_zone_map_keeps_every_map_zone() -> None:
         [
             (D1, "Ituri", "Bunia", 5),
             (D2, "Ituri", "Bunia", 9),
-            (D2, "Ituri", "A ventiler", 0),
-            (D2, "Bas-Uélé", "Dakwa", 1),
+            (D2, "Ituri", "A ventiler", 4),
+            (D2, "Bas-Uélé", "Dakwa", 0),
         ]
     )
-    out = zone_map(by_zone, ZONE_CODES, ZONE_SHAPES)
+    out = zone_map(by_zone, ZONE_CODES, ZONE_SHAPES, as_of=D2)
     assert out.rows() == [("CD1", "Bunia", 9), ("CD2", "Aru", None)]
 
 
-def test_zone_map_leaves_out_zone_missing_from_codes() -> None:
-    out = zone_map(zone_rows([(D2, "Ituri", "Nizi", 3)]), ZONE_CODES, ZONE_SHAPES)
-    assert out["Confirmed cases"].null_count() == out.height
+# Dakwa has a null code; Nizi is not in the codes at all.
+@pytest.mark.parametrize(
+    ("province", "zone"), [("Bas-Uélé", "Dakwa"), ("Ituri", "Nizi")]
+)
+def test_zone_map_rejects_cases_without_code(province: str, zone: str) -> None:
+    with pytest.raises(ValueError, match="gazetteer alias"):
+        zone_map(
+            zone_rows([(D2, province, zone, 3)]), ZONE_CODES, ZONE_SHAPES, as_of=D2
+        )
+
+
+def test_zone_map_rejects_new_gazetteer_zone_cod_ab_spells_differently() -> None:
+    cod_ab = pl.read_csv(COD_AB_PATH, infer_schema=False)
+    gazetteer = pl.concat(
+        [
+            pl.read_csv(GAZETTEER_PATH, infer_schema=False),
+            pl.DataFrame(
+                {"province": ["Ituri"], "zone": ["Bunya"], "aliases": [None]},
+                schema={"province": pl.String, "zone": pl.String, "aliases": pl.String},
+            ),
+        ]
+    )
+    codes = zone_codes(cod_ab, gazetteer)
+    shapes = cod_ab.select(pl.col("code").alias("Code"), pl.col("zone").alias("Name"))
+    with pytest.raises(ValueError, match="Ituri / Bunya"):
+        zone_map(zone_rows([(D2, "Ituri", "Bunya", 3)]), codes, shapes, as_of=D2)
 
 
 def test_zone_map_rejects_code_without_shape() -> None:
     codes = ZONE_CODES.with_columns(code=pl.lit("CD9"))
     with pytest.raises(ValueError, match="no map shape"):
-        zone_map(zone_rows([(D2, "Ituri", "Bunia", 3)]), codes, ZONE_SHAPES)
+        zone_map(zone_rows([(D2, "Ituri", "Bunia", 3)]), codes, ZONE_SHAPES, as_of=D2)
 
 
 def test_zone_map_sums_rows_sharing_a_code() -> None:
@@ -361,5 +404,173 @@ def test_zone_map_sums_rows_sharing_a_code() -> None:
         }
     )
     by_zone = zone_rows([(D2, "Bas-Uélé", "Ango", 2), (D2, "Bas-Uélé", "Dakwa", 1)])
-    out = zone_map(by_zone, codes, ZONE_SHAPES)
+    out = zone_map(by_zone, codes, ZONE_SHAPES, as_of=D2)
     assert out.rows() == [("CD2", "Aru", 3), ("CD1", "Bunia", None)]
+
+
+def test_zone_map_rejects_missing_case_indicator() -> None:
+    renamed = zone_rows([(D2, "Ituri", "Bunia", 3)]).with_columns(
+        indicator=pl.lit("Cumulative cases")
+    )
+    with pytest.raises(ValueError, match="No zone rows"):
+        zone_map(renamed, ZONE_CODES, ZONE_SHAPES, as_of=D2)
+
+
+def test_zone_map_date_ignores_province_rows() -> None:
+    by_zone = pl.concat(
+        [
+            zone_rows([(D1, "Ituri", "Bunia", 3)]),
+            zone_rows([(D2, "Ituri", "", 3)]).with_columns(level=pl.lit("province")),
+        ]
+    )
+    assert zone_map_date(by_zone) == D1
+
+
+CASES_LABEL, DEATHS_LABEL = "Cumulative confirmed cases", "Cumulative confirmed deaths"
+MEDIA, MODIFIED = 26137, "2026-11-12T05:33:36"
+
+
+def parsed(
+    rows: list[tuple[str, int, int]], *, day: date = D2, media_id: int = MEDIA
+) -> pl.DataFrame:
+    """Parsed province cases and deaths from (province, cases, deaths)."""
+    return sitrep(day, rows).with_columns(
+        media_id=pl.lit(media_id, dtype=pl.Int64), modified=pl.lit(MODIFIED)
+    )
+
+
+def zone_table(
+    subtotals: list[tuple[str, int, int]], *, media_id: int = MEDIA
+) -> pl.DataFrame:
+    """Zone table on D2: one zone row plus province subtotal rows."""
+    records = [(D2, "zone", "Ituri", "Bunia", CASES_LABEL, 1)] + [
+        (D2, "province", p, None, label, v)
+        for p, cases, deaths in subtotals
+        for label, v in ((CASES_LABEL, cases), (DEATHS_LABEL, deaths))
+    ]
+    return pl.DataFrame(
+        records,
+        schema={
+            "date": pl.Date,
+            "level": pl.String,
+            "province": pl.String,
+            "zone": pl.String,
+            "indicator": pl.String,
+            "value": pl.Int64,
+        },
+        orient="row",
+    ).with_columns(media_id=pl.lit(media_id, dtype=pl.Int64), modified=pl.lit(MODIFIED))
+
+
+def ledger(discrepancies: int = 0) -> pl.DataFrame:
+    """Extraction ledger row for the zone table's upload."""
+    return pl.DataFrame(
+        {
+            "media_id": [MEDIA],
+            "modified": [MODIFIED],
+            "status": ["released"],
+            "discrepancies": [discrepancies],
+        }
+    )
+
+
+def test_check_province_agreement_matches_by_name_key(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    older = parsed([("Ituri", 1, 1)], day=D1)  # Other dates are not compared.
+    provinces = pl.concat([older, parsed([("Haut-Uélé", 10, 4), ("Ituri", 5, 2)])])
+    by_zone = zone_table([("HAUT UELE", 10, 4), ("Ituri", 5, 2)])
+    with caplog.at_level(logging.INFO):
+        check_province_agreement(provinces, by_zone, ledger(), as_of=D2)
+    assert "subtotals match" in caplog.text
+
+
+def test_check_province_agreement_rejects_different_value() -> None:
+    by_zone = zone_table([("Ituri", 5, 3)])
+    with pytest.raises(
+        ValueError,
+        match=r"2026-10-18.*Ituri Cumulative confirmed deaths: parsed 2, zone table 3",
+    ):
+        check_province_agreement(parsed([("Ituri", 5, 2)]), by_zone, ledger(), as_of=D2)
+
+
+@pytest.mark.parametrize(
+    ("parsed_rows", "subtotals", "missing"),
+    [
+        ([("Ituri", 5, 2), ("Tshopo", 1, 0)], [("Ituri", 5, 2)], "zone table None"),
+        ([("Ituri", 5, 2)], [("Ituri", 5, 2), ("Tshopo", 1, 0)], "parsed None"),
+    ],
+)
+def test_check_province_agreement_rejects_province_in_one_table(
+    parsed_rows: list[tuple[str, int, int]],
+    subtotals: list[tuple[str, int, int]],
+    missing: str,
+) -> None:
+    with pytest.raises(
+        ValueError, match=f"Tshopo Cumulative confirmed cases.*{missing}"
+    ):
+        check_province_agreement(
+            parsed(parsed_rows), zone_table(subtotals), ledger(), as_of=D2
+        )
+
+
+def test_check_province_agreement_skips_no_parsed_rows_on_zone_date(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        check_province_agreement(
+            parsed([("Ituri", 5, 2)], day=D1),
+            zone_table([("Ituri", 9, 9)]),
+            ledger(),
+            as_of=D2,
+        )
+    assert "no rows for the zone map's date" in caplog.text
+
+
+def test_check_province_agreement_skips_other_upload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    provinces = parsed([("Ituri", 5, 2)], media_id=MEDIA - 1)
+    with caplog.at_level(logging.WARNING):
+        check_province_agreement(
+            provinces, zone_table([("Ituri", 9, 9)]), ledger(), as_of=D2
+        )
+    assert f"[({MEDIA - 1}, '{MODIFIED}')]" in caplog.text
+    assert f"[({MEDIA}, '{MODIFIED}')]" in caplog.text
+
+
+def test_check_province_agreement_skips_replaced_upload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """INSP can replace an upload in place, changing only `modified`."""
+    replaced = "2026-11-13T09:00:00"
+    provinces = parsed([("Ituri", 5, 2)]).with_columns(modified=pl.lit(replaced))
+    with caplog.at_level(logging.WARNING):
+        check_province_agreement(
+            provinces, zone_table([("Ituri", 9, 9)]), ledger(), as_of=D2
+        )
+    assert f"'{replaced}'" in caplog.text
+    assert f"'{MODIFIED}'" in caplog.text
+    assert "skipping" in caplog.text
+
+
+def test_check_province_agreement_skips_upload_with_discrepancies(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    by_zone = zone_table([("Ituri", 9, 9)])
+    with caplog.at_level(logging.WARNING):
+        check_province_agreement(
+            parsed([("Ituri", 5, 2)]), by_zone, ledger(2), as_of=D2
+        )
+    assert "2 publisher discrepancies" in caplog.text
+
+
+def test_check_province_agreement_rejects_upload_missing_from_ledger() -> None:
+    by_zone = zone_table([("Ituri", 5, 2)])
+    with pytest.raises(ValueError, match="not in ledger"):
+        check_province_agreement(
+            parsed([("Ituri", 5, 2)]),
+            by_zone,
+            ledger().with_columns(media_id=1),
+            as_of=D2,
+        )

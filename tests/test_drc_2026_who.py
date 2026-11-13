@@ -7,7 +7,9 @@ import polars as pl
 import pytest
 
 from ebola_2026_outbreak.drc_2026_who import (
-    FOOTNOTE_MARKERS,
+    OUTPUT_PATH,
+    canonical_country,
+    load_countries,
     parse_value,
     parse_who_table,
     upsert,
@@ -38,18 +40,70 @@ def test_parse_value(text: str, expected: float | None) -> None:
     assert parse_value(text) == expected
 
 
+@pytest.fixture(scope="module")
+def countries() -> dict[str, str]:
+    """The committed WHO country list."""
+    return load_countries()
+
+
 @pytest.mark.parametrize(
-    ("cell", "expected"),
+    ("label", "expected"),
     [
+        ("Nigeria¹", "Nigeria"),
+        ("Nigeria 1", "Nigeria"),
+        ("Nigeria (a)", "Nigeria"),
+        ("*Nigeria", "Nigeria"),
+        ("Nigeria $", "Nigeria"),
         ("France ***", "France"),
         ("Kenya#", "Kenya"),
-        ("Nigeria $", "Nigeria"),
         ("Uganda †", "Uganda"),
+        ("UGANDA\xa0", "Uganda"),
         ("Democratic Republic of the Congo", "Democratic Republic of the Congo"),
+        ("Democratic Republic of the Congo*", "Democratic Republic of the Congo"),
     ],
 )
-def test_footnote_markers_stripped(cell: str, expected: str) -> None:
-    assert FOOTNOTE_MARKERS.sub("", cell) == expected
+def test_canonical_country(
+    label: str, expected: str, countries: dict[str, str]
+) -> None:
+    assert canonical_country(label, countries) == expected
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["DR Congo", "Congo (Democratic Republic of the)", "Congo", "***", "Nigeria1x"],
+)
+def test_unknown_country_raises(label: str, countries: dict[str, str]) -> None:
+    with pytest.raises(ValueError, match=r"^Unknown WHO country: "):
+        canonical_country(label, countries)
+
+
+def test_alias_maps_to_country(tmp_path: Path) -> None:
+    path = tmp_path / "countries.csv"
+    path.write_text("country,aliases\nDemocratic Republic of the Congo,DR Congo|DRC\n")
+    countries = load_countries(path)
+    drc = "Democratic Republic of the Congo"
+    assert canonical_country("DR Congo", countries) == drc
+    assert canonical_country("DRC *", countries) == drc
+
+
+def test_alias_naming_two_countries_raises(tmp_path: Path) -> None:
+    path = tmp_path / "countries.csv"
+    path.write_text("country,aliases\nNiger,\nNigeria,NIGER\n")
+    with pytest.raises(ValueError, match="names both Niger and Nigeria"):
+        load_countries(path)
+
+
+def test_committed_countries_are_canonical(countries: dict[str, str]) -> None:
+    stored = pl.read_csv(OUTPUT_PATH, columns=["country"])["country"].unique()
+    assert stored.len() > 0
+    for country in stored:
+        assert canonical_country(country, countries) == country
+
+
+def test_unknown_country_rejects_table() -> None:
+    html = FIXTURE.read_text().replace(">Kenya", ">Narnia", 1)
+    with pytest.raises(ValueError, match="Unknown WHO country: Narnia"):
+        parse_who_table(html, retrieved_at=RETRIEVED_AT)
 
 
 def test_parse_value_rejects_text() -> None:
