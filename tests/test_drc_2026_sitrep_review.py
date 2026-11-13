@@ -3,6 +3,7 @@
 import csv
 import json
 import re
+import shutil
 import subprocess
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -28,6 +29,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
 )
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     CACHE_DIR,
+    COD_AB_PATH,
     FIELDS,
     GAZETTEER_PATH,
     REVIEW_DIR,
@@ -389,6 +391,31 @@ def test_apply_drops_a_row_dismissed_as_absent(gazetteer) -> None:
         apply(TRUTH, duplicate, gazetteer=gazetteer)
 
 
+def test_a_new_zone_one_model_reads_off_the_table_is_dismissed_as_absent(
+    gazetteer,
+) -> None:
+    # Komanda is an Ituri zone only COD-AB lists. One model returns it, the
+    # page prints the name, but the text layer locates no row for it.
+    komanda = RowKey("zones", "Ituri", "Komanda")
+    gemini = normalise(raw({**TRUTH, komanda: TRUTH[A]}), gazetteer)
+    assert gemini.new_zones == {komanda}
+    reconciled = reconcile(
+        gemini,
+        normalise(raw(TRUTH), gazetteer),
+        text_layer(),
+        match=match,
+        printed_labels=lambda names: set(names),
+    )
+    assert reconciled.flags == [
+        Flag(komanda, f, "unknown_name") for f in FIELDS["zones"]
+    ]
+
+    dismiss = [row(komanda, f, "absent", "unknown_name") for f in FIELDS["zones"]]
+    values, verified = apply(reconciled.accepted, dismiss, gazetteer=gazetteer)
+    assert values == TRUTH
+    assert verified == set()
+
+
 def test_apply_rejects_a_cell_reviewed_twice_differently(gazetteer) -> None:
     with refused("reviewed_twice"):
         apply(
@@ -525,7 +552,9 @@ def make_repo(
         repo / ex.STATUS_PATH.relative_to(ROOT)
     )
     cache = repo / CACHE_DIR.relative_to(ROOT)
-    gazetteer = load_gazetteer(write_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT)))
+    gazetteer_path = write_gazetteer(repo / GAZETTEER_PATH.relative_to(ROOT))
+    shutil.copy(COD_AB_PATH, repo / COD_AB_PATH.relative_to(ROOT))
+    gazetteer = load_gazetteer(gazetteer_path)
     for name, rows in (("gemini", gemini), ("mistral", mistral)):
         result = ModelResult(raw(rows), name, name, {}, "2026-10-15T12:00:00Z", {})
         write_model_result(SHA, name, result, root=cache)

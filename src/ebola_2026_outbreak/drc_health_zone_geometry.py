@@ -9,9 +9,11 @@ only to refresh COD-AB.
 
 `zone_codes` matches the sitrep gazetteer's zones to those P-codes by province
 and name when the chart tables are built. Zones COD-AB spells differently are
-listed in `COD_SPELLINGS` or as gazetteer aliases, health areas the sitreps
-report as zones take their zone's code in `HEALTH_AREA_ZONES`, and rows that
-are not zones are in `NOT_MAPPED`.
+listed in `drc_2026_sitrep_schema.COD_SPELLINGS` or as gazetteer aliases,
+health areas the sitreps report as zones take their zone's code in
+`drc_2026_sitrep_schema.HEALTH_AREA_ZONES`, and rows that are not zones are in
+`NOT_MAPPED`. The schema module keeps those tables, so the gazetteer matches
+COD-AB the same way without the shapely dependency.
 """
 
 import io
@@ -24,14 +26,20 @@ import polars as pl
 import shapely
 from shapely.geometry import mapping, shape
 
-from ebola_2026_outbreak.drc_2026_sitrep_schema import name_key
+from ebola_2026_outbreak.drc_2026_sitrep_schema import (
+    COD_AB_PATH,
+    GAZETTEER_PATH,
+    HEALTH_AREA_ZONES,
+    cod_ab_names,
+    load_gazetteer,
+    name_key,
+)
 from ebola_2026_outbreak.fetch import get
 
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 GEOMETRY_PATH = ROOT / "data" / "output" / "drc_health_zones_geometry.csv"
-COD_AB_PATH = ROOT / "data" / "reference" / "cod_ab_health_zones.csv"
 
 COD_AB_URL = (
     "https://data.humdata.org/dataset/f42132b9-8cc6-4201-b020-9259c56e8868"
@@ -47,12 +55,6 @@ COORDINATE_GRID = 1e-4
 BYTES_PER_MB = 1e6
 POLYGON_TYPES = frozenset({"Polygon", "MultiPolygon"})
 
-# Sitrep zone name -> COD-AB name, for the same zone spelled differently.
-COD_SPELLINGS = {"Mongbwalu": "Mongbalu", "Nyankunde": "Nyakunde"}
-# Health areas (aires de santé) the sitreps list as zones -> the COD-AB zone
-# holding them, under which their cases are mapped. Dakwa is a health area of
-# Ango in GRID3's health areas v9.0; neither COD-AB nor GRID3 has it as a zone.
-HEALTH_AREA_ZONES = {"Dakwa": "Ango"}
 # Gazetteer (province, zone) rows that are not zones, so have no map shape.
 # "A ventiler" holds cases not yet assigned to a zone.
 NOT_MAPPED = frozenset({("Ituri", "A ventiler")})
@@ -133,11 +135,28 @@ def cod_ab_table(features: list[dict]) -> pl.DataFrame:
     ).sort("code")
 
 
+def gazetteer_table(path: Path = GAZETTEER_PATH) -> pl.DataFrame:
+    """Every gazetteer zone as `province`, `zone` and `aliases`.
+
+    The curated rows of `path`, then the zones only COD-AB lists
+    (`Gazetteer.unseen`), so a zone released before it is curated still gets
+    its P-code.
+    """
+    curated = pl.read_csv(path, infer_schema=False)
+    unseen = pl.DataFrame(
+        sorted(load_gazetteer(path).unseen),
+        schema={"province": pl.String, "zone": pl.String},
+        orient="row",
+    ).with_columns(aliases=pl.lit(None, dtype=pl.String))
+    return pl.concat([curated, unseen])
+
+
 def zone_codes(cod_ab: pl.DataFrame, gazetteer: pl.DataFrame) -> pl.DataFrame:
     """The COD-AB P-code of each gazetteer zone, matched by province and name.
 
-    A zone matches on its own name, its `COD_SPELLINGS` or `HEALTH_AREA_ZONES`
-    entry, or any of its gazetteer aliases, all by `name_key`.
+    A zone matches on its `HEALTH_AREA_ZONES` entry, else on its
+    `cod_ab_names` (its `COD_SPELLINGS` entry or own name, then its aliases),
+    all by `name_key`.
 
     Args:
         cod_ab: COD-AB zones with `province`, `zone` and `code` (see
@@ -156,8 +175,9 @@ def zone_codes(cod_ab: pl.DataFrame, gazetteer: pl.DataFrame) -> pl.DataFrame:
     for province, zone, aliases in gazetteer.select(
         "province", "zone", "aliases"
     ).iter_rows():
-        target = HEALTH_AREA_ZONES.get(zone) or COD_SPELLINGS.get(zone, zone)
-        names = [target, *(aliases or "").split("|")]
+        names = cod_ab_names(zone, aliases)
+        if holder := HEALTH_AREA_ZONES.get(zone):
+            names[0] = holder
         code = next(
             (
                 cod[k]

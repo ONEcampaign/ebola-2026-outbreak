@@ -383,7 +383,9 @@ def apply(
     A row flagged `unknown_name` whose cells read `absent` is not in the PDF:
     its key, as printed in the review, is dropped from the values and none of
     its cells is verified, so `check_sums` runs on the rest. A row the
-    gazetteer resolves is a real zone and cannot be dismissed. A
+    gazetteer resolves is a real zone and cannot be dismissed, unless only
+    COD-AB lists the zone (`Gazetteer.unseen`): no sitrep has shown it, so a
+    model may have misread another name as it. A
     `duplicate_row` row takes the real row's values. `absent` there would
     drop the canonical row and is refused.
 
@@ -413,7 +415,7 @@ def apply(
     review = list(review)
     dismissed = {_key(row) for row in review if _dismissed(row)}
     for row in review:
-        if _dismissed(row) and resolve(_key(row), gazetteer) is not None:
+        if _dismissed(row) and _real_zone(_key(row), gazetteer):
             raise ReviewError(
                 "absent_real_zone",
                 f"{describe(_key(row))} is in the gazetteer, so it is a real zone; "
@@ -507,6 +509,16 @@ def resolve(key: RowKey, gazetteer: Gazetteer) -> RowKey | None:
     if reason == "wrong_province" and zone in gazetteer.get(name_key(zone.zone), ()):
         return resolved
     return None
+
+
+def _real_zone(key: RowKey, gazetteer: Gazetteer) -> bool:
+    """Whether a row resolves to a zone a sitrep has shown, so cannot be
+    dismissed as absent."""
+    resolved = resolve(key, gazetteer)
+    return (
+        resolved is not None
+        and HealthZone(resolved.province, resolved.zone) not in gazetteer.unseen
+    )
 
 
 def _dismissed(row: ReviewRow) -> bool:

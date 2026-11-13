@@ -11,6 +11,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     Discrepancy,
     Extraction,
     Flag,
+    Gazetteer,
     Normalised,
     Reconciled,
     RowKey,
@@ -131,6 +132,11 @@ def text_layer(rows: dict[RowKey, Values]) -> dict[RowKey, TextRow]:
 def model(rows: dict[RowKey, Values], flags: Iterable[Flag] = ()) -> Normalised:
     """A normalised model answer holding `rows`."""
     return Normalised(Extraction(150, "2026-10-11", rows), list(flags))
+
+
+def with_new_zone(rows: dict[RowKey, Values], zone: RowKey) -> Normalised:
+    """A model answer holding `rows`, with `zone` a zone only COD-AB lists."""
+    return model(rows)._replace(new_zones=frozenset({zone} & rows.keys()))
 
 
 def run(
@@ -263,6 +269,57 @@ def test_name_flags_hold_the_row_once_per_cell() -> None:
     assert result.flags == [Flag(A, f, "wrong_province", 2) for f in ALL]
 
 
+@pytest.mark.parametrize("arbitration", [True, False])
+def test_new_zone_both_models_return_is_accepted(arbitration: bool) -> None:
+    truth = report()
+    result = reconcile(
+        with_new_zone(truth, C),
+        with_new_zone(truth, C),
+        text_layer(truth),
+        match=match,
+        printed_labels=no_labels,
+        arbitration=arbitration,
+    )
+    assert result == (truth, [])
+
+
+def test_new_zone_from_one_model_not_printed_is_a_misread(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    truth = report()
+    text_rows = {k: v for k, v in text_layer(truth).items() if k != C}
+    without_c = {k: v for k, v in truth.items() if k != C}
+
+    with caplog.at_level("INFO"):
+        result = reconcile(
+            with_new_zone(truth, C),
+            model(without_c),
+            text_rows,
+            match=match,
+            printed_labels=no_labels,
+        )
+
+    assert result == (without_c, [])
+    assert "misread zone name" in caplog.text
+
+
+def test_new_zone_from_one_model_printed_is_reconciled_as_any_zone() -> None:
+    truth = report()
+    without_c = {k: v for k, v in truth.items() if k != C}
+
+    result = reconcile(
+        with_new_zone(truth, C),
+        model(without_c),
+        text_layer(truth),
+        match=match,
+        printed_labels=lambda names: set(names),
+        arbitration=False,
+    )
+
+    assert result.accepted[C] == {}
+    assert reasons(result.flags) == {(C, f): "models_disagree" for f in ALL}
+
+
 def test_held_row_skips_the_sums_that_need_it() -> None:
     truth = report()
     gemini = model(truth, [Flag(A, f, "unknown_name") for f in ALL])
@@ -328,7 +385,7 @@ def test_percentages_agree_only_when_exact(
             "zone_total": None,
             "zones": [],
         }
-        return normalise(raw, {})
+        return normalise(raw, Gazetteer({}))
 
     result = reconcile(
         normalised(gemini_cfr),

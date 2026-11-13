@@ -114,6 +114,7 @@ from ebola_2026_outbreak.drc_2026_sitrep_review import (
 )
 from ebola_2026_outbreak.drc_2026_sitrep_schema import (
     CACHE_DIR,
+    COD_AB_PATH,
     EXTRACTORS,
     FIELDS,
     GAZETTEER_PATH,
@@ -1403,7 +1404,7 @@ def check_review(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
         return diff.errors
     gazetteer_path = _in(repo, GAZETTEER_PATH)
     try:
-        gazetteer = load_gazetteer(gazetteer_path)
+        gazetteer = load_gazetteer(gazetteer_path, cod_ab_path=_in(repo, COD_AB_PATH))
     except ValueError as e:
         return [f"{gazetteer_path.relative_to(repo)}: {e}"]
 
@@ -1444,7 +1445,7 @@ def check_release(*, base: str = "origin/main", repo: Path = ROOT) -> list[str]:
     merge_base = git(repo, "merge-base", base, "HEAD")
     gazetteer_path = _in(repo, GAZETTEER_PATH)
     try:
-        gazetteer = load_gazetteer(gazetteer_path)
+        gazetteer = load_gazetteer(gazetteer_path, cod_ab_path=_in(repo, COD_AB_PATH))
     except ValueError as e:
         return [f"{gazetteer_path.relative_to(repo)}: {e}"]
     return _check_release(repo, merge_base=merge_base, gazetteer=gazetteer)

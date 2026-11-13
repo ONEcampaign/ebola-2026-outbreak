@@ -100,7 +100,7 @@ def test_gazetteer_covers_every_seed_zone() -> None:
     zones = {z for entries in GAZETTEER.values() for z in entries}
     # One zone per CSV row, so the count follows the file as reviews add zones.
     rows = GAZETTEER_PATH.read_text(encoding="utf-8").strip().splitlines()[1:]
-    assert len(zones) == len(rows)
+    assert len(zones - GAZETTEER.unseen) == len(rows)
     assert GAZETTEER[name_key("Boma Mangbetu")] == (
         HealthZone("Haut-Uélé", "Boma Mangbetu"),
     )
@@ -129,6 +129,97 @@ def test_load_gazetteer_reads_aliases(tmp_path: Path) -> None:
     assert gazetteer[name_key("Mili-Murhesa")] == (
         HealthZone("Sud-Kivu", "Miti-Murhesa"),
     )
+
+
+def write_cod_ab(path: Path, rows: str) -> Path:
+    """Write a COD-AB zone table holding `rows` and return its path."""
+    path.write_text("province,zone,code\n" + rows)
+    return path
+
+
+def test_load_gazetteer_adds_cod_ab_zones(tmp_path: Path) -> None:
+    curated = tmp_path / "zones.csv"
+    curated.write_text("province,zone,aliases\nIturi,Mongbwalu,\n")
+    cod_ab = write_cod_ab(
+        tmp_path / "cod_ab.csv",
+        "Ituri,Mongbalu,CD1\nHaut-Uele,Watsa,CD2\nBas-Uele,Bili,CD3\n"
+        "Nord-Ubangi,Bili,CD4\n",
+    )
+    gazetteer = load_gazetteer(curated, cod_ab_path=cod_ab)
+    # The curated zone keeps its name; COD-AB's spelling adds no zone.
+    assert gazetteer[name_key("Mongbwalu")] == (HealthZone("Ituri", "Mongbwalu"),)
+    assert name_key("Mongbalu") not in gazetteer
+    assert gazetteer[name_key("Watsa")] == (HealthZone("Haut-Uélé", "Watsa"),)
+    assert gazetteer[name_key("Bili")] == (
+        HealthZone("Bas-Uélé", "Bili"),
+        HealthZone("Nord-Ubangi", "Bili"),
+    )
+    assert gazetteer.unseen == {
+        HealthZone("Haut-Uélé", "Watsa"),
+        HealthZone("Bas-Uélé", "Bili"),
+        HealthZone("Nord-Ubangi", "Bili"),
+    }
+
+
+def test_load_gazetteer_leaves_out_colliding_cod_ab_zones(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    curated = tmp_path / "zones.csv"
+    curated.write_text("province,zone,aliases\nIturi,Mongbwalu,\n")
+    cod_ab = write_cod_ab(
+        tmp_path / "cod_ab.csv",
+        # A second zone under the curated name, and one name given twice.
+        "Ituri,Mongbalu,CD1\nIturi,Mongbwalu,CD2\nKwilu,Kikongo,CD3\n"
+        "Kwilu,Kikongo,CD4\n",
+    )
+    gazetteer = load_gazetteer(curated, cod_ab_path=cod_ab)
+    assert gazetteer[name_key("Mongbwalu")] == (HealthZone("Ituri", "Mongbwalu"),)
+    assert name_key("Kikongo") not in gazetteer
+    assert gazetteer.unseen == frozenset()
+    assert caplog.text.count("Leaving COD-AB zone") == 2
+
+
+def test_load_gazetteer_refuses_unknown_cod_ab_province(tmp_path: Path) -> None:
+    curated = tmp_path / "zones.csv"
+    curated.write_text("province,zone,aliases\nIturi,Bunia,\n")
+    cod_ab = write_cod_ab(tmp_path / "cod_ab.csv", "Katanga,Likasi,CD1\n")
+    with pytest.raises(ValueError, match="Province unknown in COD-AB"):
+        load_gazetteer(curated, cod_ab_path=cod_ab)
+
+
+def test_committed_gazetteer_holds_every_cod_ab_zone() -> None:
+    # 519 COD-AB zones, of which the curated rows other than Dakwa (a health
+    # area) and "A ventiler" (not a zone) match one each.
+    zones = {z for entries in GAZETTEER.values() for z in entries}
+    curated = zones - GAZETTEER.unseen
+    assert len(GAZETTEER.unseen) == 519 - (len(curated) - 2)
+
+
+def test_normalise_accepts_a_cod_ab_zone() -> None:
+    gazetteer = load_gazetteer()
+    new = next(iter(sorted(gazetteer.unseen)))
+    result = normalise(raw(zones=[zone_row(new.province, new.zone.upper())]), gazetteer)
+    key = RowKey("zones", *new)
+    assert set(result.extraction.rows) == {key}
+    assert result.name_flags == []
+    assert result.new_zones == {key}
+
+
+def test_normalise_does_not_move_a_row_to_a_cod_ab_zone_elsewhere() -> None:
+    # COD-AB lists Lubunga in Kasaï-Central too, beside the curated Tshopo one.
+    lubunga = normalise(raw(zones=[zone_row("Ituri", "Lubunga")]), GAZETTEER)
+    assert {f.reason for f in lubunga.name_flags} == {"wrong_province"}
+    # Aketi is only a COD-AB zone of Bas-Uélé.
+    aketi = normalise(raw(zones=[zone_row("Ituri", "Aketi")]), GAZETTEER)
+    assert set(aketi.extraction.rows) == {RowKey("zones", "Ituri", "Aketi")}
+    assert {f.reason for f in aketi.name_flags} == {"unknown_name"}
+    assert aketi.new_zones == frozenset()
+
+
+def test_normalise_flags_a_name_in_neither_list() -> None:
+    result = normalise(raw(zones=[zone_row("Ituri", "Nowhere")]), GAZETTEER)
+    assert {f.reason for f in result.name_flags} == {"unknown_name"}
+    assert result.new_zones == frozenset()
 
 
 def test_normalise_keys_rows_on_canonical_names() -> None:
@@ -257,9 +348,9 @@ def test_normalise_keeps_a_real_zone_beside_an_empty_one() -> None:
 
 
 def test_normalise_unknown_province() -> None:
-    row = {"province": "Kinshasa", **dict.fromkeys(FIELDS["zone_subtotals"], 0)}
+    row = {"province": "Kigali", **dict.fromkeys(FIELDS["zone_subtotals"], 0)}
     result = normalise(raw(zone_subtotals=[row]), GAZETTEER)
-    key = RowKey("zone_subtotals", "Kinshasa", "")
+    key = RowKey("zone_subtotals", "Kigali", "")
     assert {f.key for f in result.name_flags} == {key}
     assert {f.reason for f in result.name_flags} == {"unknown_name"}
 

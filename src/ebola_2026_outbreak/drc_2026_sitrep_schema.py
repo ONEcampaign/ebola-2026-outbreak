@@ -18,6 +18,12 @@ zone's province, so a zone filed under another province, or a name it does
 not know, flags every field of that row for review. An unknown name is
 resolved by adding an alias to the gazetteer.
 
+`load_gazetteer` adds every COD-AB zone (`data/reference/cod_ab_health_zones.csv`)
+that no curated zone matches, under its COD-AB spelling, so a zone's first
+cases do not make its name unknown. Such zones are the gazetteer's `unseen`
+zones; `normalise` reports the rows filed under one (`Normalised.new_zones`),
+and a zone only COD-AB lists never moves a row filed under another province.
+
 Raw model responses and the words of the PDF's table pages are cached in
 `data/interim/drc_2026_sitrep_extractions/<sha256>/`, keyed on the PDF's
 sha256, so each upload keeps its own record. Release normalises the raw
@@ -40,7 +46,7 @@ from typing import Any, Literal, NamedTuple, Self
 import polars as pl
 
 from ebola_2026_outbreak.drc_2026_sitreps_download import OUTBREAK, ROOT
-from ebola_2026_outbreak.drc_2026_sitreps_parse import canonical_province
+from ebola_2026_outbreak.drc_2026_sitreps_parse import TOTAL, canonical_province
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +54,9 @@ logger = logging.getLogger(__name__)
 ZONE_START = date(2026, 8, 19)
 
 GAZETTEER_PATH = ROOT / "data" / "reference" / f"{OUTBREAK}_health_zones.csv"
+# Province, name and P-code of every DRC health zone, written by
+# `drc_health_zone_geometry`.
+COD_AB_PATH = ROOT / "data" / "reference" / "cod_ab_health_zones.csv"
 CACHE_DIR = ROOT / "data" / "interim" / f"{OUTBREAK}_sitrep_extractions"
 REVIEW_DIR = ROOT / "data" / "review" / OUTBREAK
 
@@ -56,6 +65,14 @@ CFR_TOLERANCE = 0.05
 # Float slack on `CFR_TOLERANCE`, so a rounding tie stays in (3 / 16 is 18.75,
 # printed 18.7).
 CFR_EPSILON = 1e-9
+
+# Gazetteer zone name -> COD-AB name, for the same zone spelled differently.
+COD_SPELLINGS = {"Mongbwalu": "Mongbalu", "Nyankunde": "Nyakunde"}
+# Health areas (aires de santé) the sitreps list as zones -> the COD-AB zone
+# holding them, under which their cases are mapped. Dakwa is a health area of
+# Ango in GRID3's health areas v9.0; neither COD-AB nor GRID3 has it as a zone.
+# A health area is not its zone, so the gazetteer still lists Ango.
+HEALTH_AREA_ZONES = {"Dakwa": "Ango"}
 
 # Name keys (`name_key`) of the labels a Total row prints.
 TOTAL_KEYS = frozenset({"total", "totalgeneral", "totalnational", "totalrdc"})
@@ -274,10 +291,12 @@ class Extraction(NamedTuple):
 
 
 class Normalised(NamedTuple):
-    """Result of `normalise`: the rows, and the flags its names raised."""
+    """Result of `normalise`: the rows, the flags its names raised, and the
+    zone rows filed under a zone only COD-AB lists (`Gazetteer.unseen`)."""
 
     extraction: Extraction
     name_flags: list[Flag]
+    new_zones: frozenset[RowKey] = frozenset()
 
 
 class Reconciled(NamedTuple):
@@ -298,9 +317,23 @@ class HealthZone(NamedTuple):
     zone: str
 
 
-# Name key -> every zone it names. More than one only when provinces share a
-# zone name, and the model's province then picks one.
-type Gazetteer = dict[str, tuple[HealthZone, ...]]
+class Gazetteer(dict[str, tuple[HealthZone, ...]]):
+    """Name key -> every zone it names, from `load_gazetteer`.
+
+    More than one zone only when provinces share a zone name, and the
+    model's province then picks one. `unseen` holds the zones only COD-AB
+    lists, not yet in the curated gazetteer.
+    """
+
+    def __init__(
+        self,
+        names: Mapping[str, tuple[HealthZone, ...]],
+        *,
+        unseen: frozenset[HealthZone] = frozenset(),
+    ) -> None:
+        """Hold `names` and the COD-AB-only zones among them."""
+        super().__init__(names)
+        self.unseen = unseen
 
 
 # Extraction schema
@@ -443,12 +476,69 @@ def _province(label: str) -> str | None:
         return None
 
 
-def load_gazetteer(path: Path = GAZETTEER_PATH) -> Gazetteer:
-    """Read the health-zone gazetteer.
+def cod_ab_names(zone: str, aliases: str | None) -> list[str]:
+    """The names COD-AB may list a gazetteer zone under: its `COD_SPELLINGS`
+    entry or its own name, then its `|`-separated aliases."""
+    return [COD_SPELLINGS.get(zone, zone), *(aliases.split("|") if aliases else [])]
+
+
+def _unseen_zones(
+    cod_ab_path: Path,
+    names: Mapping[str, set[HealthZone]],
+    matched: set[tuple[str, str]],
+) -> list[HealthZone]:
+    """COD-AB zones no curated zone matches, under canonical provinces.
+
+    A zone whose name key already names a curated zone of its province, or
+    another COD-AB zone of its province, is left out with a log line: the
+    curated zone keeps the name, and a name naming two zones is no name.
+
+    Args:
+        cod_ab_path: CSV with columns `province, zone, code`.
+        names: Curated name key -> zones, as `load_gazetteer` builds it.
+        matched: (province, name key) of every curated zone's `cod_ab_names`.
+
+    Raises:
+        ValueError: If a COD-AB province is unknown to `canonical_province`.
+    """
+    cod_ab = pl.read_csv(cod_ab_path, infer_schema=False)
+    by_key: defaultdict[tuple[str, str], list[HealthZone]] = defaultdict(list)
+    for cod_province, zone in cod_ab.select("province", "zone").iter_rows():
+        if (province := _province(cod_province)) in (None, TOTAL):
+            raise ValueError(f"Province unknown in COD-AB: {cod_province!r}")
+        key = name_key(zone)
+        if (province, key) not in matched:
+            by_key[province, key].append(HealthZone(province, zone))
+
+    unseen: list[HealthZone] = []
+    for (province, key), zones in by_key.items():
+        curated = [z for z in names.get(key, ()) if z.province == province]
+        if curated or len(zones) > 1:
+            logger.warning(
+                "Leaving COD-AB zone(s) %s out of the gazetteer: the name also"
+                " names %s",
+                zones,
+                curated or "another COD-AB zone of the province",
+            )
+            continue
+        unseen.extend(zones)
+    return unseen
+
+
+def load_gazetteer(
+    path: Path = GAZETTEER_PATH, *, cod_ab_path: Path = COD_AB_PATH
+) -> Gazetteer:
+    """Read the health-zone gazetteer, completed with COD-AB's zones.
+
+    A curated zone matches a COD-AB zone of its province on the name key of
+    any of its `cod_ab_names`, and keeps its curated name. Every COD-AB zone
+    no curated zone matches is added under its COD-AB name, and listed in
+    `Gazetteer.unseen` (see `_unseen_zones` for the ones left out).
 
     Args:
         path: CSV with columns `province, zone, aliases`. Aliases are
             `|`-separated.
+        cod_ab_path: CSV with columns `province, zone, code`.
 
     Returns:
         Name key of every zone name and alias -> the zones it names.
@@ -462,6 +552,7 @@ def load_gazetteer(path: Path = GAZETTEER_PATH) -> Gazetteer:
     )
     names: defaultdict[str, set[HealthZone]] = defaultdict(set)
     seen: set[HealthZone] = set()
+    matched: set[tuple[str, str]] = set()
     for province, zone, aliases in df.iter_rows():
         if _province(province) != province:
             raise ValueError(f"Province not canonical in gazetteer: {province!r}")
@@ -471,12 +562,20 @@ def load_gazetteer(path: Path = GAZETTEER_PATH) -> Gazetteer:
         seen.add(entry)
         for name in [zone, *(aliases.split("|") if aliases else [])]:
             names[name_key(name)].add(entry)
+        matched.update((province, name_key(n)) for n in cod_ab_names(zone, aliases))
 
     for key, zones in names.items():
         provinces = [z.province for z in zones]
         if not key or len(set(provinces)) != len(provinces):
             raise ValueError(f"Gazetteer name {key!r} is ambiguous: {sorted(zones)}")
-    return {key: tuple(sorted(zones)) for key, zones in names.items()}
+
+    unseen = _unseen_zones(cod_ab_path, names, matched)
+    for zone in unseen:
+        names[name_key(zone.zone)].add(zone)
+    return Gazetteer(
+        {key: tuple(sorted(zones)) for key, zones in names.items()},
+        unseen=frozenset(unseen),
+    )
 
 
 # Normalisation
@@ -541,7 +640,8 @@ def canonical_key(
 
     Provinces are matched with `canonical_province`, zones on `name_key`
     against the gazetteer. A zone the gazetteer files under one other
-    province moves there, flagged `wrong_province`. A row that cannot be
+    province moves there, flagged `wrong_province`, unless only COD-AB lists
+    it there (`Gazetteer.unseen`). A row that cannot be
     placed keeps its printed names, with a known province made canonical:
     flagged `wrong_province` when several provinces share the zone name,
     none of them the printed one, and `unknown_name` for a name the
@@ -572,6 +672,9 @@ def canonical_key(
     match = next((z for z in candidates if z.province == province), None)
     if match is not None:
         return RowKey("zones", *match), None
+    # A zone only COD-AB lists is no evidence that a row filed elsewhere is
+    # it, so it neither moves the row nor makes the name known.
+    candidates = tuple(z for z in candidates if z not in gazetteer.unseen)
     if len(candidates) == 1:
         return RowKey("zones", *candidates[0]), "wrong_province"
     key = RowKey("zones", province or label.strip(), zone.strip())
@@ -656,14 +759,15 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     repeated under one key, each flag every field of the row. The first of
     repeated rows is kept. A Total row filed among provinces, subtotals or
     zones is dropped, since the prompt excludes it and `zone_total` carries
-    the zone table's Total.
+    the zone table's Total. A zone row keyed, unflagged, on a zone in
+    `gazetteer.unseen` is also listed in `Normalised.new_zones`.
 
     Args:
         raw: The object the model returned, shaped by `JSON_SCHEMA`.
         gazetteer: From `load_gazetteer`.
 
     Returns:
-        The rows under canonical keys, and the name flags.
+        The rows under canonical keys, the name flags and the new zones.
 
     Raises:
         ValueError: If `raw` breaks the schema (a missing field or a value of
@@ -671,6 +775,7 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
     """
     rows: dict[RowKey, Values] = {}
     flags: list[Flag] = []
+    new_zones: set[RowKey] = set()
 
     def add(printed: RowKey, values: Values) -> None:
         """File a row under its canonical key, flagging duplicates and name problems."""
@@ -684,6 +789,8 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
             rows[key] = values
         if reason is not None:
             flags.extend(Flag(key, field, reason) for field in FIELDS[key.section])
+        elif HealthZone(key.province, key.zone) in gazetteer.unseen:
+            new_zones.add(key)
 
     for section in ("kpis", "zone_total"):
         if (row := _get(raw, "extraction", section)) is not None:
@@ -710,7 +817,7 @@ def normalise(raw: Mapping[str, Any], gazetteer: Gazetteer) -> Normalised:
         _get(raw, "extraction", "report_date"),
         rows,
     )
-    return Normalised(extraction, flags)
+    return Normalised(extraction, flags, frozenset(new_zones))
 
 
 # Cache
