@@ -74,7 +74,7 @@ from ebola_2026_outbreak.drc_2026_sitreps_download import ROOT
 
 logger = logging.getLogger(__name__)
 
-REVIEWERS = ("@mharoruiz", "@jm-rivera")
+REVIEWERS = ("@mharoruiz",)
 COLUMNS = (
     "report_date",
     "sha256",

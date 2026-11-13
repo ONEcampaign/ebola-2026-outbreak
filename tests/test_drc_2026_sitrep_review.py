@@ -408,7 +408,7 @@ def test_issue_body() -> None:
     ]
     body = issue_body(held, run_url="https://github.com/o/r/actions/runs/1")
 
-    assert body.startswith("@mharoruiz @jm-rivera")
+    assert body.startswith("@mharoruiz:")
     assert f"| {DATE} | 8 | `data/review/drc_2026/2026-10-14_abababab.csv` |" in body
     assert "[PDF](https://x/2.pdf)" in body
     assert "`Refs #N`" in body

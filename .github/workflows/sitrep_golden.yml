@@ -49,4 +49,4 @@ jobs:
         run: |
           gh issue create \
             --title "Sitrep golden check failed $(date -u +%Y-%m-%d)" \
-            --body "@mharoruiz @jm-rivera The weekly golden check failed. An accepted value differs from the truth, a returned model id changed, a model call failed, or a golden PDF's URL died or its file changed. The run log names each failure: $RUN_URL"
+            --body "@mharoruiz The weekly golden check failed. An accepted value differs from the truth, a returned model id changed, a model call failed, or a golden PDF's URL died or its file changed. The run log names each failure: $RUN_URL"
