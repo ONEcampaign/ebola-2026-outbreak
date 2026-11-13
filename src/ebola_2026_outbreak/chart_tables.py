@@ -41,7 +41,7 @@ from typing import TypedDict
 import polars as pl
 
 from ebola_2026_outbreak.aggregate import forward_fill_cumulative
-from ebola_2026_outbreak.drc_2026_sitrep_schema import GAZETTEER_PATH, name_key
+from ebola_2026_outbreak.drc_2026_sitrep_schema import name_key
 from ebola_2026_outbreak.drc_2026_sitreps_extract import (
     BY_ZONE_PATH,
     BY_ZONE_SCHEMA,
@@ -61,6 +61,7 @@ from ebola_2026_outbreak.drc_health_zone_geometry import (
     COD_AB_PATH,
     GEOMETRY_PATH,
     NOT_MAPPED,
+    gazetteer_table,
     zone_codes,
 )
 from ebola_2026_outbreak.west_africa_2014_16 import FINAL_PATH as WEST_AFRICA_PATH
@@ -666,7 +667,7 @@ def main() -> None:
     )
     codes = zone_codes(
         pl.read_csv(COD_AB_PATH, infer_schema=False),
-        pl.read_csv(GAZETTEER_PATH, infer_schema=False),
+        gazetteer_table(),
     )
     zones = zone_map(
         by_zone,

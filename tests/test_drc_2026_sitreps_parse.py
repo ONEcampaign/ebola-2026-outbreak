@@ -14,8 +14,10 @@ from ebola_2026_outbreak.drc_2026_sitreps_parse import (
     ProvinceCounts,
     SkipCategory,
     TableException,
+    canonical_province,
     check_monotonic,
     find_province_table,
+    join_split_rows,
     parse_counts,
     parse_sitrep,
     readings,
@@ -67,6 +69,84 @@ def test_parse_sitrep_long_rows() -> None:
     assert TOTAL not in df["province"].to_list()
     cases = df.filter(df["indicator"] == "Cumulative confirmed cases")
     assert cases["value"].sum() == 9552
+
+
+# Canonical name -> spellings it must accept: COD-AB's (data/reference/
+# cod_ab_health_zones.csv), the sitreps' and a spaced or unaccented variant.
+PROVINCE_SPELLINGS = {
+    "Bas-Uélé": ("Bas-Uele", "Bas-Uélé", "Bas Uele"),
+    "Équateur": ("Equateur", "Équateur", "EQUATEUR"),
+    "Haut-Katanga": ("Haut-Katanga", "Haut Katanga"),
+    "Haut-Lomami": ("Haut-Lomami", "Haut Lomami"),
+    "Haut-Uélé": ("Haut-Uele", "Haut-Uélé", "Haut Uélé"),
+    "Ituri": ("Ituri", "ITURI"),
+    "Kasaï": ("Kasaï", "Kasai"),
+    "Kasaï-Central": ("Kasaï-Central", "Kasai Central"),
+    "Kasaï-Oriental": ("Kasaï-Oriental", "Kasai-Oriental"),
+    "Kinshasa": ("Kinshasa",),
+    "Kongo-Central": ("Kongo-Central", "Kongo Central"),
+    "Kwango": ("Kwango",),
+    "Kwilu": ("Kwilu",),
+    "Lomami": ("Lomami",),
+    "Lualaba": ("Lualaba",),
+    "Maï-Ndombe": ("Maï-Ndombe", "Mai-Ndombe", "Mai Ndombe"),
+    "Maniema": ("Maniema",),
+    "Mongala": ("Mongala",),
+    "Nord-Kivu": ("Nord-Kivu", "Nord Kivu"),
+    "Nord-Ubangi": ("Nord-Ubangi", "Nord Ubangi"),
+    "Sankuru": ("Sankuru",),
+    "Sud-Kivu": ("Sud-Kivu", "Sud Kivu"),
+    "Sud-Ubangi": ("Sud-Ubangi", "Sud Ubangi"),
+    "Tanganyika": ("Tanganyika",),
+    "Tshopo": ("Tshopo",),
+    "Tshuapa": ("Tshuapa",),
+}
+
+
+def test_every_province_has_spellings() -> None:
+    cod_ab = pl.read_csv(
+        Path(__file__).parents[1] / "data" / "reference" / "cod_ab_health_zones.csv"
+    )
+    assert len(PROVINCE_SPELLINGS) == 26
+    assert set(cod_ab["province"]) <= {
+        s for spellings in PROVINCE_SPELLINGS.values() for s in spellings
+    }
+
+
+@pytest.mark.parametrize(
+    ("label", "name"),
+    [(s, name) for name, spellings in PROVINCE_SPELLINGS.items() for s in spellings],
+)
+def test_canonical_province(label: str, name: str) -> None:
+    assert canonical_province(label) == name
+
+
+@pytest.mark.parametrize(
+    ("lines", "name"),
+    [
+        (["Kasaï-", "0 1 1 100,0 % 1/16 —", "Central**"], "Kasaï-Central"),
+        (["Kongo- 100,0", "0 1 1 1/16 —", "Central %"], "Kongo-Central"),
+        (["Maï-Ndombe 100,0", "0 1 1 1/16 —", "** %"], "Maï-Ndombe"),
+    ],
+)
+def test_new_wrapped_province_is_rejoined(lines: list[str], name: str) -> None:
+    (joined,) = join_split_rows(lines)
+    assert canonical_province(joined.split()[0]) == name
+
+
+def test_province_row_of_a_new_province_parses() -> None:
+    text = "\n".join(
+        [
+            "Ituri 0 10 5 50,0 % 1/36",
+            "Kasaï-Central 1 2 1 50,0 % 1/26",
+            "Kasaï 0 4 1 25,0 % 1/18",
+            "Total 1 16 7 43,8 %",
+        ]
+    )
+    table = find_province_table(text)
+    validate_table(table)
+    assert table["Kasaï-Central"] == ProvinceCounts(1, 2, 1)
+    assert table["Kasaï"] == ProvinceCounts(0, 4, 1)
 
 
 def test_readings_groups_thousands() -> None:

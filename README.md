@@ -109,14 +109,18 @@ issue that tags the reviewers. To review a held report:
    the PDF page to open in `pdf_url`.
 1. Type the printed value in `reviewed_value`, either a number or `blank` for
    an empty cell. Type `absent` where a flagged zone name is a misreading and the
-   table has no such row. If a zone name is unknown, add it or its spelling to
-   `aliases` in `data/reference/drc_2026_health_zones.csv`. A new zone also
+   table has no such row. Every zone of
+   `data/reference/cod_ab_health_zones.csv` is known under its COD-AB spelling,
+   so a zone's first cases do not make its name unknown. If a zone name is
+   unknown, add it or its spelling to `aliases` in
+   `data/reference/drc_2026_health_zones.csv`. A new zone also
    needs a match in `data/reference/cod_ab_health_zones.csv` for the zone map.
    If the tests fail on the review pull request, add the zone's COD-AB spelling
    to its `aliases`.
    When COD-AB has no such zone at all (a health area the sitrep lists as a
    zone, or a zone created after COD-AB's 2019 boundaries), a maintainer adds
-   it to `HEALTH_AREA_ZONES` (under its parent zone) or `NOT_MAPPED` in
+   it to `HEALTH_AREA_ZONES` (under its parent zone) in
+   `src/ebola_2026_outbreak/drc_2026_sitrep_schema.py` or to `NOT_MAPPED` in
    `src/ebola_2026_outbreak/drc_health_zone_geometry.py`.
 1. Open a pull request that says `Refs #N` for the issue. The review check runs
    `drc_2026_sitreps_extract.py check` and passes when the report would be
@@ -181,7 +185,8 @@ writes `data/reference/cod_ab_health_zones.csv`, the province, name and P-code
 of every COD-AB zone. Run it only to refresh COD-AB.
 
 The chart tables match each gazetteer zone to a P-code by province and name,
-using the gazetteer's aliases. A zone with cases and no code stops the build,
+using the gazetteer's aliases. Zones only COD-AB lists match under their own
+name. A zone with cases and no code stops the build,
 and a test fails a pull request that adds such a zone to the gazetteer. Add the
 COD-AB spelling to the zone's `aliases` in
 `data/reference/drc_2026_health_zones.csv`. Dakwa (Bas-Uélé), which the

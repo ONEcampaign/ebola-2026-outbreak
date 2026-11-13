@@ -13,14 +13,17 @@ flagged `models_disagree`, and, when neither model matches the text, the rest
 flagged `text_mismatch`. The headline indicators have no text-layer row, so each is
 accepted only when both models give the same value.
 
-A zone row that one model alone names, under a name the gazetteer lacks and
-the text layer does not print (`printed_labels`), is a misread of a zone the
-other model read correctly ("Mili-Murhesa" for "Miti-Murhesa"). It is
-dropped with a log line instead of holding the report, provided its province
-is canonical and every zone row the text layer locates there came back from
-a model under its canonical name. A name both models give, or one the page
-prints, is flagged `unknown_name`, so a zone new to the gazetteer reaches a
-reviewer. A located zone neither model returned may have the misread as its
+A zone row that one model alone names, under a name the gazetteer lacks or
+gives only to a zone COD-AB lists and no sitrep has yet shown
+(`Normalised.new_zones`), and that the text layer does not print
+(`printed_labels`), is a misread of a zone the other model read correctly
+("Mili-Murhesa" for "Miti-Murhesa"). It is dropped with a log line instead
+of holding the report, provided its province is canonical and every zone row
+the text layer locates there came back from a model under its canonical
+name. A name both models give, or one the page prints, is kept: an unknown
+name is flagged `unknown_name`, so it reaches a reviewer, and a COD-AB zone
+is reconciled as any other zone row, so a zone's first cases do not hold the
+report. A located zone neither model returned may have the misread as its
 only copy, so the misread is held. That also catches a zone printing nothing
 but zeros and blanks, which no sum check would. A dropped row for a zone the
 text layer did not locate leaves its province's zones short of the subtotal
@@ -120,8 +123,8 @@ def reconcile(
         text_rows: Printed text-layer rows by key; a missing key is a row
             the text layer did not locate.
         match: Whether a model's values reproduce a printed row.
-        printed_labels: Which unknown zone names the text layer prints, to
-            tell a new zone from one model's misread.
+        printed_labels: Which unknown or new zone names the text layer
+            prints, to tell a new zone from one model's misread.
         arbitration: Accept the one model whose row matches the text when
             the models disagree.
 
@@ -178,9 +181,9 @@ def _misreads(
     text_rows: dict[RowKey, TextRow],
     printed_labels: Labels,
 ) -> set[RowKey]:
-    """Zone rows flagged `unknown_name` whose name only one model gives and
-    the text layer does not print, in a province whose located zone rows the
-    models all returned."""
+    """Zone rows flagged `unknown_name` or keyed on a new zone, whose name only
+    one model gives and the text layer does not print, in a province whose
+    located zone rows the models all returned."""
     gemini_names, mistral_names = (
         {name_key(k.zone) for k in m.extraction.rows if k.section == "zones"}
         for m in (gemini, mistral)
@@ -192,12 +195,16 @@ def _misreads(
         if key.section == "zones" and text.located and key not in returned
     }
     unknown = {
-        f.key: name_key(f.key.zone)
-        for f in [*gemini.name_flags, *mistral.name_flags]
-        if f.reason == "unknown_name"
-        and f.key.section == "zones"
-        and f.key.zone
-        and f.key.province in _PROVINCES - unreturned
+        key: name_key(key.zone)
+        for key in [
+            *(f.key for f in gemini.name_flags if f.reason == "unknown_name"),
+            *(f.key for f in mistral.name_flags if f.reason == "unknown_name"),
+            *gemini.new_zones,
+            *mistral.new_zones,
+        ]
+        if key.section == "zones"
+        and key.zone
+        and key.province in _PROVINCES - unreturned
     }
     candidates = {n for n in unknown.values() if n in gemini_names ^ mistral_names}
     printed = printed_labels(candidates) if candidates else set()

@@ -46,7 +46,12 @@ logger = logging.getLogger(__name__)
 
 OUTPUT_PATH = ROOT / "data" / "processed" / f"{OUTBREAK}_sitrep_by_province.csv"
 
-# Spelling variants seen in the tables -> canonical province name.
+# Spelling variants -> canonical province name, for all 26 provinces. The
+# first 8 are those the sitreps have printed; the rest take the official
+# French names, accents kept, and also match COD-AB's unaccented spelling
+# ("Equateur", "Kasai"). A two-part name splits at `PROVINCE_SPLIT`. The
+# alternation of `LABEL` takes the first pattern that matches, so a name
+# comes before any name it starts with ("Kasaï-Central" before "Kasaï").
 PROVINCES = {
     r"Ituri": "Ituri",
     r"Nord[- ]Kivu": "Nord-Kivu",
@@ -56,19 +61,48 @@ PROVINCES = {
     r"Tshopo": "Tshopo",
     r"Sud[- ]Ubangi": "Sud-Ubangi",
     r"Nord[- ]Ubangi": "Nord-Ubangi",
+    r"Kinshasa": "Kinshasa",
+    r"Kongo[- ]Central": "Kongo-Central",
+    r"Kwango": "Kwango",
+    r"Kwilu": "Kwilu",
+    r"Ma[iï][- ]Ndombe": "Maï-Ndombe",
+    r"Kasa[iï][- ]Central": "Kasaï-Central",
+    r"Kasa[iï][- ]Oriental": "Kasaï-Oriental",
+    r"Kasa[iï]": "Kasaï",
+    r"Lomami": "Lomami",
+    r"Sankuru": "Sankuru",
+    r"Maniema": "Maniema",
+    r"Haut[- ]Lomami": "Haut-Lomami",
+    r"Haut[- ]Katanga": "Haut-Katanga",
+    r"Lualaba": "Lualaba",
+    r"Tanganyika": "Tanganyika",
+    r"Mongala": "Mongala",
+    r"[ÉE]quateur": "Équateur",
+    r"Tshuapa": "Tshuapa",
 }
+PROVINCE_SPLIT = "[- ]"
 TOTAL = "Total"
 LABEL = re.compile(
     r"^(?P<label>" + "|".join(PROVINCES) + r"|total(?: RDC)?)\b[\s*]*(?P<rest>.*)$",
     re.I,
 )
+
+
+def _halves(index: int) -> str:
+    """Alternation of the first (0) or second (1) halves of two-part province
+    patterns, longest first."""
+    halves = {p.split(PROVINCE_SPLIT)[index] for p in PROVINCES if PROVINCE_SPLIT in p}
+    return "|".join(sorted(halves, key=lambda h: (-len(h), h)))
+
+
 # A province row wrapped over three lines, the name split at either end and
 # CFR fragments on either side of the numbers:
 # "Sud-" / "0 1 1 100,0 % 1/16 —" / "Ubangi**"
 # "Sud- 100,0" / "0 1 1 1/16 —" / "Ubangi** %"
 # "Sud-Ubangi 100,0" / "0 1 1 1/16 —" / "** %"
-WRAP_HEAD = re.compile(r"^(Sud|Nord|Haut|Bas)-(Ubangi|Kivu|U[ée]l[ée])?\s*([\d,]*)$")
-WRAP_TAIL = re.compile(r"^(Ubangi|Kivu|U[ée]l[ée])?[\s*]*(%?)$")
+# Any two-part name of `PROVINCES` may wrap so.
+WRAP_HEAD = re.compile(rf"^({_halves(0)})-({_halves(1)})?\s*([\d,]*)$")
+WRAP_TAIL = re.compile(rf"^({_halves(1)})?[\s*]*(%?)$")
 NUMBERS_ONLY = re.compile(r"^[\d\s]+\d+(?:,\d+)?\s*%")
 PERCENT = re.compile(r"(\d+(?:,\d+)?)\s*%")
 # Columns that are not counts: "28/36", "(77,8 %)", "20 sur 36", "—", and

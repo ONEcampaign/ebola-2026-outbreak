@@ -11,6 +11,7 @@ from ebola_2026_outbreak.drc_health_zone_geometry import (
     EXPECTED_ZONES,
     NOT_MAPPED,
     cod_ab_table,
+    gazetteer_table,
     geometry_table,
     zone_codes,
 )
@@ -111,3 +112,13 @@ def test_every_gazetteer_zone_has_a_code() -> None:
     )
     unresolved = codes.filter(pl.col("code").is_null()).select("province", "zone")
     assert set(unresolved.rows()) == NOT_MAPPED
+
+
+def test_every_cod_ab_zone_gets_its_code_from_the_gazetteer_table() -> None:
+    # Curated rows and COD-AB-only zones together map to every P-code, so a
+    # zone released before it is curated still lands on the map.
+    zones = pl.read_csv(COD_AB_PATH, infer_schema=False)
+    codes = zone_codes(zones, gazetteer_table())
+    unresolved = codes.filter(pl.col("code").is_null()).select("province", "zone")
+    assert set(unresolved.rows()) == NOT_MAPPED
+    assert set(codes["code"].drop_nulls()) == set(zones["code"])
