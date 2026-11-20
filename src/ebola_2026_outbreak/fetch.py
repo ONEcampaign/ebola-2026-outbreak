@@ -21,7 +21,8 @@ USER_AGENT = "Mozilla/5.0 (compatible; ONE-data-ebola-scraper/0.1)"
 DEFAULT_TIMEOUT_S = 60.0
 MAX_ATTEMPTS = 3
 BACKOFF_BASE_S = 2.0
-RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+# 520-524 are Cloudflare origin errors (insp.cd sits behind Cloudflare).
+RETRY_STATUS = frozenset({429, 500, 502, 503, 504, 520, 521, 522, 523, 524})
 # Rejections issued before any model work starts, so a repeat is not billed twice.
 UNPROCESSED_STATUS = frozenset({429, 502, 503, 504})
 

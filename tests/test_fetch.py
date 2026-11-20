@@ -124,3 +124,11 @@ def test_get_retries_read_timeout() -> None:
     response = fetch.get(URL, client=client_raising([httpx.ReadTimeout("slow")], seen))
     assert response.json() == {"ok": True}
     assert len(seen) == 2
+
+
+def test_get_retries_cloudflare_origin_error() -> None:
+    seen: list[httpx.Request] = []
+    with client_for([520, 200], seen) as client:
+        response = fetch.get(URL, client=client)
+    assert response.status_code == 200
+    assert len(seen) == 2

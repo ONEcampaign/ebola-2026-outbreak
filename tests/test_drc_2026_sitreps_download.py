@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import httpx
 import polars as pl
 import pytest
 
@@ -535,3 +536,35 @@ def test_build_manifest_rejects_insp_id_of_a_ministry_file(fake_api: FakeApi) ->
     ]
     with pytest.raises(ValueError, match="clash"):
         dlm.build_manifest(first, posts=[])
+
+
+def wp_response(
+    items: list[dict[str, object]], total_pages: int | None
+) -> httpx.Response:
+    """A WordPress REST page, with the paging header unless `total_pages` is None."""
+    headers = {} if total_pages is None else {dlm.WP_TOTAL_PAGES: str(total_pages)}
+    return httpx.Response(200, json=items, headers=headers)
+
+
+def test_list_wordpress_retries_a_page_without_paging_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        [
+            wp_response([], None),
+            wp_response([{"id": 1}], 2),
+            wp_response([{"id": 2}], 2),
+        ]
+    )
+    monkeypatch.setattr(dlm, "get", lambda url: next(responses))
+    monkeypatch.setattr(dlm.time, "sleep", lambda _: None)
+    assert dlm.list_wordpress("https://insp.cd/x?a=1") == [{"id": 1}, {"id": 2}]
+
+
+def test_list_wordpress_raises_when_paging_header_never_arrives(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(dlm, "get", lambda url: wp_response([], None))
+    monkeypatch.setattr(dlm.time, "sleep", lambda _: None)
+    with pytest.raises(ValueError, match="X-WP-TotalPages"):
+        dlm.list_wordpress("https://insp.cd/x?a=1")
