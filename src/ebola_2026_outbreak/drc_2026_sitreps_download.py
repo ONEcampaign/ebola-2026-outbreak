@@ -36,6 +36,7 @@ import html
 import logging
 import re
 import sys
+import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple, NotRequired, TypedDict, cast
@@ -45,7 +46,7 @@ import httpx
 import pdfplumber
 import polars as pl
 
-from ebola_2026_outbreak.fetch import get
+from ebola_2026_outbreak.fetch import BACKOFF_BASE_S, MAX_ATTEMPTS, get
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ HTTP_NOT_FOUND = 404
 # are named "MVE16" and match no marker.
 INSP_FILE_MARKERS = ("MVEBDB", "MVE_RDC", "MVE-ITURI")
 PDF_MIME = "application/pdf"
+WP_TOTAL_PAGES = "X-WP-TotalPages"
 # Listed by MIME type, since a filename search misses renamed uploads.
 MEDIA_QUERY = (
     f"?mime_type={PDF_MIME}&per_page=100&_fields=id,modified,source_url,mime_type,post"
@@ -294,11 +296,41 @@ def list_wordpress(url: str) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     page, total_pages = 1, 1
     while page <= total_pages:
-        response = get(f"{url}&page={page}")
-        total_pages = int(response.headers["X-WP-TotalPages"])
+        response = get_wordpress_page(f"{url}&page={page}")
+        total_pages = int(response.headers[WP_TOTAL_PAGES])
         items.extend(response.json())
         page += 1
     return items
+
+
+def get_wordpress_page(url: str) -> httpx.Response:
+    """GET one WordPress REST page, retrying responses without paging headers.
+
+    INSP's Cloudflare front sometimes answers 200 without `X-WP-TotalPages`,
+    so a missing header is treated as transient.
+
+    Raises:
+        ValueError: If the header is still missing after every attempt.
+    """
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        response = get(url)
+        if WP_TOTAL_PAGES in response.headers:
+            return response
+        if attempt < MAX_ATTEMPTS:
+            wait_s = BACKOFF_BASE_S**attempt
+            logger.warning(
+                "%s returned no %s header (content-type %r), retrying in %.0fs",
+                url,
+                WP_TOTAL_PAGES,
+                response.headers.get("content-type"),
+                wait_s,
+            )
+            time.sleep(wait_s)
+    raise ValueError(
+        f"{url} returned no {WP_TOTAL_PAGES} header after {MAX_ATTEMPTS} attempts "
+        f"(content-type {response.headers.get('content-type')!r}, "
+        f"body starts {response.text[:200]!r})"
+    )
 
 
 def list_api_pdfs(api: str) -> list[MediaItem]:
