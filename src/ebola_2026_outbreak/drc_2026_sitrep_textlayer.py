@@ -20,14 +20,16 @@ Method, on the pdfplumber words of the PDF and their x extents:
   line and some cells on two lines around it. A value word about as near to
   another line leaves the rows it might belong to ambiguous. Each word in
   the row's band is cut to digits, comma, percent and slash ("sur" reads as
-  "/", "NA", "ND" and a dash stay, "(" splits a word).
+  "/", "NA", "ND" and a dash stay, a spreadsheet error such as "#DIV/0!"
+  reads as "NA", "(" splits a word).
 - A table starts at a capitalised "Létalité" header word and ends at the
   first Total row before the next such word. The table is the province
   summary when a province row prints "a/b" (ZS touchées), else the zone table.
   A zone table without an "intra-CTE" header is skipped, so its rows are not
   located.
 - The header runs from as far above "Létalité" as the first row is below
-  it, with words the extractor split into glyph runs joined again. One
+  it, less any line holding a table title word ("Tableau", "Répartition"),
+  with words the extractor split into glyph runs joined again. One
   header word marks each column ("(n)" twice, "Nouv.", "(Swab+)",
   "intra-CTE", "Total" in the zone table; "Nouveaux", "Cas", "Décès",
   "historiquement" or else "touchées", "actuellement" in the province
@@ -106,6 +108,13 @@ GUARD = 3  # points: a cell's centre is at least this far inside its column
 
 PROVINCE_KEYS = {name_key(p): p for p in PROVINCES.values()}
 NULL_TOKENS = frozenset({"NA", "ND"})
+# Spreadsheet error codes the publisher leaves in a cell ("#DIV/0!" for the CFR
+# of a row with no cases, SitReps 159, 191 and 192). Each reads as "NA".
+SPREADSHEET_ERROR = re.compile(r"#(?:DIV/0!|N/A|VALUE!|NUM!|REF!|NAME\?|NULL!)")
+# Name keys of a table title's words ("Tableau 1. Répartition des cas et décès
+# confirmés par province"). A header line holding one is the title, whose
+# "décès" would otherwise repeat a column's header word.
+TITLE_KEYS = frozenset({"tableau", "repartition"})
 # A `dump_words` line is "top x0 x1 text"; the text may hold spaces.
 DUMP_LINE_SPLITS = 3
 
@@ -139,13 +148,20 @@ class Word(NamedTuple):
 
     @property
     def is_token(self) -> bool:
-        """NA/ND cells, dashes and the "sur" of "20 sur 36" are values, not
-        labels."""
+        """NA/ND cells, spreadsheet errors, dashes and the "sur" of "20 sur
+        36" are values, not labels."""
         return (
             bool(re.fullmatch(r"N[AD]\W*", self.text))
+            or self.is_error
             or self.text == "sur"
             or self.is_dash
         )
+
+    @property
+    def is_error(self) -> bool:
+        """A spreadsheet error code, which the publisher leaves for a cell
+        with no value."""
+        return bool(SPREADSHEET_ERROR.fullmatch(self.text))
 
     @property
     def is_dash(self) -> bool:
@@ -159,12 +175,14 @@ class Word(NamedTuple):
 
     @property
     def value(self) -> str:
-        """The word as a printed value: "(77,8" -> "77,8", "NA!" -> "NA", any
-        dash -> "—"."""
+        """The word as a printed value: "(77,8" -> "77,8", "NA!" -> "NA",
+        "#DIV/0!" -> "NA", any dash -> "—"."""
         if self.text == "sur":
             return "/"
         if self.is_dash:
             return "—"
+        if self.is_error:
+            return "NA"
         if self.is_token:
             return self.text[:2]
         return re.sub(r"[^\d,%/(]", "", self.text).replace("(", " ").strip()
@@ -376,18 +394,22 @@ def _header(words: list[Word], table: Table) -> list[Word]:
     """Alphabetic words of a table's header, left to right.
 
     The header is centred on the "Létalité" cell, so it runs from as far
-    above the anchor as the first row is below it. Words the extractor split
-    with no gap ("No" "uv.") are joined.
+    above the anchor as the first row is below it. A table title set close
+    above the header falls in that span, so a line holding a title word
+    (`TITLE_KEYS`) is left out. Words the extractor split with no gap ("No"
+    "uv.") are joined.
     """
     anchor, first = table.anchor, table.rows[0]
     if first.page != anchor.page:
         return []
     lo = 2 * anchor.top - first.top
-    header = [
+    span = [
         w
         for w in words
         if w.page == anchor.page and w.is_alpha and lo <= w.top < first.top
     ]
+    titles = [w.top for w in span if w.key in TITLE_KEYS]
+    header = [w for w in span if all(abs(w.top - t) > TOL for t in titles)]
     joined: list[Word] = []
     for w in sorted(header, key=lambda w: w.x0):
         i = next(
@@ -473,8 +495,9 @@ def _province_columns(header: list[Word]) -> Columns | None:
     The ZS column is marked by "historiquement" where the header prints "ZS
     historiquement touchées", since a left-aligned ZS cell starts under it,
     and by "touchées" otherwise.
-    A table title ("Répartition des cas et décès confirmés") reaching into
-    the header brings a second "décès", which leaves the columns unresolved.
+    `_header` leaves out a table title ("Répartition des cas et décès
+    confirmés"), whose "décès" would leave the columns unresolved. Any other
+    second "décès" still does.
     """
     deaths = _one(w for w in header if w.key == "deces")
     cases = [w for w in header if w.key == "cas" and deaths and w.x1 < deaths.x0]
