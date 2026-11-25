@@ -229,7 +229,10 @@ def test_unplaced_values_hold_the_row(
 # print "—" in Sud-Ubangi's "ZS actuellement", which is no field, so the row
 # is placed. 152: "ZS actuellement" cells print on two lines around their
 # row's label. 142: the Total row's "57 ZS dans 6 provinces actives" prints
-# "provinces" on the label's line, a column gap away from "Total".
+# "provinces" on the label's line, a column gap away from "Total". 099: the
+# table title ("Répartition des cas et décès confirmés par province
+# touchée") sits inside the header span, and its "décès" repeated the deaths
+# column's header word; "Nouveaux cas" is the last column.
 #
 # Two other uploads hold one row each for what the PDF prints: SitRep 116's
 # Buta CFR is "1", and SitRep 137's Ituri "ZS actuellement" is "25.36".
@@ -240,6 +243,7 @@ PROVINCE_TABLES = FIXTURES / "province_tables"
     ("sitrep", "total", "held"),
     [
         # total: the Total row's new cases, cases, deaths and affected zones.
+        ("099", (83, 5458, 2606, 57), set()),
         ("117", (86, 6843, 3310, 61), set()),
         ("123", (87, 7345, 3545, 62), set()),
         ("125", None, {"Sud-Ubangi"}),
@@ -292,6 +296,62 @@ def test_tightly_set_zone_header() -> None:
         subtotal["cte_deaths"],
         subtotal["total_deaths_day"],
     ) == ("12", "6", "3", "9")
+
+
+A_VENTILER = RowKey("zones", "Ituri", "A ventiler")
+A_VENTILER_191: Values = {
+    "cum_confirmed": 0,
+    "cum_deaths": 493,
+    "cfr_pct": None,
+    "new_confirmed": None,
+    "community_deaths": None,
+    "cte_deaths": None,
+    "total_deaths_day": 0,
+}
+
+
+@pytest.mark.parametrize(
+    ("cfr", "matches"),
+    [(None, True), (0.0, False)],
+    ids=["blank", "zero"],
+)
+def test_spreadsheet_error_reads_as_na(cfr: float | None, matches: bool) -> None:
+    """SitRep 191 prints "#DIV/0!" in the CFR of "A ventiler", which has no
+    cases. It reads as an NA cell, so it matches a null CFR and not a 0."""
+    rows = read_rows(ZONE_TABLES / "SitRep_191.json", GAZETTEER)
+    row = rows[A_VENTILER]
+
+    assert row.located
+    assert row.cells is not None
+    assert row.cells["cfr_pct"] == "NA"
+    assert row_matches(row, A_VENTILER_191 | {"cfr_pct": cfr}, "zones") is matches
+
+
+@pytest.mark.parametrize("error", ["#DIV/0!", "#N/A", "#VALUE!"])
+def test_spreadsheet_error_in_a_count_holds_nothing_but_its_cell(
+    tmp_path: Path, error: str
+) -> None:
+    """An error code in a count column reads as NA: the row is placed, and a
+    model's number for that cell does not match it."""
+    dump = json.loads((ZONE_TABLES / "SitRep_191.json").read_text())
+    dump["pages"] = {
+        p: [
+            w.replace(" 0", f" {error}", 1)
+            if w.endswith(" 0") and w.startswith("126.22 134.93 ")
+            else w
+            for w in words
+        ]
+        for p, words in dump["pages"].items()
+    }
+    path = tmp_path / "SitRep_191.json"
+    path.write_text(json.dumps(dump))
+
+    row = read_rows(path, GAZETTEER)[A_VENTILER]
+
+    assert row.cells is not None
+    assert row.cells["cum_confirmed"] == "NA"
+    assert not row_matches(row, A_VENTILER_191, "zones")
+    assert row_matches(row, A_VENTILER_191 | {"cum_confirmed": None}, "zones")
 
 
 def _zone_table(tmp_path: Path, cte_top: float) -> Path:
